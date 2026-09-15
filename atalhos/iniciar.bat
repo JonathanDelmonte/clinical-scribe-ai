@@ -1,7 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-cd /d "%~dp0"
+REM `%~dp0` e a pasta deste script (atalhos\). Subimos um nivel para a
+REM raiz do projeto, que e onde o pnpm e o docker compose precisam rodar.
+cd /d "%~dp0.."
 title Consulta Viva - iniciando
 
 echo.
@@ -166,8 +168,8 @@ REM  as duas saidas no mesmo terminal torna impossivel entender qual dos dois
 REM  falhou quando algo da errado.
 REM ===========================================================================
 echo [6/6] Subindo aplicacao e worker...
-start "Consulta Viva - APLICACAO" cmd /k "cd /d "%~dp0" && pnpm dev"
-start "Consulta Viva - WORKER"    cmd /k "cd /d "%~dp0" && pnpm dev:worker"
+start "Consulta Viva - APLICACAO" cmd /k "cd /d "%~dp0.." && pnpm dev"
+start "Consulta Viva - WORKER"    cmd /k "cd /d "%~dp0.." && pnpm dev:worker"
 
 echo       aguardando a aplicacao responder...
 set /a tentativas=0

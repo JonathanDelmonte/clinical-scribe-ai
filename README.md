@@ -12,14 +12,14 @@
 
 ## Começando (Windows) — o caminho de um clique
 
-Dê dois cliques em **`iniciar.bat`**.
+Dê dois cliques em **`atalhos/iniciar.bat`**.
 
 Ele abre o Docker Desktop e espera ficar pronto, detecta se a máquina tem placa
 NVIDIA e escolhe o motor de acordo, sobe banco e transcrição, aplica schema e
 políticas de segurança, popula os usuários de desenvolvimento, abre a aplicação
 e o worker em janelas separadas, e por fim abre o navegador.
 
-Para desligar: **`parar.bat`**. Ele encerra a aplicação e os containers, mas
+Para desligar: **`atalhos/parar.bat`**. Ele encerra a aplicação e os containers, mas
 preserva os volumes — o banco e os modelos do Whisper sobrevivem, porque
 apagá-los custaria gigabytes de download na próxima vez.
 
@@ -94,12 +94,16 @@ pnpm check
 ## Estrutura
 
 ```
+atalhos/        iniciar.bat e parar.bat — sobe e desce tudo sem terminal
 apps/
-  web/          Next.js — PWA + rotas de API
-  worker/       processo Node: transcrever → diarizar → papel → nota
+  web/          Next.js — PWA, rotas de API, gravação e revisão
+  worker/       processo Node: fila → motor → trechos no banco
 packages/
-  core/         domínio puro: tipos, prompts, validação de citações (sem I/O)
+  core/         domínio puro: cargos, motores, citações (sem I/O)
   db/           schema Drizzle, migrations e políticas RLS
+  storage/      áudio das consultas — disco hoje, Supabase Storage depois
+services/
+  asr-local/    Whisper + pyannote em container (o motor do plano grátis)
 spikes/         código descartável de investigação (não vai para produção)
 docs/adr/       decisões arquiteturais numeradas
 ```

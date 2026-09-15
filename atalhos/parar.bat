@@ -1,7 +1,9 @@
 @echo off
 setlocal
 chcp 65001 >nul
-cd /d "%~dp0"
+REM `%~dp0` e a pasta deste script (atalhos\). Subimos um nivel para a
+REM raiz do projeto, que e onde o pnpm e o docker compose precisam rodar.
+cd /d "%~dp0.."
 title Consulta Viva - parando
 
 echo.

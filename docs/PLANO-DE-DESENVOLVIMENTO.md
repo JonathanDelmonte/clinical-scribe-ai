@@ -416,26 +416,56 @@ ter subprocessador a declarar e não haver tratamento de dado algum fora do
 dispositivo, e é um argumento que nenhum concorrente copia sem reconstruir o
 produto inteiro.
 
-**O que o `device` custa, honestamente:**
+### A divisão de trabalho: navegador E servidor, ao mesmo tempo
 
-- Modelo menor obrigatoriamente (`base` ou `small`, nunca `large-v3`)
-- Velocidade varia muito com o aparelho — gráficos integrados de notebook
-  comum ficam na faixa de 1x a 3x tempo real
-- **A diarização é o obstáculo real:** o pyannote não roda bem no navegador, e
-  separar vozes é o coração do produto
-- Exige WebGPU — Chrome e Edge sim, Safari parcial, Firefox ainda não
-- Consome bateria
+O ponto que importa não é escolher entre navegador **ou** servidor. É repartir
+as funções: cada lado faz o que consegue fazer melhor, simultaneamente.
 
-**Por que ele NÃO vem primeiro.** Um motor que transcreve mas não separa vozes
-entrega exatamente o que a concorrência já faz por R$ 97. O `device` é jogada
-de escala e de privacidade, e só faz sentido depois que o diferencial existir:
-diarização, identificação de papel, e nota ancorada. Ver [Marcos 3 e 4](#13-roadmap).
+```
+NAVEGADOR (dispositivo do cliente)        SERVIDOR (GPU)
+├─ captura o áudio
+├─ VAD: remove o silêncio
+├─ 48kHz estéreo → 16kHz mono
+├─ rascunho ao vivo (whisper-tiny)
+└─ envia só a fala, ~10x menor  ────────► ├─ large-v3: transcrição final
+                                          ├─ pyannote: separa as vozes
+                                          └─ LLM: papel + nota clínica
+```
 
-> **O código já comporta os três.** A interface `TranscriptionProvider` e a
-> função `resolveEngine()` não sabem nem se importam com *onde* a transcrição
-> acontece. Acrescentar `device` é um valor no enum e uma implementação — não é
-> reescrever o pipeline. É o retorno de ter feito a abstração antes de precisar
-> dela.
+**O que o navegador faz bem, e que o servidor faria pior:**
+
+| Função | Ganho | Esforço |
+|---|---|---|
+| **VAD** — remover silêncio antes de enviar | Corta 20–40% do arquivo e do tempo de servidor. O silêncio e o ruído da sala **nunca saem do dispositivo**. | Baixo (Silero VAD, ~1 MB) |
+| **Reamostragem** — 48 kHz estéreo → 16 kHz mono | Arquivo 6 a 10x menor. Ataca direto o "consultório de internet instável" da §8 da documentação. | Baixo |
+| **Rascunho ao vivo** — whisper-tiny no navegador | O profissional vê o texto surgindo **durante** a consulta. Valor percebido imediato, custo zero de servidor. | Médio |
+
+**O que ele não consegue:**
+
+- Igualar o `large-v3` — modelo grande não cabe no navegador
+- Rodar pyannote decentemente — separar vozes é o coração do produto e fica no servidor
+- **Dividir uma única inferência com o servidor** — uma passada do modelo é
+  indivisível; a divisão é por *função*, não dentro da mesma função
+- Exige WebGPU: Chrome e Edge sim, Safari parcial, Firefox ainda não
+
+### Ordem recomendada
+
+| Fase | O quê | Quando |
+|---|---|---|
+| **A** | VAD + reamostragem no navegador | **Cedo** — é barato (2-3 dias) e o ganho de upload e de servidor é imediato |
+| **B** | Rascunho ao vivo no navegador | Depois do Marco 4 — melhora muito a percepção, mas não cria diferencial |
+| **C** | Motor `device` completo para o plano grátis | Quando escala ou privacidade total virarem prioridade |
+
+**Por que B e C não vêm antes do Marco 4.** Um motor que transcreve mas não
+separa vozes entrega exatamente o que o concorrente já faz por R$ 97. O
+diferencial é diarização + identificação de papel + nota ancorada. A Fase A é
+exceção porque não compete com isso: ela só torna tudo mais leve e rápido.
+
+> **O código já comporta os três motores.** A interface `TranscriptionProvider`
+> e a função `resolveEngine()` não sabem nem se importam com *onde* a
+> transcrição acontece. Acrescentar `device` é um valor no enum e uma
+> implementação — não é reescrever o pipeline. É o retorno de ter feito a
+> abstração antes de precisar dela.
 
 ### ⚠️ A armadilha das APIs de IA gratuitas
 
