@@ -19,18 +19,38 @@ pnpm install
 cp .env.example .env
 pnpm db:up
 pnpm db:migrate
-pnpm db:test-rls
-pnpm dev
+pnpm db:seed
+pnpm asr:up
 ```
 
 `pnpm db:migrate` aplica extensões, schema e políticas RLS de uma vez.
-`pnpm db:test-rls` confirma que um profissional não enxerga os dados de outro.
-A aplicação sobe em http://localhost:3000.
+`pnpm db:seed` cria dois profissionais de desenvolvimento com cargos
+diferentes. `pnpm asr:up` sobe o motor de transcrição local — na primeira
+vez ele baixa alguns GB de modelo, então comece por aqui.
 
-Em outro terminal, o worker:
+Depois, em dois terminais:
+
+```bash
+pnpm dev
+```
 
 ```bash
 pnpm dev:worker
+```
+
+A aplicação sobe em http://localhost:3000. Crie um paciente, grave ou envie
+um áudio, e acompanhe a transcrição aparecer.
+
+Para conferir o isolamento entre profissionais a qualquer momento:
+
+```bash
+pnpm db:test-rls
+```
+
+Para transcrever um arquivo sem passar pela interface:
+
+```bash
+pnpm asr:try caminho/do/audio.wav
 ```
 
 Antes de abrir um PR:
