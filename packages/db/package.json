@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",
     "migrate": "node --env-file-if-exists=../../.env src/migrate.ts",
+    "test:rls": "node --env-file-if-exists=../../.env src/test-rls.ts",
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio"
   },
