@@ -1,0 +1,9 @@
+# Torch em versão CPU-only: ~200 MB contra ~2,5 GB da build com CUDA.
+# Instalado separadamente no Dockerfile, a partir do índice de CPU do PyTorch.
+
+faster-whisper==1.1.1
+pyannote.audio==3.3.2
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20

@@ -25,5 +25,43 @@ services:
       timeout: 5s
       retries: 10
 
+  # Motor de transcrição LOCAL — o motor do plano grátis.
+  #
+  # O áudio da consulta nunca sai deste container. Fica atrás de um profile
+  # porque é pesado (alguns GB de imagem e modelo) e nem toda tarefa precisa
+  # dele. Suba com `pnpm asr:up`.
+  asr-local:
+    build: ./services/asr-local
+    image: scribe-asr-local
+    container_name: scribe-asr-local
+    restart: unless-stopped
+    profiles: ["asr"]
+    ports:
+      - "8001:8000"
+    environment:
+      # `medium` equilibra qualidade e velocidade em CPU. Para o spike do
+      # Marco 1, que decide o fornecedor, troque para `large-v3`.
+      WHISPER_MODEL: ${WHISPER_MODEL:-medium}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-pt}
+      # Sem token, o serviço sobe e transcreve, mas não separa vozes.
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      # Sem este volume, cada `up` rebaixaria gigabytes de modelo.
+      - asr-models:/models
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request;urllib.request.urlopen(''http://localhost:8000/health'')"',
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      # A primeira subida baixa o modelo. Sem esta folga, o healthcheck
+      # declararia o container morto no meio do download.
+      start_period: 300s
+
 volumes:
   postgres-data:
+  asr-models:
