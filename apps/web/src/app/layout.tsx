@@ -53,7 +53,21 @@ export default async function RootLayout({
 
   return (
     <html lang="pt-BR">
-      <body className="min-h-dvh antialiased">
+      {/*
+       * `suppressHydrationWarning` no <body> por causa de EXTENSÕES DO
+       * NAVEGADOR, não de código nosso.
+       *
+       * Várias extensões (ColorZilla, gerenciadores de senha, tradutores)
+       * injetam atributos no <body> — `cz-shortcut-listen="true"` é o caso
+       * clássico — antes de o React hidratar. O React compara o HTML do
+       * servidor com o do cliente, encontra um atributo a mais e acusa erro de
+       * hidratação, que aparece para o desenvolvedor como se fosse um bug.
+       *
+       * A supressão vale só para os atributos DESTE elemento, um nível de
+       * profundidade. Erros de hidratação reais, dentro da árvore, continuam
+       * sendo reportados normalmente — que é o que queremos.
+       */}
+      <body className="min-h-dvh antialiased" suppressHydrationWarning>
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-3xl items-center gap-4 px-5 py-3">
             <Link href="/" className="font-semibold tracking-tight">
