@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import * as schema from "./schema.js";
+import * as schema from "./schema";
 
 export type Database = ReturnType<typeof createServiceClient>;
 
@@ -54,6 +54,12 @@ export async function withProfessional<T>(
   fn: (tx: Parameters<Parameters<Database["transaction"]>[0]>[0]) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
+    // Trocar de papel é obrigatório, não cosmético: RLS é IGNORADA por
+    // superusuário, e em desenvolvimento a conexão é `postgres`. Sem esta
+    // linha as políticas não seriam aplicadas, tudo funcionaria em testes
+    // manuais, e o isolamento só falharia em produção — onde a conexão do
+    // Supabase já é `authenticated` e as políticas passam a valer de verdade.
+    await tx.execute(sql`set local role authenticated`);
     await tx.execute(
       sql`select set_config('request.jwt.claim.sub', ${authUserId}, true)`,
     );
