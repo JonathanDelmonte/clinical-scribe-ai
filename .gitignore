@@ -48,3 +48,6 @@ test-results/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Armazenamento local de audio das consultas — dado de saude, jamais no Git
+.storage/
