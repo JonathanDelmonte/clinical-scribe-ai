@@ -1,0 +1,480 @@
+# Plano de Desenvolvimento — Consulta Viva
+
+> Companheiro de [DOCUMENTACAO.md](./DOCUMENTACAO.md), que define **o quê** e **por quê**.
+> Este documento define **como** e **em que ordem**.
+> Criado em 15/09/2026 · Status: proposta inicial
+
+---
+
+## Princípio que ordena tudo
+
+> **Ataque o risco desconhecido antes do trabalho conhecido.**
+
+O MVP tem duas naturezas de trabalho misturadas:
+
+| Natureza | O que é | Risco |
+|---|---|---|
+| **Conhecido** | Auth, CRUD de pacientes, PWA, upload, export PDF, cobrança | Baixo — é execução. Leva tempo, mas não falha. |
+| **Desconhecido** | Diarização em pt-BR com áudio real de consultório; identificação de papel; nota ancorada sem alucinar | **Alto** — pode simplesmente não funcionar bem o bastante. |
+
+A ordem natural ("começar pelo login") constrói seis semanas de trabalho conhecido antes de descobrir se o desconhecido funciona. A ordem certa inverte isso: **as duas primeiras semanas respondem às perguntas que podem matar o produto**, usando scripts descartáveis, sem app, sem banco, sem interface.
+
+Se o spike falhar, você perdeu duas semanas — não dois meses.
+
+---
+
+## Sumário
+
+1. [Decisões de stack](#1-decisões-de-stack)
+2. [Marco 0 — Fundação](#marco-0--fundação-2-3-dias)
+3. [Marco 1 — Spike de ASR e diarização](#marco-1--spike-de-asr-e-diarização-1-semana) ⭐
+4. [Marco 2 — Esqueleto andante](#marco-2--esqueleto-andante-1-semana)
+5. [Marco 3 — Identificação de papel](#marco-3--identificação-de-papel-3-4-dias)
+6. [Marco 4 — Nota ancorada](#marco-4--nota-ancorada-1-2-semanas) ⭐
+7. [Marco 5 — O produto ao redor](#marco-5--o-produto-ao-redor-2-3-semanas)
+8. [Marco 6 — Endurecimento e LGPD](#marco-6--endurecimento-e-lgpd-1-semana)
+9. [Modelo de dados inicial](#9-modelo-de-dados-inicial)
+10. [Estrutura do repositório](#10-estrutura-do-repositório)
+11. [Economia unitária — o número que decide o freemium](#11-economia-unitária)
+12. [O que fazer em paralelo (não-código)](#12-o-que-fazer-em-paralelo)
+13. [Critérios de aborto](#13-critérios-de-aborto)
+
+---
+
+## 1. Decisões de stack
+
+Recomendações com justificativa. Cada uma vira um ADR em `docs/adr/` quando confirmada.
+
+| Camada | Escolha | Por quê |
+|---|---|---|
+| **Monorepo** | pnpm workspaces + TypeScript | pnpm já instalado; workspaces evitam o inferno de publicar pacotes internos. |
+| **Front-end** | Next.js (App Router) + React + Tailwind | PWA mobile-first, um só deploy, SSR para as páginas de marketing. Solo dev não tem orçamento para manter front e back separados. |
+| **API** | Route Handlers do Next.js (BFF) | Evita um segundo serviço no MVP. Se crescer, extrai-se depois. |
+| **Worker** | Processo Node separado, container próprio | Transcrição leva minutos. **Não pode** rodar em serverless com timeout. Este é o único serviço que precisa viver fora do Next. |
+| **Fila** | Tabela no Postgres com `FOR UPDATE SKIP LOCK` (ou `pgmq`) | Zero infra nova. Redis/SQS só quando o volume justificar. |
+| **Banco + Auth + Storage** | **Supabase, região São Paulo (`sa-east-1`)** | Ver nota abaixo — é a decisão de maior alavancagem do projeto. |
+| **ORM** | Drizzle | SQL-first, convive bem com políticas RLS escritas à mão. Prisma abstrai demais justamente onde você precisa de controle. |
+| **ASR + diarização** | **A definir pelo Marco 1** | Não decidir por leitura de site. Decidir por medição. |
+| **LLM da nota** | API com saída estruturada (JSON Schema) + contrato de não-treinamento | Ver [Marco 4](#marco-4--nota-ancorada-1-2-semanas) para o mecanismo anti-alucinação. |
+| **Testes** | Vitest (unidade) + Playwright (e2e do loop crítico) | |
+| **CI** | GitHub Actions: typecheck, lint, teste, migration dry-run | |
+
+### Por que Supabase em São Paulo
+
+Não é preferência de ferramenta, é a soma de quatro requisitos da documentação resolvidos por uma escolha só:
+
+1. **Isolamento multi-tenant rígido** (§6.3 da doc: *"a busca precisa ser filtrada por dono no nível de dados, não só na interface"*) → **Row Level Security** do Postgres faz exatamente isso. A política vive no banco; nem um bug de aplicação nem uma query esquecida vazam dados de outro profissional.
+2. **Dados no Brasil** → região `sa-east-1` existe.
+3. **`pgvector` para o assistente RAG futuro** (§6.3-A) → extensão nativa, zero migração depois.
+4. **Storage criptografado para áudio** com as mesmas políticas de acesso.
+
+O custo disso é acoplamento a um fornecedor. Mitigação: é Postgres puro por baixo — o schema, as migrations e as políticas RLS são portáveis. O que prende é Auth e Storage, e ambos são substituíveis com ~1 semana de trabalho se necessário.
+
+### ⚠️ O conflito de residência de dados
+
+A documentação vende **"dados hospedados no Brasil"** como recurso de confiança (§10) e sugere **AssemblyAI / Deepgram / AWS HealthScribe** como fornecedores de ASR (§8). **Os três são hospedados fora do Brasil.** O áudio da consulta — o dado mais sensível do sistema — sairia do país.
+
+Isso não é ilegal: a LGPD (Art. 33) permite transferência internacional com salvaguardas. Mas exige que você:
+
+- liste os **subprocessadores** na política de privacidade;
+- tenha **cláusulas contratuais** adequadas com cada um;
+- **não afirme** "seus dados ficam no Brasil" se o áudio é processado nos EUA — isso é o tipo de promessa que vira reclamação na ANPD.
+
+**Três saídas, em ordem de preferência:**
+
+| Saída | Efeito | Custo |
+|---|---|---|
+| **A. Fornecedor com região no Brasil** — Google STT v2 (`southamerica-east1`) ou Azure Speech (Brazil South) | Claim de marketing fica verdadeiro e íntegro | Precisa validar qualidade de diarização em pt-BR — é justamente o que o Marco 1 faz |
+| **B. Fornecedor estrangeiro + divulgação honesta** | Claim vira *"armazenamento no Brasil; processamento por subprocessadores listados"* | Mais fraco na venda, mas legítimo |
+| **C. Whisper + pyannote auto-hospedado em GPU no Brasil** | Residência total + margem em escala | Caro e prematuro no dia 1 — a própria doc alerta contra (§8) |
+
+**Por isso o Marco 1 testa Google e Azure junto com AssemblyAI e Deepgram.** Se um fornecedor com região brasileira entregar qualidade comparável, a saída A é gratuita e o diferencial de confiança fica real.
+
+---
+
+## Marco 0 — Fundação (2-3 dias)
+
+Infraestrutura mínima para que todo o resto tenha onde acontecer.
+
+- [ ] Commit inicial; `.gitignore`, `LICENSE`, `README.md`
+- [ ] Monorepo pnpm com a estrutura da [seção 10](#10-estrutura-do-repositório)
+- [ ] TypeScript strict, ESLint, Prettier, `.editorconfig`
+- [ ] GitHub Actions: `typecheck` + `lint` + `test` em cada PR
+- [ ] Projeto Supabase em `sa-east-1`; `.env.example` documentado
+- [ ] `docs/adr/` com ADR-0001 (stack) registrado
+- [ ] Docker Compose com Postgres local (`pgvector` habilitado) para desenvolvimento offline
+
+**Feito quando:** `pnpm install && pnpm typecheck && pnpm test` passa em um clone limpo e o CI está verde.
+
+---
+
+## Marco 1 — Spike de ASR e diarização (1 semana) ⭐
+
+**Este é o marco mais importante do projeto.** Nenhuma linha de app é escrita aqui. É um diretório Python descartável em `spikes/asr-bench/` cuja única saída é uma tabela de números e um ADR.
+
+### Pergunta que ele responde
+
+> Existe um fornecedor que transcreva e separe vozes em português brasileiro, em áudio real de consultório, com qualidade suficiente e custo viável — e, de preferência, sem tirar o áudio do país?
+
+### Comece pelo local — é grátis e responde três perguntas de uma vez
+
+**Ordem: Whisper + pyannote na sua própria máquina, primeiro.** Sem chave de API, sem cartão, sem cadastro. Whisper large-v3 é genuinamente muito bom em português — frequentemente melhor que as APIs comerciais — e pyannote 3.1 é o estado da arte aberto em diarização.
+
+Rodar local responde três coisas ao mesmo tempo:
+
+1. **A qualidade serve?** (o portão que decide se o produto existe)
+2. **O plano grátis fecha?** Se a transcrição roda no seu servidor, o custo marginal por consulta grátis cai para perto de zero — vira custo fixo de servidor, não custo por uso. Ver [§11](#11-economia-unitária).
+3. **A residência de dados se sustenta?** O áudio nunca sai do seu servidor. O claim "dados no Brasil" fica verdadeiro sem depender de fornecedor nenhum.
+
+O custo é velocidade: em CPU, uma consulta de 30 minutos leva de 10 a 40 minutos para processar. Para um plano grátis em que a nota chega por notificação em vez de na hora, isso é aceitável. Medir esse tempo na sua máquina é parte do spike.
+
+> **Isto contradiz a documentação?** Não. A §8 alerta contra *construir* ASR — e está certa. Baixar um modelo pronto e rodá-lo num container não é construir ASR; é usar uma biblioteca. São coisas diferentes, com custos diferentes.
+
+### Fornecedores a medir, nesta ordem
+
+| Ordem | Fornecedor | Região BR? | Por que nesta posição |
+|---|---|---|---|
+| **1º** | **Whisper large-v3 + pyannote 3.1 (local)** | 🏠 total | Grátis, sem cadastro, e é o candidato a motor do plano grátis |
+| 2º | Google STT v2 (`southamerica-east1`) | ✅ | Se o local for lento demais, este mantém a residência |
+| 3º | Azure Speech (Brazil South) | ✅ | Idem |
+| 4º | AssemblyAI | ❌ | Régua de qualidade do mercado |
+| 5º | Deepgram | ❌ | Régua de custo e latência |
+
+Só desça na lista se o de cima não passar. Se o local resolver, você economiza o spike inteiro dos pagos.
+
+> Confirme região, suporte a pt-BR e preço vigente na documentação de cada fornecedor no momento do spike — não confie nesta tabela para decisão de contrato.
+
+### Corpus de teste — a versão barata
+
+**Passo 1 — o teste do olho (≈2 horas).** Grave **2 consultas simuladas** de 8 minutos. Rode nos candidatos. **Leia as saídas lado a lado.**
+
+Você não precisa de número nenhum para ver que um fornecedor colocou a fala do profissional na boca do paciente. Se um for visivelmente melhor, a decisão está tomada e você para aqui.
+
+**Passo 2 — só se ficar empatado (≈2 horas a mais).** Aí sim vale medir. E há um truque que elimina a parte cara do trabalho:
+
+> **Grave cada pessoa num microfone separado** — dois celulares, ou um microfone USB mais o do notebook. Some os canais para criar o arquivo de teste (que soa como gravação de um microfone só), e guarde os canais separados. **Eles são o gabarito de quem-falou-quando, perfeito e de graça.**
+
+Isso entrega DER e cpWER sem rotular nada à mão. Sobra só o texto para o WER — e aí você **corrige** a saída do melhor fornecedor em vez de digitar do zero, o que é umas três vezes mais rápido.
+
+**Cenários, em ordem de importância** — três bastam:
+
+| # | Cenário | Por que importa |
+|---|---|---|
+| 1 | 1:1, sala silenciosa | Piso: se falhar aqui, o fornecedor está fora |
+| 2 | Celular na mesa + ruído de fundo | O consultório real, mobile-first |
+| 3 | Profissional + paciente + **acompanhante** | 3 falantes — o diferencial prometido |
+
+> **Correção honesta:** a primeira versão deste plano pedia 6 a 10 gravações com transcrição manual completa — umas 8 horas. Isso é rigor de artigo acadêmico para uma decisão de sim-ou-não. O caminho acima custa 2 a 4 horas e decide a mesma coisa.
+
+### Métricas (só no passo 2)
+
+- **WER** — qualidade da transcrição
+- **cpWER** — *concatenated minimum-permutation WER*. **Reporte sempre junto com o DER.** A doc (§7) traz o caso de "15% DER com 31% cpWER": o DER parecia ótimo enquanto um terço das palavras estava atribuída ao falante errado. Use o pacote `meeteval`.
+- **DER** — via `pyannote.metrics`
+- **Custo por minuto** de áudio, medido na fatura real
+- **Latência** em lote (e em streaming, se houver intenção de tempo real)
+- **Acurácia em termos clínicos** — conte à mão os erros em nomes de medicamentos e dosagens. É onde o erro é perigoso.
+
+### Entregável
+
+`docs/adr/0002-fornecedor-asr.md`, com a tabela completa e a decisão justificada.
+
+### Portão de qualidade
+
+| Métrica | Mínimo aceitável | Comentário |
+|---|---|---|
+| WER (cenários 1-2) | < 15% | Acima disso a revisão custa mais que digitar |
+| cpWER (cenário 3) | < 25% | O caso do acompanhante é o diferencial prometido |
+| Custo | < R$ 1,00 / consulta de 30 min | Senão o plano grátis é inviável ([§11](#11-economia-unitária)) |
+
+**Nenhum fornecedor passa?** Vá para os [critérios de aborto](#13-critérios-de-aborto) antes de escrever mais código.
+
+---
+
+## Marco 2 — Esqueleto andante (1 semana)
+
+O *walking skeleton*: a fatia mais fina possível que atravessa **todas** as camadas. Feio de propósito.
+
+```
+upload de um .wav  →  job na fila  →  worker chama o fornecedor
+     →  segmentos salvos no Postgres  →  linha do tempo rotulada na tela
+```
+
+- [ ] Schema inicial + migrations ([seção 9](#9-modelo-de-dados-inicial))
+- [ ] **Políticas RLS desde o primeiro dia** — nunca "depois"; retrofitar RLS em schema existente é doloroso e é onde vazamentos nascem
+- [ ] Storage: upload de áudio com URL assinada
+- [ ] Tabela de jobs + worker com *polling* e retry
+- [ ] Integração com o fornecedor escolhido no Marco 1
+- [ ] Página crua que lista os segmentos com falante e timestamp
+
+Sem beleza, sem auth elaborada, sem tratamento de erro sofisticado. **Prova que o tubo inteiro funciona ponta a ponta.**
+
+**Feito quando:** você sobe um arquivo pelo navegador e vê a transcrição separada por falante aparecer sozinha.
+
+---
+
+## Marco 3 — Identificação de papel (3-4 dias)
+
+Transformar `Falante 1 / Falante 2` em `PROFISSIONAL / PACIENTE / OUTRO`.
+
+### Recomendação: comece só com o Método B
+
+A documentação (§7) recomenda combinar **A** (impressão vocal cadastrada) + **B** (classificação por conteúdo via LLM). A combinação é o destino certo — mas **não no MVP**.
+
+**Por quê:** o Método B sozinho é um prompt de ~30 linhas sobre a transcrição já diarizada. Não exige *embeddings* de voz, nem infraestrutura de ML, nem — e este é o ponto — **pedir ao profissional que grave uma amostra de voz no cadastro**. Esse passo é fricção pura num fluxo de onboarding, exatamente onde se perde conversão.
+
+E o sinal linguístico é esmagador: quem pergunta *"há quanto tempo você sente isso?"* e quem responde *"faz uns três dias"* não se confundem. O Método A resolve um problema que o B provavelmente já resolve sozinho.
+
+**Plano:** implemente B, **meça a acurácia** no corpus do Marco 1. Só adicione A se B ficar abaixo de ~95%.
+
+- [ ] Prompt de classificação de papel sobre o transcrito diarizado
+- [ ] Medir acurácia nos 6 cenários do corpus
+- [ ] Correção manual na interface (o profissional troca o rótulo se errar) — **rede de segurança obrigatória**, independente da acurácia
+- [ ] Registrar as correções: são os dados que dizem se o Método A vale o esforço
+
+---
+
+## Marco 4 — Nota ancorada (1-2 semanas) ⭐
+
+O segundo marco crítico. Aqui mora a diferença entre um produto confiável e um gerador de texto plausível.
+
+### O mecanismo anti-alucinação
+
+A documentação (§11) mostra o número que assusta: **62% dos achados de exame físico fabricados passaram despercebidos** na revisão do médico — porque soavam críveis. Prompt pedindo "não invente" não resolve isso. Arquitetura resolve.
+
+**A técnica central: cite IDs, nunca timestamps.**
+
+```
+Prompt recebe:
+  [seg_a1f3] PROFISSIONAL (00:32): "Há quanto tempo você sente essa dor?"
+  [seg_b8e2] PACIENTE     (00:38): "Uns três dias, começou depois do treino"
+  ...
+
+Saída estruturada obrigatória (JSON Schema):
+  {
+    "queixa_principal": {
+      "texto": "Dor lombar há 3 dias, início após atividade física",
+      "fontes": ["seg_b8e2"]           ← só pode COPIAR IDs que existem
+    }
+  }
+```
+
+Por que isso funciona: se você pedir timestamps, o modelo **gera números** — e números gerados são plausíveis e errados. Se você pedir IDs opacos de uma lista fechada, ele só pode copiar. Qualquer ID que não exista na lista é detectado por validação determinística, sem IA no meio.
+
+### Camadas de defesa
+
+1. **Saída estruturada** com `fontes: string[]` obrigatório em toda afirmação clínica
+2. **Validação determinística** — todo ID citado existe? Senão, rejeita e reprocessa
+3. **Verificação de suporte** — segunda passada barata: o trecho citado sustenta a afirmação? Sinaliza divergência
+4. **Seção omitida > seção inventada** — o prompt instrui a omitir o que não está no áudio, nunca preencher
+5. **Rascunho até aprovação** — nada é salvo como documento sem clique explícito do profissional
+
+### Interface de revisão
+
+- Clique numa frase → destaca os segmentos-fonte → toca aquele trecho do áudio
+- Afirmações sem fonte ou com verificação divergente aparecem **visualmente marcadas**
+- Edição livre; a edição do profissional é a verdade final
+
+- [ ] Prompt + JSON Schema da nota (SOAP/anamnese) para a especialidade escolhida
+- [ ] Validador de citações (determinístico)
+- [ ] Verificador de suporte (LLM barato, segunda passada)
+- [ ] Execução do **objetivo** da sessão como geração adicional, com as mesmas regras
+- [ ] Interface de revisão com áudio ancorado
+- [ ] Versionamento de prompt gravado em cada documento — sem isso você não consegue investigar regressões de qualidade
+
+---
+
+## Marco 5 — O produto ao redor (2-3 semanas)
+
+Agora sim, o trabalho conhecido. Nesta altura o núcleo já está provado.
+
+- [ ] Auth real + onboarding (perfil, especialidade, registro profissional, assinatura)
+- [ ] CRUD de pacientes, com busca
+- [ ] **Gravação no navegador** — `MediaRecorder`, upload em pedaços, retomada se a rede cair, aviso de bateria/permissão. *Subestime este item por sua conta e risco: é onde o mobile real machuca.*
+- [ ] Pasta do paciente com histórico de sessões
+- [ ] Registro de consentimento antes de gravar (texto + timestamp + método)
+- [ ] Export: PDF e "copiar para o prontuário"
+- [ ] Plano grátis com **quota verificada no servidor antes de processar** (nunca depois — senão você paga a conta)
+- [ ] PWA: manifest, service worker, instalável, ícone
+- [ ] Telemetria de custo por sessão desde o primeiro usuário
+
+---
+
+## Marco 6 — Endurecimento e LGPD (1 semana)
+
+- [ ] **Testes automatizados de RLS** — suíte que tenta ler dados de outro profissional e falha o build se conseguir. Não é opcional.
+- [ ] Trilha de auditoria (quem viu/editou o quê, quando)
+- [ ] Política de retenção: exclusão automática do áudio após N dias, configurável
+- [ ] Exclusão de conta e portabilidade (direitos do titular, Art. 18)
+- [ ] Política de privacidade e termos, com subprocessadores listados
+- [ ] Criptografia em repouso confirmada; segredos fora do código
+- [ ] Rate limiting nas rotas caras
+- [ ] Revisão de segurança da aplicação antes do primeiro usuário real
+
+---
+
+## 9. Modelo de dados inicial
+
+Traduzido de §9 da documentação para tabelas concretas.
+
+```
+professionals   id, auth_user_id, nome, especialidade, registro_profissional,
+                assinatura_url, plano, criado_em
+                -- voice_embedding vector(192)  → só se o Marco 3 exigir o Método A
+
+patients        id, professional_id ⚑, nome, data_nascimento, documento_cifrado,
+                observacoes, criado_em
+
+sessions        id, professional_id ⚑, patient_id, iniciada_em, encerrada_em,
+                status, audio_path, objetivo_texto, objetivo_template_id,
+                consentimento_em, consentimento_metodo, excluida_em
+
+transcript_segments  id, session_id, professional_id ⚑, falante_label, papel,
+                     inicio_ms, fim_ms, texto, confianca
+
+documents       id, session_id, professional_id ⚑, tipo, conteudo jsonb,
+                modelo, prompt_versao, aprovado_em, aprovado_por
+
+objective_templates  id, professional_id ⚑ (nulo = global), especialidade,
+                     nome, prompt
+
+usage_events    id, professional_id ⚑, session_id, tipo, minutos,
+                custo_centavos, criado_em
+
+audit_log       id, ator_id, acao, entidade, entidade_id, ip, criado_em
+```
+
+### Duas decisões de schema que economizam meses
+
+**⚑ Desnormalize `professional_id` em toda tabela.** `transcript_segments` naturalmente só teria `session_id` — o dono viria por JOIN. Não faça isso. Políticas RLS com JOIN são lentas e fáceis de escrever errado, e cada política mal escrita é um vazamento de dado de saúde. Com a coluna direta, toda política é a mesma linha trivial:
+
+```sql
+create policy tenant_isolation on transcript_segments
+  for all using (professional_id = auth.professional_id());
+```
+
+**Prepare o terreno do `pgvector` agora, use depois.** Habilite a extensão no Marco 0 e mantenha `transcript_segments` limpo e bem tipado. O assistente RAG da Fase 4 (§6.3-A da doc) vira uma coluna e um índice — não uma migração de dados históricos.
+
+---
+
+## 10. Estrutura do repositório
+
+```
+clinical-scribe-ai/
+├── apps/
+│   ├── web/                 # Next.js — PWA + rotas de API (BFF)
+│   └── worker/              # processo Node: transcrever → diarizar → papel → nota
+├── packages/
+│   ├── db/                  # schema Drizzle, migrations, políticas RLS, seeds
+│   └── core/                # domínio puro: tipos, prompts, pipeline, validadores
+│                            #   sem I/O → testável sem banco nem rede
+├── spikes/
+│   └── asr-bench/           # Marco 1 — Python, descartável, não vai para produção
+├── docs/
+│   ├── DOCUMENTACAO.md      # visão de produto e negócio
+│   ├── PLANO-DE-DESENVOLVIMENTO.md
+│   └── adr/                 # decisões arquiteturais numeradas
+└── .github/workflows/
+```
+
+**Por que `packages/core` separado:** a lógica que mais importa — montagem de prompt, validação de citações, classificação de papel — não deve depender de banco, rede nem framework. Isolada, ela roda em testes de milissegundos, e você consegue iterar em qualidade de prompt sem subir a aplicação inteira. É a diferença entre ajustar um prompt em 10 segundos ou em 3 minutos, multiplicada por centenas de iterações.
+
+---
+
+## 11. Economia unitária
+
+O plano grátis é a estratégia de aquisição (§12 da doc) — e o item que pode sangrar caixa em silêncio. Mas a conta muda **radicalmente** conforme a arquitetura.
+
+### Duas arquiteturas, custo muito diferente
+
+Por consulta de 30 minutos:
+
+| Item | Tudo em API paga | ASR local + LLM barato |
+|---|---|---|
+| ASR + diarização | R$ 0,45 – 1,10 | **~R$ 0** (custo fixo de servidor) |
+| LLM da nota | R$ 0,15 – 0,60 (modelo premium) | R$ 0,05 – 0,15 (modelo econômico) |
+| **Total por consulta** | **R$ 0,60 – 1,70** | **~R$ 0,10** |
+| **Por usuário grátis/mês** (300 min ≈ 10 consultas) | **R$ 6 – 17** | **~R$ 1** |
+| **1.000 usuários grátis/mês** | **R$ 6.000 – 17.000** | **~R$ 1.000** + servidor |
+
+Com 5% convertendo para o Pro a R$ 89, mil usuários geram R$ 4.450/mês. Na coluna da esquerda, **o plano grátis dá prejuízo**. Na direita, é ruído contábil.
+
+**A diferença decisiva é o ASR.** Ele é o item caro, e é o único que dá para zerar: Whisper + pyannote auto-hospedados transformam custo por consulta em custo fixo de servidor — que não cresce quando chega mais um usuário grátis.
+
+### A arquitetura recomendada para o freemium
+
+| Plano | Motor | Efeito |
+|---|---|---|
+| **Grátis** | Whisper + pyannote no seu servidor, fila com prioridade baixa | Custo marginal ~zero; nota chega em minutos, não na hora |
+| **Pro** | Prioridade alta na mesma fila, ou API comercial se o Marco 1 provar que é melhor | Rápido, e o custo é coberto pela assinatura |
+
+Isso também resolve a residência de dados de graça: no plano grátis o áudio **nunca sai do seu servidor**.
+
+### ⚠️ A armadilha das APIs de IA gratuitas
+
+É tentador usar o nível grátis do OpenRouter, do Google AI Studio ou equivalentes para zerar também o custo do LLM. **Não faça isso com dado de paciente.**
+
+Esses níveis costumam ser gratuitos justamente porque o provedor registra e usa os prompts para treinar. Mandar a transcrição de uma consulta para lá significa:
+
+- **uso secundário** de dado sensível de saúde, que pela própria §10 da documentação exige **consentimento explícito e específico** do paciente;
+- a promessa **"não treinamos com seus dados"** deixa de ser verdadeira;
+- sem contrato de tratamento de dados (DPA), você não tem base para o compartilhamento com o subprocessador.
+
+**Onde o nível grátis serve muito bem:** desenvolvimento e testes com áudio simulado, que é exatamente o corpus do Marco 1. Use à vontade lá.
+
+**Para dado real:** modelo pago, com termos contratuais de não-treinamento. A boa notícia é que isso custa muito menos do que parece — um modelo econômico processando 30 minutos de transcrição fica na casa de **R$ 0,05 a 0,15**, e vem com os mesmos termos contratuais do modelo caro. Verifique a política de dados vigente de cada provedor antes de fechar.
+
+### Instrumentação, em qualquer arquitetura
+
+- [ ] Quota **verificada antes de processar**, não depois
+- [ ] Custo real registrado por sessão em `usage_events` desde o primeiro usuário
+- [ ] Painel de custo por usuário e custo por conversão desde a semana 1
+- [ ] Limite reavaliado com dados reais aos 30 dias
+
+---
+
+## 12. O que fazer em paralelo
+
+Trabalho não-código que não pode esperar o código ficar pronto:
+
+| Item | Quando | Por quê |
+|---|---|---|
+| **10-15 entrevistas no nicho** (§13, Fase 0 da doc) | Durante os Marcos 0-2 | Descobrir o **objetivo nº 1** que o profissional pediria. Isso define o template do Marco 4 — e você vai precisar dele antes do Marco 4 terminar. |
+| **Escolher a especialidade** | Antes do Marco 4 | Nutrição ou psicologia (§4). O Marco 4 é específico de especialidade. |
+| **Gravar o corpus de teste** | Antes do Marco 1 | 8 horas de trabalho manual. Comece no dia 1. |
+| **Recrutar 3-5 testadores** | Durante o Marco 3 | Precisam estar prontos quando o Marco 5 fechar. |
+| **Definir a marca** | Até o Marco 5 | O repositório já se chama `clinical-scribe-ai`; renomeável a 1 clique. |
+
+> A documentação recomenda validar antes de codar pesado (Fase 0). Este plano não contradiz isso — ele roda a validação **em paralelo** com o trabalho técnico que independe do resultado das entrevistas. Nenhuma entrevista vai mudar o fato de que você precisa saber se a diarização funciona em pt-BR.
+
+---
+
+## 13. Critérios de aborto
+
+Escritos agora, com a cabeça fria, para não serem racionalizados depois.
+
+| Gatilho | Decisão |
+|---|---|
+| Nenhum fornecedor bate o portão de qualidade do Marco 1 | **Pare.** Reavalie: nicho com áudio mais controlado (microfone dedicado, Método C), ou produto diferente. Não construa o app esperando melhorar depois. |
+| Custo por consulta > R$ 3,00 **mesmo com ASR local** | Modelo freemium inviável. Reprecifique antes do Marco 5, não depois. |
+| Método B < 80% de acurácia de papel | Acrescente o Método A (impressão vocal) — orçe +1 semana. |
+| Taxa de alucinação > 5% por afirmação após o Marco 4 | **Bloqueie o lançamento.** Este é o risco nº 1 da doc (§11). Um erro de dosagem inventado é um problema de responsabilidade civil, não um bug. |
+| Entrevistas revelam que o objetivo nº 1 não é a nota estruturada | Ajuste o Marco 4 antes de construí-lo. É por isso que as entrevistas rodam cedo. |
+
+---
+
+## Cronograma consolidado
+
+| Marco | Duração | Acumulado |
+|---|---|---|
+| 0 — Fundação | 2-3 dias | ~3 dias |
+| 1 — Spike ASR ⭐ | 1 semana | ~1,5 semana |
+| 2 — Esqueleto andante | 1 semana | ~2,5 semanas |
+| 3 — Identificação de papel | 3-4 dias | ~3 semanas |
+| 4 — Nota ancorada ⭐ | 1-2 semanas | ~4,5 semanas |
+| 5 — Produto ao redor | 2-3 semanas | ~7 semanas |
+| 6 — Endurecimento e LGPD | 1 semana | **~8 semanas** |
+
+Dois meses até um MVP testável com usuários reais — dentro da janela de 2-3 meses da Fase 1 da documentação (§13).
+
+**Os marcos ⭐ são os que decidem se o produto existe.** Os outros decidem quando.
