@@ -14,7 +14,8 @@
     "migrate": "node --env-file-if-exists=../../.env src/migrate.ts",
     "test:rls": "node --env-file-if-exists=../../.env src/test-rls.ts",
     "push": "drizzle-kit push",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "seed": "node --env-file-if-exists=../../.env --import tsx src/seed.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13"
   }
 }
