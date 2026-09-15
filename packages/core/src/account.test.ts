@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { Account, Engine, Plan, UserRole } from "./account.js";
+import type { Account, Engine, Plan, UserRole } from "./account";
 import {
   canChooseEngine,
   canProcess,
   remainingMinutes,
   resolveEngine,
-} from "./account.js";
+} from "./account";
 
 function account(
   role: UserRole,

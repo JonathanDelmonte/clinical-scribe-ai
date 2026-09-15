@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { CitedStatement, TranscriptSegment } from "./domain.js";
+import type { CitedStatement, TranscriptSegment } from "./domain";
 import {
   formatSegmentsForPrompt,
   formatTimestamp,
   isBlocking,
   resolveCitations,
   validateCitations,
-} from "./citations.js";
+} from "./citations";
 
 function segment(
   id: string,

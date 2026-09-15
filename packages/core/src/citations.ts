@@ -16,7 +16,7 @@
  * esta: só esta é determinística.
  */
 
-import type { CitedStatement, TranscriptSegment } from "./domain.js";
+import type { CitedStatement, TranscriptSegment } from "./domain";
 
 export type CitationIssue =
   /** Afirmação clínica sem nenhuma fonte — sempre um problema. */

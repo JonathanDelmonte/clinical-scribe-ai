@@ -5,17 +5,17 @@ export type {
   SpeakerRole,
   SpeakerRoleSource,
   TranscriptSegment,
-} from "./domain.js";
-export { SPEAKER_ROLES } from "./domain.js";
+} from "./domain";
+export { SPEAKER_ROLES } from "./domain";
 
-export type { CitationIssue } from "./citations.js";
+export type { CitationIssue } from "./citations";
 export {
   formatSegmentsForPrompt,
   formatTimestamp,
   isBlocking,
   resolveCitations,
   validateCitations,
-} from "./citations.js";
+} from "./citations";
 
 export type {
   Account,
@@ -24,7 +24,7 @@ export type {
   EngineReason,
   Plan,
   UserRole,
-} from "./account.js";
+} from "./account";
 export {
   canChooseEngine,
   canProcess,
@@ -32,12 +32,12 @@ export {
   PLAN_MONTHLY_MINUTES,
   remainingMinutes,
   resolveEngine,
-} from "./account.js";
+} from "./account";
 
 export type {
   RawSegment,
   TranscriptionInput,
   TranscriptionProvider,
   TranscriptionResult,
-} from "./transcription.js";
-export { isUsableForRoleIdentification, speakerCount } from "./transcription.js";
+} from "./transcription";
+export { isUsableForRoleIdentification, speakerCount } from "./transcription";

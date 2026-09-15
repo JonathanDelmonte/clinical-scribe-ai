@@ -3,8 +3,14 @@
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
-    "module": "NodeNext",
-    "moduleResolution": "nodenext",
+    // Resolução de bundler em todo o monorepo. Nada aqui é compilado para
+    // JS e executado por Node puro: a web passa pelo Turbopack e o worker
+    // pelo tsx, os dois resolvem imports relativos sem extensão. Com
+    // `nodenext` o TypeScript exigiria escrever "./arquivo.js" para um
+    // arquivo .ts, e o Turbopack não segue esse apontamento — o erro que
+    // ele dá aponta para a linha do re-export, não para a causa.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

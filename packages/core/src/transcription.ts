@@ -10,7 +10,7 @@
  * essa troca mexe num arquivo. Sem ele, mexe no pipeline inteiro.
  */
 
-import type { Engine } from "./account.js";
+import type { Engine } from "./account";
 
 /** Um trecho como o motor devolve — antes de virar `TranscriptSegment`. */
 export interface RawSegment {
