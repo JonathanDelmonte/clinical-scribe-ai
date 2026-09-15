@@ -1,0 +1,29 @@
+# Sobreposição que troca o motor de transcrição para GPU.
+#
+#     pnpm asr:up:gpu
+#
+# Arquivo separado, e não uma flag no compose principal, porque a reserva de
+# GPU FALHA em máquina que não tem uma. O caminho padrão precisa funcionar em
+# qualquer lugar; quem tem placa opta por ela explicitamente.
+services:
+  asr-local:
+    build:
+      context: ./services/asr-local
+      dockerfile: Dockerfile.gpu
+    image: scribe-asr-local-gpu
+    environment:
+      # Com GPU o `large-v3` fica mais rápido que o `medium` em CPU e ainda é
+      # bem melhor em português. É o raro caso de ganhar nas duas pontas.
+      WHISPER_MODEL: ${WHISPER_MODEL_GPU:-large-v3}
+      WHISPER_DEVICE: cuda
+      WHISPER_COMPUTE_TYPE: float16
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-pt}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-5}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -56,6 +56,7 @@ export default tseslint.config(
     files: [
       "apps/worker/**/*.ts",
       "packages/db/src/migrate.ts",
+      "packages/db/src/seed.ts",
       "packages/db/src/test-rls.ts",
     ],
     rules: { "no-console": "off" },

@@ -28,6 +28,17 @@ pnpm asr:up
 diferentes. `pnpm asr:up` sobe o motor de transcrição local — na primeira
 vez ele baixa alguns GB de modelo, então comece por aqui.
 
+> **Tem placa NVIDIA? Use `pnpm asr:up:gpu` no lugar de `pnpm asr:up`.**
+>
+> A diferença é de uma ordem de grandeza — em CPU o Whisper roda abaixo do
+> tempo real (uma consulta de 30 min leva mais de 30 min para processar); em
+> GPU ele passa de 20x, e ainda dá para usar o modelo `large-v3`, que é o
+> melhor em português. Mais rápido e melhor ao mesmo tempo.
+>
+> Exige o driver NVIDIA recente e o Docker Desktop com integração de GPU
+> (padrão no WSL2). Confira com:
+> `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`
+
 Depois, em dois terminais:
 
 ```bash

@@ -39,11 +39,54 @@ viabilidade do plano grátis, e residência de dados. Ver §Marco 1 do
 
 ### Velocidade
 
-| Modelo | Fator de tempo real | Consulta de 30 min levaria | Veredito |
+| Configuração | Fator de tempo real | Consulta de 30 min | Trechos |
 |---|---|---|---|
-| `medium` | 0,78x | ~38 min | Mais lento que a própria consulta |
-| `small` | **1,79x** | **~17 min** | 2,3x mais rápido que `medium` |
-| `large-v3` | não medido | — | Inviável em CPU, pela extrapolação |
+| CPU · `medium` · sequencial | 0,78x | ~38 min | 8 |
+| CPU · `small` · sequencial | 1,79x | ~17 min | 9 |
+| **GPU · `large-v3` · sequencial** | **0,52x** | **~58 min** | 12 |
+| **GPU · `large-v3` · lote 8 + tempo por palavra** | **10,35x** | **~3 min** | **15** |
+
+### A descoberta que inverte a intuição
+
+**A GPU sozinha deixou o sistema MAIS LENTO que a CPU** — 0,52x contra 0,78x. A
+placa mostrava 50% de utilização com **39 W de consumo numa peça de 170 W**:
+ociosa entre rajadas minúsculas de trabalho.
+
+A causa é o Whisper processar janelas de 30 segundos **uma de cada vez**. Cada
+chamada paga um custo fixo de preparo e transferência, e no WSL2 esse custo por
+lançamento de kernel domina o tempo total. Comprar hardware melhor sem mudar o
+padrão de acesso não resolveu nada.
+
+**A inferência em lote (`BatchedInferencePipeline`) multiplicou por 20** — de
+0,52x para 10,35x. É a diferença entre entregar 16 envelopes um por um e
+entregar a caixa inteira.
+
+> Lote **8**, não 16: lotes maiores pioraram o tempo nesta placa, provavelmente
+> por pressão de memória. Vale remedir ao trocar de GPU.
+
+### O efeito colateral que quase passou
+
+O lote devolve blocos grossos — **28 segundos num único trecho, com
+profissional e paciente dentro dele**. Isso arruinaria as duas coisas centrais
+do produto: a separação de vozes (um bloco com dois falantes recebe um rótulo
+só) e as citações (clicar numa frase tocaria meio minuto de áudio).
+
+A saída não foi abrir mão do lote. Foi ligar `word_timestamps` — que custa ~18%
+de tempo — e **reconstruir os trechos a partir das palavras**, quebrando na
+troca de falante, em pausa longa, em fim de frase e num teto de duração. O
+resultado tem granularidade **melhor** que a versão sequencial original: 15
+trechos contra 12.
+
+### Implicação para a arquitetura do plano grátis
+
+A margem do freemium depende de GPU, não de CPU. Com ~10x de tempo real, uma
+placa processa cerca de 14 mil minutos de áudio por dia; com 25% de utilização
+real, atende algo como **1.000 usuários grátis por GPU**. Um servidor com GPU
+custa na casa de R$ 500–1.500/mês — custo **fixo**, que não cresce a cada novo
+usuário grátis, ao contrário de API por minuto.
+
+Em CPU pura o plano grátis continua possível, mas com fila longa e a promessa
+tendo que ser "sua nota fica pronta em até uma hora".
 
 **O que estes números significam.** Para um plano grátis assíncrono — em que a
 nota chega por notificação e não na hora — ambos são toleráveis isoladamente. O

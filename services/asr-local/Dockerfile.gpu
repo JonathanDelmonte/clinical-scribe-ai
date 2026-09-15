@@ -1,0 +1,46 @@
+# Motor de transcrição LOCAL, versão GPU.
+#
+# Mesma aplicação da versão CPU (`Dockerfile`), mesmo `app.py`, mesma resposta.
+# Muda só o hardware que executa o modelo — e a diferença é de uma ordem de
+# grandeza: o que leva um minuto em CPU sai em poucos segundos aqui.
+#
+# A imagem é grande (~8 GB) porque carrega o runtime CUDA e o PyTorch com CUDA.
+# É o preço de não depender de fornecedor externo para transcrever.
+#
+#     pnpm asr:up:gpu
+
+# `cudnn-runtime` e não `base`: o ctranslate2 (motor do faster-whisper) precisa
+# de cuBLAS e cuDNN. Com a imagem `base` ele enxerga a GPU, carrega o modelo e
+# falha na primeira inferência — um erro que aparece tarde e não menciona cuDNN.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      python3 python3-pip ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# PyTorch com CUDA 12.4 — usado pelo pyannote na diarização. O faster-whisper
+# não depende do torch, mas a diarização sim, e rodá-la em CPU enquanto a
+# transcrição voa na GPU deixaria o gargalo apenas mudar de lugar.
+RUN pip3 install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cu124 \
+      torch==2.5.1 torchaudio==2.5.1
+
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+ENV HF_HOME=/models \
+    WHISPER_MODEL=large-v3 \
+    WHISPER_DEVICE=cuda \
+    WHISPER_COMPUTE_TYPE=float16 \
+    WHISPER_LANGUAGE=pt \
+    WHISPER_BEAM_SIZE=5
+
+EXPOSE 8000
+CMD ["python3", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
