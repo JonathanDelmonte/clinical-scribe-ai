@@ -1,88 +1,96 @@
-const MILESTONES = [
-  { id: 0, name: "Fundação", state: "doing", note: "monorepo, CI, schema, RLS" },
-  {
-    id: 1,
-    name: "Spike de ASR e diarização",
-    state: "next",
-    note: "⭐ decide se o produto existe",
-    critical: true,
-  },
-  { id: 2, name: "Esqueleto andante", state: "todo", note: "tubo ponta a ponta" },
-  { id: 3, name: "Identificação de papel", state: "todo", note: "médico × paciente" },
-  {
-    id: 4,
-    name: "Nota ancorada",
-    state: "todo",
-    note: "⭐ citações e anti-alucinação",
-    critical: true,
-  },
-  { id: 5, name: "Produto ao redor", state: "todo", note: "auth, gravação, export" },
-  {
-    id: 6,
-    name: "Endurecimento e LGPD",
-    state: "todo",
-    note: "testes de RLS, retenção",
-  },
-] as const;
+import { PLAN_DEFAULT_ENGINE, resolveEngine, type Account } from "@scribe/core";
+import { patients } from "@scribe/db";
+import { desc, isNull } from "drizzle-orm";
+import Link from "next/link";
 
-const STATE_STYLES: Record<string, string> = {
-  doing: "bg-accent/15 text-accent border-accent/30",
-  next: "bg-accent/5 text-ink border-line",
-  todo: "text-muted border-line",
-};
+import { NewPatientForm } from "@/components/NewPatientForm";
+import { asCurrentProfessional } from "@/lib/auth";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const data = await asCurrentProfessional(async (tx, me) => {
+    const rows = await tx
+      .select()
+      .from(patients)
+      .where(isNull(patients.deletedAt))
+      .orderBy(desc(patients.createdAt));
+    return { me, rows };
+  }).catch(() => null);
+
+  if (data === null) {
+    return (
+      <main className="mx-auto max-w-3xl px-5 py-16">
+        <h1 className="text-xl font-semibold">Banco não configurado</h1>
+        <p className="mt-3 text-muted">
+          Rode <code className="text-ink">pnpm db:up</code>,{" "}
+          <code className="text-ink">pnpm db:migrate</code> e{" "}
+          <code className="text-ink">pnpm db:seed</code>.
+        </p>
+      </main>
+    );
+  }
+
+  const { me, rows } = data;
+  const account: Account = {
+    role: me.role,
+    plan: me.plan,
+    preferredEngine: me.preferredEngine,
+  };
+  const decision = resolveEngine(account);
+
   return (
-    <main className="mx-auto max-w-2xl px-5 py-16">
-      <header className="mb-10">
-        <p className="text-xs font-medium tracking-widest text-muted uppercase">
-          pré-MVP
+    <main className="mx-auto max-w-3xl px-5 py-10">
+      <header className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">{me.name}</h1>
+        <p className="mt-1 text-sm text-muted">
+          cargo <strong className="text-ink">{me.role}</strong> · plano{" "}
+          <strong className="text-ink">{me.plan}</strong> · motor{" "}
+          <strong className="text-ink">{decision.engine}</strong>{" "}
+          <span className="text-muted">
+            ({decision.reason === "plan-default" ? "padrão do plano" : "escolha do dev"}
+            )
+          </span>
         </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Consulta Viva</h1>
-        <p className="mt-3 text-balance leading-relaxed text-muted">
-          Escriba clínico com IA. Grava a consulta, transcreve, separa quem fala e
-          devolve a nota estruturada — com cada afirmação ancorada no trecho de áudio
-          que a originou.
-        </p>
+        {me.role === "developer" && (
+          <p className="mt-1 text-xs text-muted">
+            Como desenvolvedor você escolhe o motor em cada sessão. No plano {me.plan} o
+            padrão seria <code>{PLAN_DEFAULT_ENGINE[me.plan]}</code>.
+          </p>
+        )}
       </header>
 
-      <section aria-labelledby="marcos">
-        <h2
-          id="marcos"
-          className="mb-4 text-xs font-medium tracking-widest text-muted uppercase"
-        >
-          Marcos
+      <section className="mb-8">
+        <h2 className="mb-3 text-xs font-medium tracking-widest text-muted uppercase">
+          Novo paciente
         </h2>
-        <ol className="space-y-2">
-          {MILESTONES.map((m) => (
-            <li
-              key={m.id}
-              className={`flex items-baseline gap-3 rounded-lg border px-4 py-3 ${
-                STATE_STYLES[m.state] ?? STATE_STYLES["todo"]
-              }`}
-            >
-              <span className="w-5 shrink-0 font-mono text-sm tabular-nums">
-                {m.id}
-              </span>
-              <span className="font-medium">{m.name}</span>
-              <span className="ml-auto text-right text-sm text-muted">{m.note}</span>
-            </li>
-          ))}
-        </ol>
+        <NewPatientForm />
       </section>
 
-      <footer className="mt-10 border-t border-line pt-5 text-sm text-muted">
-        <p>
-          Plano completo em{" "}
-          <code className="text-ink">docs/PLANO-DE-DESENVOLVIMENTO.md</code>.
-        </p>
-        <p className="mt-1">
-          Estado da API:{" "}
-          <a className="text-accent underline underline-offset-2" href="/api/health">
-            /api/health
-          </a>
-        </p>
-      </footer>
+      <section>
+        <h2 className="mb-3 text-xs font-medium tracking-widest text-muted uppercase">
+          Pacientes ({rows.length})
+        </h2>
+        {rows.length === 0 ? (
+          <p className="text-sm text-muted">
+            Nenhum paciente ainda. Crie o primeiro acima.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/pacientes/${p.id}`}
+                  className="flex items-center gap-3 rounded-lg border border-line px-4 py-3 transition-colors hover:border-accent"
+                >
+                  <span className="font-medium">{p.name}</span>
+                  <span className="ml-auto text-sm text-muted">abrir pasta →</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

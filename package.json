@@ -31,7 +31,8 @@
     "asr:logs": "docker compose --profile asr logs -f asr-local",
     "asr:health": "curl -s http://localhost:8001/health",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
-    "asr:try": "pnpm --filter @scribe/worker try-asr"
+    "asr:try": "pnpm --filter @scribe/worker try-asr",
+    "db:seed": "pnpm --filter @scribe/db seed"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,9 +1,29 @@
+import { join } from "node:path";
+
 import type { NextConfig } from "next";
+
+/**
+ * Carrega o `.env` da RAIZ do monorepo.
+ *
+ * O Next procura `.env` no diretório da aplicação (`apps/web/.env`), mas o
+ * projeto mantém um só na raiz — a mesma `DATABASE_URL` serve web, worker e
+ * migrations, e três cópias divergem no primeiro dia em que alguém edita uma.
+ *
+ * Isto roda antes da aplicação, então as variáveis já estão em `process.env`
+ * quando o primeiro módulo é avaliado. Variáveis do ambiente real têm
+ * precedência: em produção não existe `.env` e este bloco simplesmente não faz
+ * nada.
+ */
+try {
+  process.loadEnvFile(join(process.cwd(), "..", "..", ".env"));
+} catch {
+  // Sem .env — produção, ou primeira execução antes do `cp .env.example .env`.
+}
 
 const config: NextConfig = {
   // Os pacotes internos exportam TypeScript direto de `src/`, sem passo de
   // build. Um dev solo não precisa compilar pacotes internos para consumi-los.
-  transpilePackages: ["@scribe/core", "@scribe/db"],
+  transpilePackages: ["@scribe/core", "@scribe/db", "@scribe/storage"],
 
   // Vamos lidar com áudio de consulta — vale apertar os cabeçalhos desde já,
   // antes que alguma dependência comece a chamar endpoint inesperado.
