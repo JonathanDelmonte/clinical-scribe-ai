@@ -16,3 +16,28 @@ export {
   resolveCitations,
   validateCitations,
 } from "./citations.js";
+
+export type {
+  Account,
+  Engine,
+  EngineDecision,
+  EngineReason,
+  Plan,
+  UserRole,
+} from "./account.js";
+export {
+  canChooseEngine,
+  canProcess,
+  PLAN_DEFAULT_ENGINE,
+  PLAN_MONTHLY_MINUTES,
+  remainingMinutes,
+  resolveEngine,
+} from "./account.js";
+
+export type {
+  RawSegment,
+  TranscriptionInput,
+  TranscriptionProvider,
+  TranscriptionResult,
+} from "./transcription.js";
+export { isUsableForRoleIdentification, speakerCount } from "./transcription.js";
