@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+
+    // Nenhum tipo global por padrão. Cada pacote declara o que precisa.
+    // packages/core herda a lista vazia, e com isso a sua pureza deixa de
+    // ser convenção no comentário e passa a ser erro de compilação:
+    // `process`, `fs` e afins simplesmente não existem lá.
+    "types": []
+  },
+  "exclude": ["node_modules", "dist", ".next", "spikes"]
+}

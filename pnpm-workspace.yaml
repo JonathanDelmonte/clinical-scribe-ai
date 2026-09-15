@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# esbuild precisa rodar o script de instalação para baixar o binário nativo —
+# é dele que o Vitest e o tsx dependem. Aprovação explícita exigida pelo pnpm 11.
+allowBuilds:
+  esbuild: true

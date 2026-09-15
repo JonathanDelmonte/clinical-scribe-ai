@@ -1,0 +1,22 @@
+# Terminação de linha LF em todo lugar, inclusive no Windows.
+#
+# Sem isto, o Git converte para CRLF no checkout e o CI em Linux vê arquivos
+# diferentes dos que você editou. O sintoma típico é um teste que passa na sua
+# máquina e falha no CI por motivo nenhum aparente.
+* text=auto eol=lf
+
+# Binários nunca são convertidos.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary
+*.wav  binary
+*.mp3  binary
+*.m4a  binary
+*.webm binary
+
+# Lockfile é gerado: esconde do diff e marca como não-mesclável à mão.
+pnpm-lock.yaml -diff linguist-generated=true
+
+# Migrations são geradas pelo drizzle-kit e nunca editadas manualmente.
+packages/db/migrations/** linguist-generated=true

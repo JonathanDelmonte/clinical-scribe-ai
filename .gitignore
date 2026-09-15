@@ -1,0 +1,50 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Ambiente — NUNCA commitar segredos
+.env
+.env.*
+!.env.example
+
+# Dados sensíveis: áudio de consulta e transcrições jamais entram no repositório
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.webm
+*.flac
+spikes/**/corpus/
+spikes/**/output/
+spikes/**/.venv/
+
+# Python (spikes)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Ferramentas
+.vitest/
+coverage/
+playwright-report/
+test-results/
+.turbo/
+.eslintcache
+
+# Editores e SO
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,46 @@
+{
+  "name": "clinical-scribe-ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Escriba clínico com IA — grava, transcreve, separa vozes e gera nota estruturada ancorada no áudio",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "dev": "pnpm --filter @scribe/web dev",
+    "dev:worker": "pnpm --filter @scribe/worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @scribe/db generate",
+    "db:migrate": "pnpm --filter @scribe/db migrate",
+    "db:test-rls": "pnpm --filter @scribe/db test:rls",
+    "db:studio": "pnpm --filter @scribe/db studio",
+    "asr:up": "docker compose --profile asr up -d asr-local",
+    "asr:down": "docker compose --profile asr stop asr-local",
+    "asr:logs": "docker compose --profile asr logs -f asr-local",
+    "asr:health": "curl -s http://localhost:8001/health",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "asr:try": "pnpm --filter @scribe/worker try-asr"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.5.1",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
+  }
+}
