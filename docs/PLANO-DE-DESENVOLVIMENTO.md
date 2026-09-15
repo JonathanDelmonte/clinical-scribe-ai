@@ -401,14 +401,41 @@ Com 5% convertendo para o Pro a R$ 89, mil usuários geram R$ 4.450/mês. Na col
 
 **A diferença decisiva é o ASR.** Ele é o item caro, e é o único que dá para zerar: Whisper + pyannote auto-hospedados transformam custo por consulta em custo fixo de servidor — que não cresce quando chega mais um usuário grátis.
 
-### A arquitetura recomendada para o freemium
+### A arquitetura recomendada para o freemium — três motores
 
-| Plano | Motor | Efeito |
-|---|---|---|
-| **Grátis** | Whisper + pyannote no seu servidor, fila com prioridade baixa | Custo marginal ~zero; nota chega em minutos, não na hora |
-| **Pro** | Prioridade alta na mesma fila, ou API comercial se o Marco 1 provar que é melhor | Rápido, e o custo é coberto pela assinatura |
+| Motor | Onde roda | Quem usa | Custo para você | Diarização |
+|---|---|---|---|---|
+| **`device`** | navegador do cliente (WebGPU) | grátis | **zero** | difícil — ver abaixo |
+| **`local`** | nosso servidor com GPU | grátis com fila · Pro | fixo, R$ 500–1.500/mês | sim |
+| **`cloud`** | API comercial | Pro · Clínica | por minuto | sim |
 
-Isso também resolve a residência de dados de graça: no plano grátis o áudio **nunca sai do seu servidor**.
+O `local` já resolve a residência de dados: o áudio nunca sai do nosso servidor.
+O `device` vai além — **o áudio nunca sai da sala de consulta**. Não é
+"hospedado no Brasil", é *nunca transmitido*. Sob LGPD isso é a diferença entre
+ter subprocessador a declarar e não haver tratamento de dado algum fora do
+dispositivo, e é um argumento que nenhum concorrente copia sem reconstruir o
+produto inteiro.
+
+**O que o `device` custa, honestamente:**
+
+- Modelo menor obrigatoriamente (`base` ou `small`, nunca `large-v3`)
+- Velocidade varia muito com o aparelho — gráficos integrados de notebook
+  comum ficam na faixa de 1x a 3x tempo real
+- **A diarização é o obstáculo real:** o pyannote não roda bem no navegador, e
+  separar vozes é o coração do produto
+- Exige WebGPU — Chrome e Edge sim, Safari parcial, Firefox ainda não
+- Consome bateria
+
+**Por que ele NÃO vem primeiro.** Um motor que transcreve mas não separa vozes
+entrega exatamente o que a concorrência já faz por R$ 97. O `device` é jogada
+de escala e de privacidade, e só faz sentido depois que o diferencial existir:
+diarização, identificação de papel, e nota ancorada. Ver [Marcos 3 e 4](#13-roadmap).
+
+> **O código já comporta os três.** A interface `TranscriptionProvider` e a
+> função `resolveEngine()` não sabem nem se importam com *onde* a transcrição
+> acontece. Acrescentar `device` é um valor no enum e uma implementação — não é
+> reescrever o pipeline. É o retorno de ter feito a abstração antes de precisar
+> dela.
 
 ### ⚠️ A armadilha das APIs de IA gratuitas
 
