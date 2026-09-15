@@ -1,0 +1,24 @@
+{
+  "name": "@scribe/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Processamento assíncrono: transcrever → diarizar → identificar papel → gerar nota",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "try-asr": "node --env-file-if-exists=../../.env --import tsx src/try-asr.ts"
+  },
+  "dependencies": {
+    "@scribe/core": "workspace:*",
+    "@scribe/db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "pino": "^10.3.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "tsx": "^4.23.13"
+  }
+}
