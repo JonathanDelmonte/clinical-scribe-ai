@@ -21,6 +21,14 @@ const schema = z.object({
   /** Serviço Whisper + pyannote de `services/asr-local`. Motor do plano grátis. */
   ASR_LOCAL_URL: z.string().url().default("http://localhost:8001"),
 
+  /**
+   * Raiz do armazenamento de audio. Precisa ser a MESMA da aplicacao web:
+   * a web escreve o arquivo, o worker le. Caminhos divergentes produzem
+   * "arquivo nao encontrado" num caminho que nenhum dos dois lados testa
+   * sozinho.
+   */
+  STORAGE_ROOT: z.string().default(".storage"),
+
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().max(16).default(2),
   WORKER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),

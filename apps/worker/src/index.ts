@@ -13,21 +13,24 @@
  */
 
 import { createServiceClient } from "@scribe/db";
+import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
 
 import { config, requireDatabaseUrl } from "./config.js";
 import { logger } from "./logger.js";
+import { makeTranscribeHandler } from "./handlers/transcribe.js";
 import { claimJob, completeJob, failJob, type ClaimedJob } from "./queue.js";
 
 const db = createServiceClient(requireDatabaseUrl());
+const storage = createLocalStorage(resolveStorageRoot(config.STORAGE_ROOT));
 
 type JobHandler = (job: ClaimedJob) => Promise<void>;
 
 const handlers: Record<string, JobHandler> = {
-  // Marco 2 — chama o fornecedor escolhido no ADR-0002 e grava transcript_segments
-  // transcribe: handleTranscribe,
+  transcribe: makeTranscribeHandler(db, storage, logger),
+
   // Marco 3 — LLM lê a transcrição diarizada e atribui PROFISSIONAL × PACIENTE
   // identify_roles: handleIdentifyRoles,
-  // Marco 4 — gera a nota com citações por ID e valida determinísticamente
+  // Marco 4 — gera a nota com citações por ID e valida deterministicamente
   // generate_note: handleGenerateNote,
   // Marco 6 — retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS
   // delete_audio: handleDeleteAudio,
@@ -116,8 +119,9 @@ logger.info(
   {
     concurrency: config.WORKER_CONCURRENCY,
     asrLocalUrl: config.ASR_LOCAL_URL,
+    storage: storage.kind,
     handlers: Object.keys(handlers),
-    milestone: 0,
+    milestone: 2,
   },
   "worker iniciado",
 );
