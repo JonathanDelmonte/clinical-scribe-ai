@@ -1,0 +1,20 @@
+{
+  "name": "@scribe/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Domínio puro: tipos, montagem de prompt, validação de citações. Sem I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.0"
+  }
+}
