@@ -46,6 +46,19 @@ export interface TranscriptionResult {
    */
   readonly diarizationApplied: boolean;
   readonly diarizationError: string | null;
+
+  /**
+   * O texto termina bem antes do áudio.
+   *
+   * Existe porque essa é a falha mais perigosa deste pipeline: o serviço
+   * responde com sucesso, devolve texto coerente, e omite o final da consulta
+   * — que é justamente onde costuma estar a conduta, a receita e a data de
+   * retorno. Sem este sinal, a única forma de perceber seria alguém notar que
+   * a prescrição sumiu da nota, provavelmente depois do paciente ir embora.
+   */
+  readonly truncated: boolean;
+  /** Quantos milissegundos de áudio ficaram sem transcrição no fim. */
+  readonly uncoveredMs: number;
   readonly speakers: readonly string[];
   readonly segments: readonly RawSegment[];
 }
@@ -87,6 +100,16 @@ export function isUsableForRoleIdentification(
 ): { usable: true } | { usable: false; reason: string } {
   if (result.segments.length === 0) {
     return { usable: false, reason: "Nenhuma fala reconhecida no áudio." };
+  }
+  if (result.truncated) {
+    const seconds = Math.round(result.uncoveredMs / 1000);
+    return {
+      usable: false,
+      reason:
+        `Transcrição incompleta: os últimos ${seconds}s do áudio não foram ` +
+        `transcritos. Não gere nota a partir de uma consulta cortada — o que ` +
+        `falta no fim costuma ser a conduta.`,
+    };
   }
   if (!result.diarizationApplied) {
     return {

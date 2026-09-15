@@ -25,8 +25,9 @@ viabilidade do plano grátis, e residência de dados. Ver §Marco 1 do
 |---|---|
 | Máquina | Windows 10, 16 CPUs, 15 GB RAM |
 | Execução | Docker Desktop (WSL2) — **não** Linux nativo |
-| Modelo | faster-whisper, `compute_type=int8`, CPU, 16 threads |
-| Áudio | 1,7 min de diálogo sintético em pt-BR (TTS do Windows) |
+| GPU | NVIDIA RTX 3060, 12 GB |
+| Motor | faster-whisper — `int8` em CPU, `float16` em GPU |
+| Áudio | diálogos sintéticos em pt-BR (TTS do Windows), 38,8s e 103,7s |
 
 > ⚠️ **O que estas medições NÃO dizem.** O áudio é sintético: prosódia
 > artificial, sem ruído, sem sobreposição, sem sotaque. Serve para provar que o
@@ -39,60 +40,94 @@ viabilidade do plano grátis, e residência de dados. Ver §Marco 1 do
 
 ### Velocidade
 
-| Configuração | Fator de tempo real | Consulta de 30 min | Trechos |
+| Configuração | Tempo real | Consulta de 30 min | Completa? |
 |---|---|---|---|
-| CPU · `medium` · sequencial | 0,78x | ~38 min | 8 |
-| CPU · `small` · sequencial | 1,79x | ~17 min | 9 |
-| **GPU · `large-v3` · sequencial** | **0,52x** | **~58 min** | 12 |
-| **GPU · `large-v3` · lote 8 + tempo por palavra** | **10,35x** | **~3 min** | **15** |
+| CPU · `medium` · sequencial | 0,78x | ~38 min | sim |
+| CPU · `small` · sequencial | 1,79x | ~17 min | sim |
+| GPU · `large-v3` · **em lote** | **27x** | 1,1 min | ❌ **trunca em 30s** |
+| **GPU · `large-v3` · sequencial** | **12,8x** | **2,3 min** | ✅ **sim** |
 
-### A descoberta que inverte a intuição
+> ⚠️ **Correção de uma medição anterior deste documento.** A versão anterior
+> registrava "GPU sequencial 0,52x — mais lento que a CPU" e atribuía isso a
+> ociosidade entre rajadas de kernel. **Estava errado:** aquela medição incluía
+> o carregamento do modelo na VRAM. Medido com o modelo quente, sequencial dá
+> 12,8x. O diagnóstico de "GPU pior que CPU" não se sustenta.
 
-**A GPU sozinha deixou o sistema MAIS LENTO que a CPU** — 0,52x contra 0,78x. A
-placa mostrava 50% de utilização com **39 W de consumo numa peça de 170 W**:
-ociosa entre rajadas minúsculas de trabalho.
+### O bug que quase entrou em produção
 
-A causa é o Whisper processar janelas de 30 segundos **uma de cada vez**. Cada
-chamada paga um custo fixo de preparo e transferência, e no WSL2 esse custo por
-lançamento de kernel domina o tempo total. Comprar hardware melhor sem mudar o
-padrão de acesso não resolveu nada.
+A inferência em lote é 2x mais rápida e foi adotada primeiro. Ela **trunca
+silenciosamente**.
 
-**A inferência em lote (`BatchedInferencePipeline`) multiplicou por 20** — de
-0,52x para 10,35x. É a diferença entre entregar 16 envelopes um por um e
-entregar a caixa inteira.
+Quando o VAD encontra uma única região de fala contínua maior que a janela de
+30 segundos do Whisper, o pipeline em lote transcreve os primeiros 30 segundos
+e **descarta o resto** — sem erro, sem aviso, com resposta HTTP 200 e texto
+coerente.
 
-> Lote **8**, não 16: lotes maiores pioraram o tempo nesta placa, provavelmente
-> por pressão de memória. Vale remedir ao trocar de GPU.
+Medido num áudio de 38,8s com pausas de 500 ms entre as falas:
 
-### O efeito colateral que quase passou
+```
+sequencial   termina em 37,5s   perde 1,3s (só silêncio)   ✅
+em lote      termina em 29,6s   perde 9,2s                 ❌
+```
 
-O lote devolve blocos grossos — **28 segundos num único trecho, com
-profissional e paciente dentro dele**. Isso arruinaria as duas coisas centrais
-do produto: a separação de vozes (um bloco com dois falantes recebe um rótulo
-só) e as citações (clicar numa frase tocaria meio minuto de áudio).
+O mesmo lote acertou num áudio de 103s — porque ali as pausas eram de 600 ms e
+o VAD partiu em oito regiões. **A falha depende do padrão de pausa da
+conversa**, que é exatamente o que varia entre uma consulta e outra.
 
-A saída não foi abrir mão do lote. Foi ligar `word_timestamps` — que custa ~18%
-de tempo — e **reconstruir os trechos a partir das palavras**, quebrando na
-troca de falante, em pausa longa, em fim de frase e num teto de duração. O
-resultado tem granularidade **melhor** que a versão sequencial original: 15
-trechos contra 12.
+Numa consulta de 30 minutos entre duas pessoas que se falam sem pausas longas,
+o produto entregaria o primeiro meio minuto. E o que se perde no fim de uma
+consulta é a conduta: a receita e a data de retorno.
+
+**Decisão: batching desligado.** Dobrar 1,1 para 2,3 minutos numa consulta
+inteira é preço irrisório por não perder a prescrição. `WHISPER_BATCH_SIZE`
+continua configurável para quem quiser medir, mas o padrão é zero.
+
+### Duas outras correções da mesma investigação
+
+**`condition_on_previous_text=False`.** O padrão do Whisper realimenta o texto
+anterior como contexto, e isso produziu duas falhas medidas: encerrar a
+transcrição 5,9s antes do fim do áudio, e **alucinar um fecho que ninguém
+disse** ("Obrigado."). Desligado, o custo em velocidade é desprezível (11,8x
+contra 12,8x) e o texto termina onde o áudio termina.
+
+**Trava de cobertura.** O serviço agora compara onde o texto termina com onde o
+áudio termina e devolve `truncated: true` quando a diferença passa de 5
+segundos. O worker marca a sessão como **falha** nesse caso — preservando os
+trechos para diagnóstico, mas impedindo que uma consulta cortada chegue ao
+profissional rotulada como "pronta para revisão".
+
+Essa trava existe porque a classe de falha é invisível por construção: resposta
+de sucesso, texto plausível, e o final faltando. Sem ela, a descoberta viria de
+alguém notar que a prescrição sumiu da nota — provavelmente depois de o
+paciente ir embora.
+
+### Diarização: funcionando
+
+Separação de vozes validada num diálogo sintético de duas vozes distintas:
+**10 de 10 trechos atribuídos corretamente.**
+
+Duas dependências precisaram de ajuste, e as duas falhavam com erros que não
+mencionavam a causa:
+
+| Problema | Erro que aparecia | Correção |
+|---|---|---|
+| `huggingface-hub` 1.x removeu `use_auth_token` | `hf_hub_download() got an unexpected keyword argument 'use_auth_token'` | teto `<1.0` no requirements |
+| `pyannote.core` usa `matplotlib` sem declarar | `No module named 'matplotlib'` | adicionado explicitamente |
+
+O serviço degradou com elegância nos dois casos: continuou transcrevendo,
+devolveu tudo como um falante só, e reportou o motivo exato em
+`diarization_error`.
 
 ### Implicação para a arquitetura do plano grátis
 
-A margem do freemium depende de GPU, não de CPU. Com ~10x de tempo real, uma
-placa processa cerca de 14 mil minutos de áudio por dia; com 25% de utilização
+A margem do freemium depende de GPU, não de CPU. Com ~12x de tempo real, uma
+placa processa cerca de 17 mil minutos de áudio por dia; com 25% de utilização
 real, atende algo como **1.000 usuários grátis por GPU**. Um servidor com GPU
 custa na casa de R$ 500–1.500/mês — custo **fixo**, que não cresce a cada novo
 usuário grátis, ao contrário de API por minuto.
 
 Em CPU pura o plano grátis continua possível, mas com fila longa e a promessa
 tendo que ser "sua nota fica pronta em até uma hora".
-
-**O que estes números significam.** Para um plano grátis assíncrono — em que a
-nota chega por notificação e não na hora — ambos são toleráveis isoladamente. O
-problema aparece na **fila**: com `medium`, dez consultas grátis chegando
-juntas fazem a última esperar mais de seis horas; com `small`, menos de três. O
-dimensionamento do plano grátis depende disso tanto quanto do custo.
 
 ### Qualidade observada (indicativa, áudio sintético)
 
@@ -116,21 +151,11 @@ documentação aponta como risco: soa plausível e passa despercebido numa revis
 rápida. **O corpus real precisa contar erros de medicamento e dosagem à mão** —
 nenhuma métrica agregada como WER separa "de pirona" de um erro inofensivo.
 
-### Diarização
-
-**Ainda não medida.** O pyannote exige aceitar os termos de
-`pyannote/speaker-diarization-3.1` no Hugging Face e um token gratuito.
-
-O serviço degrada de forma graciosa sem o token: transcreve e devolve tudo como
-`SPEAKER_00`, marcando `diarization_applied: false`. Isso é deliberado — um
-serviço que transcreve sem separar vozes ainda é útil; um serviço que não sobe,
-não.
-
 ## Decisão
 
 **Pendente.** Falta:
 
-- [ ] **Habilitar diarização** (`HF_TOKEN`) e medir separação de vozes — é o
+- [x] **Habilitar diarização** (`HF_TOKEN`) e medir separação de vozes — é o
       único passo que depende de ação humana: criar conta gratuita no Hugging
       Face, aceitar os termos do modelo, gerar token
 - [ ] Gravar o corpus real — 2 consultas de 8 min, cenários em `spikes/README.md`
@@ -145,9 +170,18 @@ não.
 - **A arquitetura de dois motores está validada.** `resolveEngine()` decide,
   `TranscriptionProvider` abstrai, e trocar de motor é configuração. Qualquer
   que seja o resultado do spike, a troca custa um arquivo.
-- **O plano grátis precisa comunicar a fila.** "Sua nota fica pronta em até uma
-  hora" é uma promessa honesta e funciona como diferenciação do Pro. Prometer
-  imediato e entregar em 40 minutos, não.
-- **`large-v3` em CPU está praticamente descartado** para produção. Se a
-  qualidade do `medium` não bastar, o caminho é GPU (custo fixo maior) ou
-  fornecedor de nuvem, não um modelo maior no mesmo hardware.
+- **O plano grátis precisa comunicar a fila.** "Sua nota fica pronta em alguns
+  minutos" é honesto com GPU. Em CPU vira "em até uma hora" — também honesto, e
+  funciona como diferenciação do Pro. Prometer imediato e entregar em 40
+  minutos, não.
+- **`large-v3` em CPU está descartado** para produção. Se a qualidade do
+  `medium` não bastar, o caminho é GPU (custo fixo maior) ou fornecedor de
+  nuvem, não um modelo maior no mesmo hardware.
+- **Velocidade nunca justifica perda silenciosa de dado.** O batching era 2x
+  mais rápido e foi descartado por truncar. Numa ferramenta clínica, a falha
+  que não avisa é pior que a lentidão que avisa — e este ADR agora carrega uma
+  trava automatizada para essa classe de bug, não só a lembrança dela.
+- **Toda dependência de IA precisa de teto de versão.** Duas quebras nesta
+  investigação vieram de major que subiu sozinha (`huggingface-hub` 1.x) ou de
+  dependência não declarada (`matplotlib`). O ecossistema de ML é jovem e
+  quebra compatibilidade com frequência.

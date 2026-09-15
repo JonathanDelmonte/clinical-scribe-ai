@@ -33,18 +33,33 @@ DEVICE_SETTING = os.getenv("WHISPER_DEVICE", "auto")
 # Feixe de busca. 5 dá texto melhor; 1 é cerca de duas vezes mais rápido.
 BEAM_SIZE = int(os.getenv("WHISPER_BEAM_SIZE", "5"))
 
-# Quantos pedaços de áudio vão juntos para a GPU. 0 desliga o batching.
+# Inferência em lote. DESLIGADA por padrão, e isso é uma decisão de segurança
+# clínica, não de desempenho.
 #
-# Sem batching o Whisper processa janelas de 30s uma de cada vez, e cada chamada
-# paga um custo fixo de preparo e transferência. No WSL2 esse custo por
-# lançamento de kernel domina o tempo total: a placa fica em 40 W de 170 W,
-# ociosa entre rajadas. Medido nesta máquina: 0,5x sem lote contra 8x com lote.
+# O lote é ~2x mais rápido (27x contra 12,8x de tempo real nesta máquina), mas
+# TRUNCA áudio em que o VAD encontra uma única região contínua maior que a
+# janela de 30s do Whisper: ele transcreve os primeiros 30 segundos e descarta
+# o resto, sem erro e com aparência de sucesso.
 #
-# 8 e não 16: lotes maiores pioraram o tempo aqui. Vale remedir em outra GPU.
+# Duas pessoas conversando sem pausas longas produzem exatamente esse padrão.
+# Numa consulta de 30 minutos, o produto entregaria o primeiro meio minuto — e
+# o que se perde no fim costuma ser a conduta: a receita e a data de retorno.
 #
-# Em CPU o ganho é pequeno e o consumo de memória cresce, então fica desligado.
-_default_batch = "8" if os.getenv("WHISPER_DEVICE", "auto") == "cuda" else "0"
-BATCH_SIZE = int(os.getenv("WHISPER_BATCH_SIZE", _default_batch))
+# Dobrar o tempo de 1,2 para 2,5 minutos numa consulta inteira é um preço
+# irrisório por não perder a prescrição.
+BATCH_SIZE = int(os.getenv("WHISPER_BATCH_SIZE", "0"))
+
+# Realimentar o texto anterior como contexto é o padrão do Whisper e causa duas
+# falhas medidas: encerrar a transcrição antes do fim do áudio e alucinar um
+# fecho ("Obrigado.") que ninguém disse. Desligado, o custo em velocidade é
+# desprezível e o texto termina onde o áudio termina.
+CONDITION_ON_PREVIOUS = (
+    os.getenv("WHISPER_CONDITION_ON_PREVIOUS", "false").lower() == "true"
+)
+
+# Quanto de áudio final pode ficar sem transcrição antes de considerarmos que
+# algo se perdeu. Silêncio no fim da gravação é normal; meio minuto não é.
+MAX_UNCOVERED_S = float(os.getenv("MAX_UNCOVERED_SECONDS", "5"))
 
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 DIARIZATION_MODEL = os.getenv("DIARIZATION_MODEL", "pyannote/speaker-diarization-3.1")
@@ -177,14 +192,14 @@ def build_segments(
     """
     Agrupa palavras em trechos, quebrando onde importa.
 
-    Existe porque a inferência em lote devolve blocos grossos — medi 28 segundos
-    num único trecho, com o profissional e a paciente dentro dele. Isso
+    O Whisper corta por prosódia e pausa, não por troca de falante, e os blocos
+    que ele devolve chegam a juntar profissional e paciente num trecho só. Isso
     arruinaria as duas coisas centrais do produto: a separação de vozes (um
     bloco com dois falantes recebe um rótulo só) e as citações (clicar numa
     frase tocaria meio minuto de áudio em vez de cinco segundos).
 
-    A solução não é abrir mão do lote — são 16x de velocidade. É reconstruir os
-    trechos a partir das palavras, que já vêm com tempo individual.
+    A saída é reconstruir os trechos a partir das palavras, que já vêm com
+    tempo individual — e cortar onde a conversa realmente muda.
 
     Quebra em quatro situações, nesta ordem de importância:
 
@@ -288,6 +303,7 @@ async def transcribe(
             # Custa ~18% de tempo e é o que permite reconstruir trechos finos e
             # cortar na troca de falante. Barato pelo que entrega.
             "word_timestamps": True,
+            "condition_on_previous_text": CONDITION_ON_PREVIOUS,
         }
         if BATCH_SIZE > 0:
             options["batch_size"] = BATCH_SIZE
@@ -336,7 +352,27 @@ async def transcribe(
         elapsed = time.time() - started
         audio_seconds = info.duration or 0.0
 
+        # ---- trava de cobertura ------------------------------------------
+        # Compara onde o texto termina com onde o áudio termina.
+        #
+        # Existe porque a falha que ela pega é invisível: o serviço responde
+        # 200, devolve texto coerente, e simplesmente omite o final da consulta.
+        # Sem esta conferência, a única forma de descobrir seria alguém notar
+        # que a receita sumiu da nota — provavelmente depois do paciente ir
+        # embora.
+        last_ms = max((s["end_ms"] for s in segments), default=0)
+        uncovered_s = max(0.0, audio_seconds - last_ms / 1000)
+        truncated = uncovered_s > MAX_UNCOVERED_S
+        if truncated:
+            log.error(
+                "TRANSCRICAO INCOMPLETA: audio=%.1fs, texto termina em %.1fs, "
+                "faltam %.1fs",
+                audio_seconds, last_ms / 1000, uncovered_s,
+            )
+
         return {
+            "truncated": truncated,
+            "uncovered_ms": int(uncovered_s * 1000),
             "engine": "local",
             "model": MODEL_SIZE,
             "language": info.language,

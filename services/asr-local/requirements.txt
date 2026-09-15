@@ -1,8 +1,20 @@
-# Torch em versão CPU-only: ~200 MB contra ~2,5 GB da build com CUDA.
-# Instalado separadamente no Dockerfile, a partir do índice de CPU do PyTorch.
+# Torch em versão CPU-only na imagem padrão, CUDA na imagem GPU. Instalado
+# separadamente no Dockerfile, antes destes, para não deixar o pyannote puxar a
+# build errada.
 
 faster-whisper==1.1.1
 pyannote.audio==3.3.2
+
+# TETO OBRIGATÓRIO. A linha 1.x do huggingface-hub removeu o parâmetro
+# `use_auth_token` (virou `token`), e o pyannote 3.3.2 ainda chama pelo nome
+# antigo. Sem o teto o pip instala a mais nova e a diarização falha com
+# "hf_hub_download() got an unexpected keyword argument 'use_auth_token'" —
+# um erro que não menciona versão nenhuma.
+huggingface-hub>=0.23,<1.0
+
+# Dependência real do pyannote.core, que não a declara. Sem ela o carregamento
+# do pipeline morre com "No module named 'matplotlib'".
+matplotlib>=3.7
 
 fastapi==0.115.6
 uvicorn[standard]==0.34.0

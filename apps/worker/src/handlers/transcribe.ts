@@ -152,6 +152,35 @@ export function makeTranscribeHandler(
       );
     }
 
+    // ---- trava de integridade ------------------------------------------
+    // Os trechos ficam salvos — são reais e servem para diagnóstico. Mas a
+    // sessão NÃO pode chegar ao profissional como "pronta para revisão": o
+    // que falta no fim de uma consulta costuma ser a conduta, e uma nota
+    // gerada sobre transcrição cortada omitiria a prescrição sem avisar
+    // ninguém. Falhar alto é o único comportamento aceitável aqui.
+    if (result.truncated) {
+      const seconds = Math.round(result.uncoveredMs / 1000);
+      const reason =
+        `Transcrição incompleta: os últimos ${seconds}s do áudio não foram ` +
+        `transcritos. A gravação está preservada — reprocesse antes de usar.`;
+
+      await db
+        .update(sessions)
+        .set({
+          status: "failed",
+          failureReason: reason,
+          engineUsed: provider.engine,
+          durationMs: result.durationMs,
+        })
+        .where(eq(sessions.id, sessionId));
+
+      log.error(
+        { uncoveredMs: result.uncoveredMs, durationMs: result.durationMs },
+        "transcrição truncada — sessão marcada como falha",
+      );
+      return;
+    }
+
     await db.insert(usageEvents).values({
       professionalId: session.professionalId,
       sessionId,

@@ -20,6 +20,8 @@ interface LocalResponse {
   realtime_factor: number | null;
   diarization_applied: boolean;
   diarization_error: string | null;
+  truncated: boolean;
+  uncovered_ms: number;
   speakers: string[];
   segments: {
     start_ms: number;
@@ -89,6 +91,8 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
       realtimeFactor: body.realtime_factor,
       diarizationApplied: body.diarization_applied,
       diarizationError: body.diarization_error,
+      truncated: body.truncated ?? false,
+      uncoveredMs: body.uncovered_ms ?? 0,
       speakers: body.speakers,
       segments: body.segments.map((s) => ({
         startMs: s.start_ms,
