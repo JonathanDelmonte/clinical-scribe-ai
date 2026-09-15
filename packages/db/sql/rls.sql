@@ -126,6 +126,15 @@ create policy audit_read_own on public.audit_log
   for select to authenticated
   using (professional_id = auth.professional_id());
 
+-- `jobs` é o caso que exige precisão: a aplicação PRECISA enfileirar (é ela
+-- quem recebe o upload e dispara o processamento), mas não pode tocar em job
+-- nenhum depois disso.
+--
+--   INSERT  ✔ apenas para si mesma
+--   SELECT  ✔ apenas os seus (a tela de sessão consulta o andamento)
+--   UPDATE  ✘ mudar status é do worker; permitir aqui deixaria o cliente
+--             marcar job como concluído sem nada ter sido processado
+--   DELETE  ✘ apagar job da fila é sabotar o próprio processamento
 alter table public.jobs enable row level security;
 alter table public.jobs force row level security;
 
@@ -133,6 +142,11 @@ drop policy if exists jobs_read_own on public.jobs;
 create policy jobs_read_own on public.jobs
   for select to authenticated
   using (professional_id = auth.professional_id());
+
+drop policy if exists jobs_enqueue_own on public.jobs;
+create policy jobs_enqueue_own on public.jobs
+  for insert to authenticated
+  with check (professional_id = auth.professional_id());
 
 -- -----------------------------------------------------------------------------
 -- Permissões de base

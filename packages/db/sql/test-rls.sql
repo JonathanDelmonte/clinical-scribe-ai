@@ -156,7 +156,48 @@ begin
     when insufficient_privilege then null;  -- esperado
   end;
 
-  raise notice 'OK — isolamento multi-tenant verificado (12 asserções)';
+  -- FILA ------------------------------------------------------------------------
+  -- Esta seção existe porque a falta dela deixou passar um bug real: a tabela
+  -- `jobs` só tinha política de SELECT, e a aplicação não conseguia enfileirar
+  -- nada. O upload gravava o áudio e a transação revertia em silêncio.
+
+  -- Enfileirar para si mesma: permitido, é o que a aplicação faz no upload.
+  insert into jobs (professional_id, session_id, kind)
+  values ('11111111-1111-1111-1111-111111111111',
+          'a2a2a2a2-0000-0000-0000-000000000001', 'transcribe');
+
+  -- Enfileirar em nome de outro: não.
+  begin
+    insert into jobs (professional_id, kind)
+    values ('22222222-2222-2222-2222-222222222222', 'transcribe');
+    raise exception 'FALHA GRAVE: Ana enfileirou trabalho na conta do Bruno';
+  exception
+    when insufficient_privilege then null;  -- esperado
+  end;
+
+  -- Alterar job é do worker. Se o cliente pudesse, marcaria como concluído
+  -- sem nada ter sido processado.
+  update jobs set status = 'done' where professional_id = auth.professional_id();
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'FALHA: Ana alterou % jobs — mudar status é só do worker', n;
+  end if;
+
+  -- Apagar job da fila seria sabotar o próprio processamento.
+  delete from jobs where professional_id = auth.professional_id();
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'FALHA: Ana apagou % jobs da fila', n;
+  end if;
+
+  -- E não enxerga a fila alheia.
+  select count(*) into n from jobs
+   where professional_id = '22222222-2222-2222-2222-222222222222';
+  if n <> 0 then
+    raise exception 'FALHA: Ana vê % jobs do Bruno', n;
+  end if;
+
+  raise notice 'OK — isolamento multi-tenant verificado (17 asserções)';
 end
 $$;
 
