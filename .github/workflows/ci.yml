@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Formato, lint, tipos e testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Formato
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Tipos
+        run: pnpm typecheck
+
+      - name: Testes
+        run: pnpm test
+
+  database:
+    name: Schema e políticas RLS
+    runs-on: ubuntu-latest
+
+    # Sobe um Postgres real com pgvector. Aplicar o schema e o rls.sql num banco
+    # de verdade a cada PR é o que impede que um erro de sintaxe nas políticas —
+    # a única barreira entre os dados de um profissional e os de outro — só
+    # apareça no deploy.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scribe
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/scribe
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Extensões, schema e políticas RLS
+        run: pnpm db:migrate
+
+      # O teste que importa: tenta ativamente ler, escrever e alterar dados de
+      # outro profissional. Falha o build se qualquer tentativa tiver sucesso.
+      # Política escrita não é política testada.
+      - name: Isolamento multi-tenant
+        run: pnpm db:test-rls
