@@ -5,6 +5,13 @@
 # máquina e falha no CI por motivo nenhum aparente.
 * text=auto eol=lf
 
+# EXCECAO: scripts em lote do Windows exigem CRLF. Com LF o interpretador
+# quebra em rotulos e `goto` de formas que nao parecem ter relacao com
+# terminacao de linha — o arquivo simplesmente se comporta errado.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
 # Binários nunca são convertidos.
 *.png  binary
 *.jpg  binary

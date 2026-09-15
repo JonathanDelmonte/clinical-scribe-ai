@@ -10,7 +10,23 @@
 
 ---
 
-## Começando
+## Começando (Windows) — o caminho de um clique
+
+Dê dois cliques em **`iniciar.bat`**.
+
+Ele abre o Docker Desktop e espera ficar pronto, detecta se a máquina tem placa
+NVIDIA e escolhe o motor de acordo, sobe banco e transcrição, aplica schema e
+políticas de segurança, popula os usuários de desenvolvimento, abre a aplicação
+e o worker em janelas separadas, e por fim abre o navegador.
+
+Para desligar: **`parar.bat`**. Ele encerra a aplicação e os containers, mas
+preserva os volumes — o banco e os modelos do Whisper sobrevivem, porque
+apagá-los custaria gigabytes de download na próxima vez.
+
+> A primeira execução baixa o modelo (alguns GB) e pode levar 10 a 20 minutos.
+> As seguintes sobem em menos de um minuto.
+
+## Começando à mão
 
 Precisa de Node 24+, pnpm e o Docker Desktop aberto.
 
