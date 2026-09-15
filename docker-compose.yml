@@ -1,0 +1,29 @@
+services:
+  # Postgres local para desenvolvimento offline.
+  # A imagem pgvector/pgvector já traz a extensão — o mesmo que o Supabase
+  # oferece, para que o assistente RAG da Fase 4 não exija troca de banco.
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: scribe-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: scribe
+    ports:
+      # 5433 no host, não 5432: é comum já existir um PostgreSQL instalado
+      # na máquina ocupando a 5432. Quando isso acontece, `localhost:5432`
+      # vai para o Postgres errado e o erro que aparece é "autenticação
+      # falhou" — que não parece, de jeito nenhum, com "porta ocupada".
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./packages/db/sql/00-extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scribe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
