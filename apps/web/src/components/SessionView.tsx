@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { SessionProgress } from "./SessionProgress";
+
 interface Segment {
   id: string;
   speakerLabel: string;
@@ -21,6 +23,10 @@ interface SessionData {
     engineUsed: string | null;
     objectiveText: string | null;
     failureReason: string | null;
+    progressPercent: number | null;
+    progressPhase: string | null;
+    progressEtaSeconds: number | null;
+    progressPreview: string | null;
   };
   patient: { name: string } | null;
   segments: Segment[];
@@ -67,8 +73,11 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         // Só continua pedindo enquanto há trabalho em andamento. Um intervalo
         // fixo que nunca para desperdiça consulta ao banco em toda aba aberta
         // e esquecida.
+        // 1,5s enquanto processa: a barra precisa se mover de forma visível.
+        // Depois de pronta, nada muda e o laço para — aba esquecida aberta não
+        // deve consultar o banco para sempre.
         if (IN_PROGRESS.has(body.session.status)) {
-          timer = setTimeout(() => void poll(), 3000);
+          timer = setTimeout(() => void poll(), 1500);
         }
       } catch (err) {
         if (!alive) return;
@@ -142,11 +151,16 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         </p>
       )}
 
-      {working && segments.length === 0 && (
-        <p className="text-sm text-muted">
-          O worker está processando. Isso leva alguns minutos — o motor local roda em
-          CPU, e a página se atualiza sozinha quando terminar.
-        </p>
+      {working && (
+        <SessionProgress
+          data={{
+            percent: session.progressPercent,
+            phase: session.progressPhase,
+            etaSeconds: session.progressEtaSeconds,
+            preview: session.progressPreview,
+            status: session.status,
+          }}
+        />
       )}
 
       {segments.length > 0 && (

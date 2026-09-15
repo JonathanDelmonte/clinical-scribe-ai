@@ -109,11 +109,48 @@ export function makeTranscribeHandler(
     const audio = await storage.get(session.audioPath);
     const started = Date.now();
 
-    const result = await provider.transcribe({
-      audio,
-      filename: session.audioPath,
-      diarize: true,
-    });
+    // Acompanhamento em paralelo com a transcrição.
+    //
+    // O motor sabe até que segundo do áudio já chegou; este laço traz esse
+    // número para o banco, de onde a interface o lê. Sem isso a tela mostraria
+    // só um indicador girando, que não distingue "faltam dez segundos" de
+    // "travou há dez minutos" — e foi exatamente essa dúvida que motivou a
+    // existência disto.
+    let acompanhando = true;
+    const acompanhamento = (async () => {
+      while (acompanhando) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (!acompanhando) break;
+        const p = await provider.progress?.(job.id);
+        if (p === null || p === undefined) continue;
+        await db
+          .update(sessions)
+          .set({
+            progressPercent: p.percent,
+            progressPhase: p.phaseLabel,
+            progressEtaSeconds: p.etaSeconds,
+            progressPreview: p.preview,
+          })
+          .where(eq(sessions.id, sessionId))
+          .catch(() => undefined);
+      }
+    })();
+
+    let result;
+    try {
+      result = await provider.transcribe({
+        audio,
+        filename: session.audioPath,
+        diarize: true,
+        jobId: job.id,
+      });
+    } finally {
+      // Encerra o laço ANTES de qualquer outra escrita na sessão: um
+      // acompanhamento ainda vivo sobrescreveria o estado final com um
+      // progresso velho.
+      acompanhando = false;
+      await acompanhamento;
+    }
 
     log.info(
       {
@@ -171,6 +208,10 @@ export function makeTranscribeHandler(
           failureReason: reason,
           engineUsed: provider.engine,
           durationMs: result.durationMs,
+          progressPercent: null,
+          progressPhase: null,
+          progressEtaSeconds: null,
+          progressPreview: null,
         })
         .where(eq(sessions.id, sessionId));
 
@@ -201,6 +242,10 @@ export function makeTranscribeHandler(
         engineUsed: provider.engine,
         durationMs: result.durationMs,
         failureReason: null,
+        progressPercent: null,
+        progressPhase: null,
+        progressEtaSeconds: null,
+        progressPreview: null,
       })
       .where(eq(sessions.id, sessionId));
 

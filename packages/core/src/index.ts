@@ -35,6 +35,7 @@ export {
 } from "./account";
 
 export type {
+  EngineProgress,
   RawSegment,
   TranscriptionInput,
   TranscriptionProvider,

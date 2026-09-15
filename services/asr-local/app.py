@@ -10,18 +10,24 @@ O áudio entra, os trechos saem, e nada sai deste container pela rede.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
 import tempfile
+import threading
 import time
 from typing import Any, Sequence
 
+import numpy as np
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from faster_whisper import BatchedInferencePipeline, WhisperModel
+from faster_whisper.audio import decode_audio
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger("asr-local")
+
+SAMPLE_RATE = 16000
 
 MODEL_SIZE = os.getenv("WHISPER_MODEL", "medium")
 LANGUAGE = os.getenv("WHISPER_LANGUAGE", "pt")
@@ -33,26 +39,19 @@ DEVICE_SETTING = os.getenv("WHISPER_DEVICE", "auto")
 # Feixe de busca. 5 dá texto melhor; 1 é cerca de duas vezes mais rápido.
 BEAM_SIZE = int(os.getenv("WHISPER_BEAM_SIZE", "5"))
 
-# Inferência em lote. DESLIGADA por padrão, e isso é uma decisão de segurança
+# Inferência em lote. DESLIGADA por padrão, e isso é decisão de segurança
 # clínica, não de desempenho.
 #
-# O lote é ~2x mais rápido (27x contra 12,8x de tempo real nesta máquina), mas
-# TRUNCA áudio em que o VAD encontra uma única região contínua maior que a
-# janela de 30s do Whisper: ele transcreve os primeiros 30 segundos e descarta
-# o resto, sem erro e com aparência de sucesso.
-#
-# Duas pessoas conversando sem pausas longas produzem exatamente esse padrão.
-# Numa consulta de 30 minutos, o produto entregaria o primeiro meio minuto — e
-# o que se perde no fim costuma ser a conduta: a receita e a data de retorno.
-#
-# Dobrar o tempo de 1,2 para 2,5 minutos numa consulta inteira é um preço
-# irrisório por não perder a prescrição.
+# O lote é ~2x mais rápido, mas TRUNCA áudio em que o VAD encontra uma única
+# região contínua maior que a janela de 30s do Whisper: transcreve os primeiros
+# 30 segundos e descarta o resto, sem erro e com aparência de sucesso. Duas
+# pessoas conversando sem pausas longas produzem exatamente esse padrão, e o
+# que se perde no fim de uma consulta é a conduta. Ver ADR-0002.
 BATCH_SIZE = int(os.getenv("WHISPER_BATCH_SIZE", "0"))
 
 # Realimentar o texto anterior como contexto é o padrão do Whisper e causa duas
 # falhas medidas: encerrar a transcrição antes do fim do áudio e alucinar um
-# fecho ("Obrigado.") que ninguém disse. Desligado, o custo em velocidade é
-# desprezível e o texto termina onde o áudio termina.
+# fecho ("Obrigado.") que ninguém disse.
 CONDITION_ON_PREVIOUS = (
     os.getenv("WHISPER_CONDITION_ON_PREVIOUS", "false").lower() == "true"
 )
@@ -69,6 +68,35 @@ MAX_GAP_S = float(os.getenv("SEGMENT_MAX_GAP_S", "0.8"))
 MAX_SEGMENT_S = float(os.getenv("SEGMENT_MAX_SECONDS", "18"))
 
 SENTENCE_END = re.compile(r"[.!?…]$")
+
+# Uma troca de falante mais curta que isto e com menos palavras que isto não é
+# troca de turno — é ruído da diarização, e precisa ser absorvida.
+#
+# Ninguém toma o turno da conversa para dizer meia palavra. Quando duas pessoas
+# falam por cima (máscara, microfone ruim, sala com murmúrio de fundo), o
+# pyannote emite turnos sobrepostos, e casar palavra a palavra com o turno de
+# maior sobreposição oscila perto das bordas. Medido num áudio real de
+# consulta: 147 turnos do pyannote viraram 234 trechos, com "tudo bem" partido
+# entre dois falantes.
+MIN_TURN_S = float(os.getenv("SEGMENT_MIN_TURN_SECONDS", "0.7"))
+MIN_TURN_WORDS = int(os.getenv("SEGMENT_MIN_TURN_WORDS", "3"))
+
+# Intervalo mínimo entre palavras para que uma troca de falante seja aceita.
+#
+# Ninguém toma o turno da conversa sem que haja uma pausa. Duas palavras
+# coladas — menos de dois décimos de segundo entre elas — são a mesma pessoa
+# continuando a falar, e uma fronteira de falante ali é erro do modelo.
+#
+# Medido no áudio real de consulta: 49 dos 147 turnos do pyannote duram menos
+# de 0,7s, e os erros visíveis caíam no meio de frases sem pausa alguma
+# ("Me" | "chamo Gabriel.", "Vou fazer uma" | "coisa.").
+MIN_SWITCH_GAP_S = float(os.getenv("SEGMENT_MIN_SWITCH_GAP_SECONDS", "0.2"))
+
+# Peso de cada fase no progresso total. Medido: transcrever 11 min de áudio
+# levou ~57s e separar as vozes ~34s, então a transcrição vale cerca de dois
+# terços. Aproximado serve: o objetivo é uma barra que não trava nem salta.
+PESO_TRANSCRICAO = 0.65
+PESO_DIARIZACAO = 0.30
 
 
 def resolve_device() -> str:
@@ -97,13 +125,49 @@ COMPUTE_TYPE = os.getenv(
     "WHISPER_COMPUTE_TYPE", "float16" if DEVICE == "cuda" else "int8"
 )
 
-app = FastAPI(title="asr-local", version="0.2.0")
+app = FastAPI(title="asr-local", version="0.3.0")
 
-# Carregados sob demanda: subir o container não deve esperar o download.
 _whisper: WhisperModel | None = None
 _batched: Any | None = None
 _diarizer: Any | None = None
 _diarizer_error: str | None = None
+
+# -----------------------------------------------------------------------------
+# Progresso
+#
+# O profissional fica olhando uma tela enquanto a consulta processa. Um
+# indicador que só gira não diz se faltam dez segundos ou dez minutos, e a
+# diferença entre esperar informado e esperar no escuro é grande.
+#
+# Isto é progresso REAL, não estimativa de relógio: o faster-whisper devolve os
+# trechos num gerador, então sabemos exatamente até que segundo do áudio ele já
+# chegou. O pyannote reporta pelo seu próprio hook.
+# -----------------------------------------------------------------------------
+_progress: dict[str, dict[str, Any]] = {}
+_progress_lock = threading.Lock()
+
+
+def set_progress(job: str | None, **campos: Any) -> None:
+    if job is None:
+        return
+    with _progress_lock:
+        atual = _progress.setdefault(job, {"iniciado_em": time.time()})
+        atual.update(campos)
+        decorrido = time.time() - atual["iniciado_em"]
+        atual["elapsed_s"] = round(decorrido, 1)
+        pct = atual.get("percent", 0)
+        # ETA só a partir de 5%: antes disso a extrapolação é ruído, e um
+        # número que despenca de "faltam 40 min" para "faltam 2 min" corrói a
+        # confiança mais do que não mostrar nada.
+        atual["eta_s"] = (
+            round(decorrido * (100 - pct) / pct) if 5 <= pct < 100 else None
+        )
+
+
+@app.get("/progress/{job}")
+def get_progress(job: str) -> dict[str, Any]:
+    with _progress_lock:
+        return dict(_progress.get(job, {"phase": "unknown", "percent": 0}))
 
 
 def get_whisper() -> WhisperModel:
@@ -122,7 +186,7 @@ def get_whisper() -> WhisperModel:
 
 
 def get_transcriber() -> Any:
-    """Pipeline em lote quando faz sentido, ou o modelo direto."""
+    """Pipeline em lote quando pedido, ou o modelo direto."""
     global _batched
     model = get_whisper()
     if BATCH_SIZE <= 0:
@@ -186,6 +250,56 @@ def speaker_of(
     return best
 
 
+def smooth_speakers(words: Sequence[Any], speakers: list[str]) -> list[str]:
+    """
+    Corrige trocas de falante que não podem ser reais.
+
+    Duas passadas, em ordem:
+
+    1. TROCA SEM PAUSA — palavras coladas são a mesma pessoa. Esta é a regra
+       forte: uma fronteira de falante no meio de uma frase corrida é sempre
+       erro do modelo, porque a fala humana não funciona assim.
+
+    2. TURNO CURTO DEMAIS — sequência de poucas palavras e pouco tempo cercada
+       pelo MESMO outro falante dos dois lados. A exigência de que os dois lados
+       coincidam evita estragar uma troca legítima: A→B→C não é suavizado, só
+       A→B→A.
+    """
+    if not words:
+        return speakers
+
+    # ---- passada 1: nenhuma troca sem pausa --------------------------------
+    speakers = list(speakers)
+    for i in range(1, len(words)):
+        intervalo = words[i].start - words[i - 1].end
+        if speakers[i] != speakers[i - 1] and intervalo < MIN_SWITCH_GAP_S:
+            speakers[i] = speakers[i - 1]
+
+    # ---- passada 2: blocos curtos demais ----------------------------------
+    # Agrupa em blocos de mesmo falante: (inicio, fim_exclusivo, falante)
+    blocos: list[list[Any]] = []
+    for i, spk in enumerate(speakers):
+        if blocos and blocos[-1][2] == spk:
+            blocos[-1][1] = i + 1
+        else:
+            blocos.append([i, i + 1, spk])
+
+    for b in range(1, len(blocos) - 1):
+        ini, fim, _ = blocos[b]
+        anterior, seguinte = blocos[b - 1][2], blocos[b + 1][2]
+        if anterior != seguinte:
+            continue
+        duracao = words[fim - 1].end - words[ini].start
+        if (fim - ini) <= MIN_TURN_WORDS and duracao <= MIN_TURN_S:
+            blocos[b][2] = anterior
+
+    suavizado = list(speakers)
+    for ini, fim, spk in blocos:
+        for i in range(ini, fim):
+            suavizado[i] = spk
+    return suavizado
+
+
 def build_segments(
     words: Sequence[Any], turns: Sequence[tuple[float, float, str]] | None
 ) -> list[dict[str, Any]]:
@@ -208,6 +322,15 @@ def build_segments(
       3. FIM DE FRASE     — ponto, interrogação, exclamação
       4. DURAÇÃO MÁXIMA   — trecho longo demais é citação imprecisa
     """
+    falantes = (
+        smooth_speakers(
+            words,
+            [speaker_of(w.start, w.end, turns) for w in words],
+        )
+        if turns is not None
+        else ["SPEAKER_00"] * len(words)
+    )
+
     segments: list[dict[str, Any]] = []
     current: list[Any] = []
     current_speaker = "SPEAKER_00"
@@ -232,12 +355,8 @@ def build_segments(
             )
         current.clear()
 
-    for word in words:
-        speaker = (
-            speaker_of(word.start, word.end, turns)
-            if turns is not None
-            else "SPEAKER_00"
-        )
+    for indice, word in enumerate(words):
+        speaker = falantes[indice]
 
         if current:
             previous = current[-1]
@@ -255,6 +374,59 @@ def build_segments(
 
     flush()
     return segments
+
+
+def diarize(
+    audio: np.ndarray, job: str | None
+) -> list[tuple[float, float, str]] | None:
+    """
+    Separa as vozes, reportando progresso.
+
+    Recebe a FORMA DE ONDA já decodificada, não o caminho do arquivo, e isso é
+    correção de bug, não otimização: entregando o caminho, o pyannote decodifica
+    por conta própria com o torchaudio, e para MP3 o resultado não fecha com a
+    janela de embedding de 10s — quebra com "Sizes of tensors must match except
+    in dimension 0. Expected size 160000 but got size 145516".
+
+    Decodificar uma vez com o ffmpeg e passar o mesmo vetor para os dois modelos
+    resolve a quebra, elimina a decodificação dupla, e garante que os timestamps
+    do Whisper e os turnos do pyannote se refiram exatamente ao mesmo áudio —
+    o que importa, porque um é casado com o outro em `build_segments`.
+    """
+    diarizer = get_diarizer()
+    if diarizer is None:
+        return None
+
+    import torch
+
+    class Hook:
+        """Traduz o andamento interno do pyannote para a nossa escala."""
+
+        def __call__(
+            self,
+            step: str,
+            _artifact: Any = None,
+            file: Any = None,
+            total: int | None = None,
+            completed: int | None = None,
+        ) -> None:
+            if total and completed is not None:
+                fracao = min(1.0, completed / total)
+                set_progress(
+                    job,
+                    phase="diarizing",
+                    phase_label="separando as vozes",
+                    percent=round((PESO_TRANSCRICAO + PESO_DIARIZACAO * fracao) * 100),
+                )
+
+    waveform = torch.from_numpy(audio).unsqueeze(0)
+    annotation = diarizer(
+        {"waveform": waveform, "sample_rate": SAMPLE_RATE}, hook=Hook()
+    )
+    return [
+        (turn.start, turn.end, speaker)
+        for turn, _, speaker in annotation.itertracks(yield_label=True)
+    ]
 
 
 @app.get("/health")
@@ -280,19 +452,52 @@ def health() -> dict[str, Any]:
 async def transcribe(
     file: UploadFile = File(...),
     language: str = Query(default=LANGUAGE),
-    diarize: bool = Query(default=True),
+    diarize_speakers: bool = Query(default=True, alias="diarize"),
+    job: str | None = Query(default=None),
 ) -> dict[str, Any]:
+    """
+    Recebe o áudio e devolve os trechos.
+
+    Só a leitura do upload acontece no laço de eventos; o processamento vai
+    para uma thread separada via `asyncio.to_thread`.
+
+    Isso não é otimização, é o que torna o progresso possível. O Whisper e o
+    pyannote bloqueiam a thread por minutos, e dentro de um `async def` isso
+    congela o laço inteiro: `/progress/{job}` fica sem resposta exatamente
+    enquanto há progresso para reportar. O sintoma engana, porque o endpoint
+    responde normalmente quando testado fora de um processamento.
+    """
     if file.filename is None:
         raise HTTPException(status_code=400, detail="arquivo sem nome")
 
     suffix = os.path.splitext(file.filename)[1] or ".wav"
-    started = time.time()
+    set_progress(job, phase="decoding", phase_label="preparando o áudio", percent=1)
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())
         path = tmp.name
 
+    return await asyncio.to_thread(
+        _processar, path, language, diarize_speakers, job
+    )
+
+
+def _processar(
+    path: str, language: str, diarize_speakers: bool, job: str | None
+) -> dict[str, Any]:
+    started = time.time()
     try:
+        # Uma decodificação só, compartilhada entre os dois modelos.
+        audio = decode_audio(path, sampling_rate=SAMPLE_RATE)
+        audio_seconds = len(audio) / SAMPLE_RATE
+        set_progress(
+            job,
+            phase="transcribing",
+            phase_label="transcrevendo",
+            percent=2,
+            audio_s=round(audio_seconds, 1),
+        )
+
         options: dict[str, Any] = {
             "language": language,
             # VAD corta silêncio antes de transcrever. Numa consulta real há
@@ -308,21 +513,40 @@ async def transcribe(
         if BATCH_SIZE > 0:
             options["batch_size"] = BATCH_SIZE
 
-        raw, info = get_transcriber().transcribe(path, **options)
-        whisper_segments = list(raw)
+        raw, info = get_transcriber().transcribe(audio, **options)
 
-        # Diarização ANTES de montar os trechos: as fronteiras de falante são o
-        # critério de corte mais importante, e aplicá-las depois obrigaria a
-        # refazer o agrupamento inteiro.
+        # Consumir o gerador aqui, e não com list(), é o que dá progresso real:
+        # cada trecho traz o segundo do áudio onde termina.
+        whisper_segments = []
+        for seg in raw:
+            whisper_segments.append(seg)
+            if audio_seconds > 0:
+                fracao = min(1.0, seg.end / audio_seconds)
+                set_progress(
+                    job,
+                    phase="transcribing",
+                    phase_label="transcrevendo",
+                    percent=max(2, round(PESO_TRANSCRICAO * fracao * 100)),
+                    transcribed_s=round(seg.end, 1),
+                    preview=seg.text.strip()[:120],
+                )
+
         turns: list[tuple[float, float, str]] | None = None
-        if diarize:
-            diarizer = get_diarizer()
-            if diarizer is not None:
-                annotation = diarizer(path)
-                turns = [
-                    (turn.start, turn.end, speaker)
-                    for turn, _, speaker in annotation.itertracks(yield_label=True)
-                ]
+        if diarize_speakers:
+            set_progress(
+                job,
+                phase="diarizing",
+                phase_label="separando as vozes",
+                percent=round(PESO_TRANSCRICAO * 100),
+            )
+            turns = diarize(audio, job)
+
+        set_progress(
+            job,
+            phase="assembling",
+            phase_label="montando a transcrição",
+            percent=round((PESO_TRANSCRICAO + PESO_DIARIZACAO) * 100),
+        )
 
         words = [w for seg in whisper_segments for w in (seg.words or [])]
 
@@ -350,7 +574,6 @@ async def transcribe(
             ]
 
         elapsed = time.time() - started
-        audio_seconds = info.duration or 0.0
 
         # ---- trava de cobertura ------------------------------------------
         # Compara onde o texto termina com onde o áudio termina.
@@ -367,24 +590,41 @@ async def transcribe(
             log.error(
                 "TRANSCRICAO INCOMPLETA: audio=%.1fs, texto termina em %.1fs, "
                 "faltam %.1fs",
-                audio_seconds, last_ms / 1000, uncovered_s,
+                audio_seconds,
+                last_ms / 1000,
+                uncovered_s,
             )
 
+        set_progress(job, phase="done", phase_label="concluído", percent=100)
+
         return {
-            "truncated": truncated,
-            "uncovered_ms": int(uncovered_s * 1000),
             "engine": "local",
             "model": MODEL_SIZE,
             "language": info.language,
             "duration_ms": int(audio_seconds * 1000),
             "processing_ms": int(elapsed * 1000),
-            # Quanto mais rápido que o tempo real. Abaixo de 1,0 significa que
-            # processar demora mais que a consulta durou.
             "realtime_factor": round(audio_seconds / elapsed, 2) if elapsed else None,
+            "truncated": truncated,
+            "uncovered_ms": int(uncovered_s * 1000),
             "diarization_applied": turns is not None,
             "diarization_error": None if turns is not None else _diarizer_error,
             "speakers": sorted({s["speaker_label"] for s in segments}),
             "segments": segments,
         }
+    except Exception as exc:
+        set_progress(job, phase="failed", phase_label="falhou", error=str(exc)[:200])
+        raise
     finally:
         os.unlink(path)
+        # Guardar progresso de job concluído para sempre vaza memória num
+        # serviço de vida longa. Meia hora é folga suficiente para a interface
+        # ler o estado final.
+        if job is not None:
+            with _progress_lock:
+                velhos = [
+                    k
+                    for k, v in _progress.items()
+                    if time.time() - v.get("iniciado_em", 0) > 1800
+                ]
+                for k in velhos:
+                    _progress.pop(k, None)

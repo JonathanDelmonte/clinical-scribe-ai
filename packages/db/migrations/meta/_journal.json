@@ -15,6 +15,13 @@
       "when": 1789496881779,
       "tag": "0001_furry_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789512535199,
+      "tag": "0002_lazy_viper",
+      "breakpoints": true
     }
   ]
 }

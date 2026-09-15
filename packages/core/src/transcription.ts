@@ -63,7 +63,38 @@ export interface TranscriptionResult {
   readonly segments: readonly RawSegment[];
 }
 
+/**
+ * Andamento do processamento, para a tela de espera.
+ *
+ * É progresso REAL, não relógio: o motor sabe até que segundo do áudio já
+ * chegou. Uma barra baseada em tempo decorrido mente quando o áudio é mais
+ * longo ou a máquina está ocupada, e mentir sobre espera é pior que não
+ * informar.
+ */
+export interface EngineProgress {
+  /** decoding | transcribing | diarizing | assembling | done | failed */
+  readonly phase: string;
+  /** Texto pronto para a tela, em português. */
+  readonly phaseLabel: string;
+  readonly percent: number;
+  readonly elapsedSeconds: number;
+  /** Estimativa de quanto falta. `null` antes de haver base para estimar. */
+  readonly etaSeconds: number | null;
+  /** Último trecho reconhecido — a prova visível de que algo acontece. */
+  readonly preview: string | null;
+  readonly audioSeconds: number | null;
+  readonly transcribedSeconds: number | null;
+}
+
 export interface TranscriptionInput {
+  /**
+   * Identificador para acompanhar o progresso deste trabalho.
+   *
+   * Opcional porque nem todo motor sabe reportar andamento — um fornecedor de
+   * nuvem devolve tudo de uma vez. Quando ausente, a interface cai para o
+   * indicador simples.
+   */
+  readonly jobId?: string;
   /**
    * `Uint8Array<ArrayBuffer>` e não `Uint8Array` puro: o tipo padrão inclui
    * buffers compartilhados entre threads (`SharedArrayBuffer`), que `Blob` e
@@ -81,6 +112,8 @@ export interface TranscriptionProvider {
   /** Sobe e responde? Usado no início do job para falhar cedo. */
   healthy(): Promise<boolean>;
   transcribe(input: TranscriptionInput): Promise<TranscriptionResult>;
+  /** Andamento, para motores que sabem reportá-lo. */
+  progress?(jobId: string): Promise<EngineProgress | null>;
 }
 
 /**

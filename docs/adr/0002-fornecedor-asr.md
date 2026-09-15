@@ -118,6 +118,64 @@ O serviço degradou com elegância nos dois casos: continuou transcrevendo,
 devolveu tudo como um falante só, e reportou o motivo exato em
 `diarization_error`.
 
+### Primeiro áudio real de consulta
+
+Consulta médica simulada de 11,4 min, gravada em sala de aula: os dois com
+**máscara**, microfone de celular, murmúrio de fundo. É o cenário difícil de
+propósito.
+
+| | Sintético limpo | **Consulta real** |
+|---|---|---|
+| Velocidade | 12,8x | **3,4x** |
+| 11 min processam em | 0,9 min | **~4 min** |
+
+**Áudio difícil custa 4x mais tempo.** Mais hipóteses no feixe de busca, mais
+reprocessamento de trechos incertos. O número honesto para o produto é o da
+direita; a régua de laboratório enganava.
+
+#### Dois bugs que só o áudio real revelou
+
+**1. MP3 quebrava a diarização.** `Sizes of tensors must match except in
+dimension 0. Expected size 160000 but got size 145516` — 160.000 amostras são
+exatamente os 10s da janela de embedding do pyannote. A causa não era o
+comprimento do áudio: era o **torchaudio decodificando MPEG diferente do
+ffmpeg**. A correção foi decodificar uma vez e passar a mesma forma de onda aos
+dois modelos, o que também elimina a decodificação dupla e garante que
+timestamps e turnos se refiram ao mesmo áudio.
+
+**2. O progresso nunca chegava.** O endpoint era `async def` com trabalho
+bloqueante dentro, o que congela o laço de eventos: `/progress/{job}` ficava sem
+resposta exatamente enquanto havia progresso a reportar. Resolvido movendo o
+processamento para `asyncio.to_thread`.
+
+#### Qualidade da separação de vozes: parcial
+
+O pyannote acerta **quantas** pessoas são (2), mas erra **onde** ficam as
+fronteiras. Informar `num_speakers=2` não mudou nada na qualidade — só deixou
+40% mais rápido. 49 dos 147 turnos duram menos de 0,7s.
+
+Duas regras de pós-processamento recuperaram parte:
+
+| | Trechos | "Me chamo Gabriel" |
+|---|---|---|
+| Sem tratamento | 234 | `Me` / `chamo Gabriel.` ✗ |
+| Suavização de turnos curtos | 213 | ainda partido ✗ |
+| **+ nenhuma troca sem pausa** | **197** | inteiro ✓ |
+
+A regra forte é a segunda: **ninguém troca de turno sem pausa**. Uma fronteira
+de falante entre duas palavras coladas é sempre erro do modelo.
+
+**O que continua errado:** a atribuição oscila entre frases. "Me chamo Gabriel"
+e "Sou médico há 5 anos" saem como falantes diferentes, sendo a mesma pessoa.
+Nenhum pós-processamento acústico conserta isso sem risco de destruir trocas
+legítimas.
+
+**Implicação direta para o Marco 3:** a identificação de papel por conteúdo não
+é só um complemento da diarização — em áudio difícil ela é a correção dela. O
+LLM lê "Sou médico há 5 anos" e sabe quem fala, independentemente do rótulo
+acústico. A §7 da documentação recomenda combinar os dois métodos; este áudio
+mostrou por quê.
+
 ### Implicação para a arquitetura do plano grátis
 
 A margem do freemium depende de GPU, não de CPU. Com ~12x de tempo real, uma

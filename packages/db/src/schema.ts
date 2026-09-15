@@ -205,6 +205,24 @@ export const sessions = pgTable(
     consentMethod: text("consent_method"),
 
     failureReason: text("failure_reason"),
+
+    /**
+     * Andamento do processamento, para a tela de espera.
+     *
+     * Fica na sessão, e não só na memória do worker, por dois motivos: a
+     * interface consulta o banco (não tem acesso ao worker), e se o worker
+     * cair no meio o último estado conhecido sobrevive — a tela mostra onde
+     * parou em vez de voltar ao zero sem explicação.
+     *
+     * `progressPreview` guarda o último pedaço de texto reconhecido. É o que
+     * transforma a espera de "uma barra andando" em "está funcionando, olha aí
+     * o que ele já entendeu".
+     */
+    progressPercent: integer("progress_percent"),
+    progressPhase: text("progress_phase"),
+    progressEtaSeconds: integer("progress_eta_seconds"),
+    progressPreview: text("progress_preview"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
