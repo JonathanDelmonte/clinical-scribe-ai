@@ -12,7 +12,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { identifyRolesByContent, roleByLabel, type SpeakerInput } from "./roles";
+import {
+  identifyRolesByContent,
+  refineRolesByVoice,
+  roleByLabel,
+  type SpeakerInput,
+} from "./roles";
 
 /** Amostra fiel da transcrição real, com os rótulos originais do pyannote. */
 const CONSULTA_REAL: SpeakerInput[] = [
@@ -139,5 +144,70 @@ describe("rótulos contaminados — não decidir é melhor que decidir errado", 
     const mapa = roleByLabel(identifyRolesByContent(limpo));
     expect(mapa["A"]).toBe("professional");
     expect(mapa["B"]).toBe("patient");
+  });
+});
+
+describe("impressão vocal — só corrige onde o sinal é forte", () => {
+  /**
+   * Medido em consulta real com máscara e microfone de celular: as duas vozes
+   * ficaram a 0,17 de distância, com faixas sobrepostas. Corrigir trecho a
+   * trecho nesse regime é sorteio — 35 de 139 trechos "discordavam", com
+   * acertos e erros misturados.
+   */
+  const RUIDOSO = [
+    { speakerLabel: "A", voiceSimilarity: 0.58 },
+    { speakerLabel: "A", voiceSimilarity: 0.42 },
+    { speakerLabel: "B", voiceSimilarity: 0.45 },
+    { speakerLabel: "B", voiceSimilarity: 0.38 },
+  ];
+
+  const LIMPO = [
+    { speakerLabel: "A", voiceSimilarity: 0.88 },
+    { speakerLabel: "A", voiceSimilarity: 0.82 },
+    { speakerLabel: "B", voiceSimilarity: 0.21 },
+    { speakerLabel: "B", voiceSimilarity: 0.17 },
+  ];
+
+  const PAPEIS = [
+    { speakerLabel: "A", role: "professional" as const, confidence: 0.8, evidence: [] },
+    { speakerLabel: "B", role: "patient" as const, confidence: 0.8, evidence: [] },
+  ];
+
+  it("não mexe em trecho algum quando as vozes estão próximas", () => {
+    const r = refineRolesByVoice(PAPEIS, RUIDOSO);
+    expect(r.correctedIndexes).toEqual([]);
+  });
+
+  it("mas ainda confirma quem é quem", () => {
+    const r = refineRolesByVoice(PAPEIS, RUIDOSO);
+    expect(roleByLabel(r.assignments)["A"]).toBe("professional");
+    expect(r.disagreed).toBe(false);
+  });
+
+  it("com vozes bem separadas, a correção volta a valer", () => {
+    const comErro = [...LIMPO, { speakerLabel: "B", voiceSimilarity: 0.85 }];
+    const r = refineRolesByVoice(PAPEIS, comErro);
+    // O último trecho tem rótulo do paciente e voz de médico: é o caso que
+    // justifica o Método A existir.
+    expect(r.correctedIndexes).toContain(4);
+  });
+
+  it("sinaliza quando a voz discorda do conteúdo", () => {
+    const invertido = [
+      { speakerLabel: "A", role: "patient" as const, confidence: 0.8, evidence: [] },
+      {
+        speakerLabel: "B",
+        role: "professional" as const,
+        confidence: 0.8,
+        evidence: [],
+      },
+    ];
+    expect(refineRolesByVoice(invertido, LIMPO).disagreed).toBe(true);
+  });
+
+  it("sem medida nenhuma, devolve tudo intacto", () => {
+    const r = refineRolesByVoice(PAPEIS, [{ speakerLabel: "A" }]);
+    expect(r.assignments).toBe(PAPEIS);
+    expect(r.correctedIndexes).toEqual([]);
   });
 });

@@ -55,6 +55,23 @@ export {
   MIN_CONFIDENCE,
   MARGEM_VOZ,
   refineRolesByVoice,
+  SEPARACAO_MINIMA_VOZ,
   roleByLabel,
   swapRoles,
 } from "./roles";
+
+export type {
+  ClinicalNote,
+  NoteSection,
+  NoteValidation,
+  ParsedNote,
+  SecaoChave,
+} from "./note";
+export {
+  buildNotePrompt,
+  parseNoteResponse,
+  PROMPT_VERSION,
+  SECOES,
+  sectionTitle,
+  validateNote,
+} from "./note";

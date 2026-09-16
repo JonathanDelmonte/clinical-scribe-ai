@@ -357,6 +357,27 @@ export interface VoiceScoredSegment {
  */
 export const MARGEM_VOZ = 0.06;
 
+/**
+ * Separação mínima entre as vozes para permitir correção trecho a trecho.
+ *
+ * Medido em dois áudios reais:
+ *
+ *   gravação limpa            médico +0,85  paciente +0,19  →  separação 0,66
+ *   consulta com máscara      médico +0,58  paciente +0,41  →  separação 0,17
+ *
+ * Máscara cirúrgica e microfone de celular degradam a impressão vocal a ponto
+ * de as faixas se sobreporem quase inteiramente. Nesse regime, decidir por
+ * trecho é sorteio: numa amostra real, 35 de 139 trechos "discordaram" do
+ * rótulo, e a conferência manual mostrou acertos e erros misturados.
+ *
+ * A decisão por RÓTULO sobrevive — é uma média sobre dezenas de trechos, e
+ * média tolera ruído. A decisão por TRECHO não. Abaixo deste limiar o Método A
+ * continua ajudando a escolher quem é quem, e para de mexer em fala
+ * individual — trocar erro estável por erro aleatório deixaria a transcrição
+ * pior do que estava.
+ */
+export const SEPARACAO_MINIMA_VOZ = 0.3;
+
 export interface VoiceRefinement {
   readonly assignments: readonly SpeakerAssignment[];
   /** Índices dos trechos cujo papel a voz corrigiu. */
@@ -450,12 +471,19 @@ export function refineRolesByVoice(
     };
   });
 
-  // Correção trecho a trecho — o que só a voz alcança.
-  const centroide = new Map(porRotulo.map((e) => [e.label, e.media]));
-  const doProfissional = centroide.get(maisParecido.label) ?? 0;
+  // Correção trecho a trecho — o que só a voz alcança, QUANDO ela alcança.
+  const doProfissional = maisParecido.media;
   const doPaciente = Math.min(...porRotulo.map((e) => e.media));
+  const separacao = doProfissional - doPaciente;
 
   const correctedIndexes: number[] = [];
+
+  // Sinal fraco demais para decidir fala por fala. A escolha de quem é quem
+  // (acima) fica; a correção individual não acontece.
+  if (separacao < SEPARACAO_MINIMA_VOZ) {
+    return { assignments: refinados, correctedIndexes: [], disagreed };
+  }
+
   segments.forEach((s, i) => {
     const sim = s.voiceSimilarity;
     if (sim === null || sim === undefined) return;
