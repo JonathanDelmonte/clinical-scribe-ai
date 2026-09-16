@@ -38,6 +38,24 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 | **5** — Produto ao redor | ❌ não iniciado | Tudo. É o maior bloco restante — ver [DIVISAO-DE-TRABALHO.md](./DIVISAO-DE-TRABALHO.md). |
 | **6** — Endurecimento e LGPD | 🔨 parcial | Só os testes de RLS existem (17 asserções, no CI). |
 
+### Fila da Trilha A — o que vem depois
+
+1. **Correção da transcrição pelo profissional** — clicar num trecho, corrigir
+   o que o Whisper ouviu errado, salvar. O texto original nunca é apagado: o
+   par (errado → certo) é dado rotulado, gerado pelo uso, que nenhum
+   concorrente tem sem ter usuários antes. Exige migration.
+2. **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
+3. **Vocabulário do domínio no Whisper** — `initial_prompt` com nomes de
+   medicamentos e jargão da especialidade. É a melhoria de qualidade mais barata
+   que existe: uma linha, custo zero, ataca a classe de erro "azar/arder".
+4. **Limpeza de áudio só para o caminho das vozes** — limpar antes do Whisper
+   frequentemente PIORA a transcrição (ele foi treinado em áudio sujo), mas o
+   pyannote é o oposto. Bifurcar: áudio cru para o Whisper, limpo para a
+   diarização e a impressão vocal.
+5. **Verificador de suporte** — segunda passada que confere se o trecho citado
+   sustenta a afirmação. **Adiado de propósito:** medir a frequência do problema
+   antes de gastar uma chamada por nota.
+
 **Os dois marcos ⭐ estão vencidos.** O que resta é majoritariamente trabalho
 conhecido — que leva tempo mas não falha.
 
