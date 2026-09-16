@@ -220,6 +220,20 @@ export const sessions = pgTable(
     consentRecordedAt: timestamp("consent_recorded_at", { withTimezone: true }),
     consentMethod: text("consent_method"),
 
+    /**
+     * Quanto de silêncio o DISPOSITIVO removeu antes de enviar, e onde estava
+     * a fala no áudio original.
+     *
+     * Existe porque o áudio enxuto é o registro: os tempos de todos os trechos
+     * vivem no tempo enxuto. Isso mantém tudo consistente sem conversão em
+     * lugar nenhum — mas deixaria sem resposta a pergunta "este áudio foi
+     * modificado?", que um registro clínico precisa responder.
+     *
+     * Com o mapa guardado, a resposta é sim, e exatamente quanto e onde.
+     */
+    silenceRemovedMs: integer("silence_removed_ms"),
+    speechRegions: jsonb("speech_regions"),
+
     failureReason: text("failure_reason"),
 
     /**

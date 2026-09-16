@@ -1,0 +1,17 @@
+{
+  "name": "@scribe/audio-browser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Processamento de áudio no dispositivo: reamostragem, detecção de fala e mapa de tempo",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.0"
+  }
+}

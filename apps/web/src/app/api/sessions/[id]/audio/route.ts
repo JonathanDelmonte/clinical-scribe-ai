@@ -45,6 +45,28 @@ export async function POST(
     );
   }
 
+  /**
+   * O mapa de tempo que o dispositivo mandou junto.
+   *
+   * Lido defensivamente e ignorado quando estranho: um mapa malformado não
+   * pode impedir o áudio de ser gravado. A consulta já aconteceu; perder a
+   * gravação por causa de metadado seria trocar o essencial pelo acessório.
+   */
+  const mapaBruto = form?.get("audioMap");
+  let silenceRemovedMs: number | null = null;
+  let speechRegions: unknown = null;
+  if (typeof mapaBruto === "string") {
+    try {
+      const m = JSON.parse(mapaBruto) as { regions?: unknown; removedMs?: unknown };
+      if (typeof m.removedMs === "number" && Number.isFinite(m.removedMs)) {
+        silenceRemovedMs = Math.max(0, Math.round(m.removedMs));
+      }
+      if (Array.isArray(m.regions)) speechRegions = m.regions;
+    } catch {
+      // mapa inválido: segue sem ele
+    }
+  }
+
   const extension = extensionOf(file.name);
   if (!ALLOWED.has(extension)) {
     return NextResponse.json(
@@ -74,6 +96,8 @@ export async function POST(
         status: "uploaded",
         endedAt: new Date(),
         failureReason: null,
+        silenceRemovedMs,
+        speechRegions,
       })
       .where(eq(sessions.id, session.id));
 

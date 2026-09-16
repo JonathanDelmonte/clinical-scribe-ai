@@ -1,5 +1,6 @@
 "use client";
 
+import { prepareForUpload } from "@scribe/audio-browser";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -96,9 +97,42 @@ export function SessionRecorder({
 
     const { session } = (await created.json()) as { session: { id: string } };
 
-    setStatus(`enviando ${(file.size / 1024 / 1024).toFixed(1)} MB…`);
+    // ---- a metade do navegador ------------------------------------------
+    //
+    // O dispositivo reamostra para 16 kHz mono e corta o silêncio ANTES de
+    // enviar. Reamostrar é ganho puro: o Whisper converte para 16 kHz de
+    // qualquer jeito, então mandar 48 kHz estéreo é subir seis vezes mais
+    // bytes para o servidor descartar cinco sextos.
+    //
+    // E o ruído da sala — o silêncio entre as falas — nunca sai daqui.
+    setStatus("preparando o áudio no seu dispositivo…");
+
+    let envio = file;
+    let mapa: { regions: unknown; removedMs: number } | null = null;
+
+    try {
+      const pronto = await prepareForUpload(file);
+      envio = pronto.file;
+      mapa = { regions: pronto.regions, removedMs: pronto.removedMs };
+
+      const economia = 1 - pronto.bytes / pronto.originalBytes;
+      setStatus(
+        `${(pronto.bytes / 1024 / 1024).toFixed(1)} MB` +
+          (economia > 0.05 ? ` · ${Math.round(economia * 100)}% menor` : "") +
+          (pronto.removedMs > 2000
+            ? ` · ${Math.round(pronto.removedMs / 1000)}s de silêncio removidos`
+            : ""),
+      );
+    } catch {
+      // Codec que o navegador não decodifica, memória insuficiente num celular
+      // antigo, AudioContext bloqueado. Enviar o original é a degradação certa:
+      // upload maior e processamento mais lento, nunca consulta perdida.
+      setStatus(`enviando ${(file.size / 1024 / 1024).toFixed(1)} MB…`);
+    }
+
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", envio);
+    if (mapa !== null) form.append("audioMap", JSON.stringify(mapa));
 
     const uploaded = await fetch(`/api/sessions/${session.id}/audio`, {
       method: "POST",
