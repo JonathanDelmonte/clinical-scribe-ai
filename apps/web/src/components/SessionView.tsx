@@ -271,14 +271,17 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 
       {note !== null && (
         <ClinicalNote
+          key={note.id}
           note={note}
+          sessionId={sessionId}
           validSegmentIds={idsValidos}
           activeSources={fontesAtivas}
           onCite={ouvir}
+          onSaved={() => setRecarga((n) => n + 1)}
         />
       )}
 
-      {segments.length > 0 && !working && (
+      {segments.length > 0 && !working && note?.approvedAt == null && (
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => void gerarNota()}

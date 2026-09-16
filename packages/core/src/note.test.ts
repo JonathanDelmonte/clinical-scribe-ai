@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import type { TranscriptSegment } from "./domain";
 import {
+  allStatements,
   buildNotePrompt,
+  checkApproval,
   parseNoteResponse,
   PROMPT_VERSION,
   SECOES,
@@ -217,5 +219,66 @@ describe("seções", () => {
 
   it("a versão do prompt é gravável", () => {
     expect(PROMPT_VERSION).toMatch(/^nota-v\d+$/);
+  });
+});
+
+describe("checkApproval", () => {
+  const ancorada = { path: "conduta[0]", text: "Relaxante", sources: ["seg_c"] };
+  const semFonte = { path: "hipoteseDiagnostica[0]", text: "Lombalgia", sources: [] };
+  const inventada = {
+    path: "exameFisico[0]",
+    text: "Ausculta normal",
+    sources: ["seg_x"],
+  };
+
+  it("aprova quando toda afirmação tem âncora válida", () => {
+    expect(checkApproval([ancorada], TRECHOS).ok).toBe(true);
+  });
+
+  it("bloqueia afirmação sem fonte", () => {
+    const r = checkApproval([ancorada, semFonte], TRECHOS);
+    expect(r.ok).toBe(false);
+    expect(r.pending).toEqual(["hipoteseDiagnostica[0]"]);
+  });
+
+  it("bloqueia afirmação que cita trecho inexistente", () => {
+    expect(checkApproval([inventada], TRECHOS).ok).toBe(false);
+  });
+
+  // O caso que justifica o campo. Sem esta saída, o profissional precisaria
+  // APAGAR informação correta para conseguir assinar — o pior resultado
+  // possível de um mecanismo que existe para proteger o registro.
+  it("libera a afirmação que o profissional assumiu", () => {
+    const assumida = { ...semFonte, confirmedAt: "2026-09-16T01:00:00Z" };
+    expect(checkApproval([ancorada, assumida], TRECHOS).ok).toBe(true);
+  });
+
+  it("assumir vale também para fonte inventada", () => {
+    const assumida = { ...inventada, confirmedAt: "2026-09-16T01:00:00Z" };
+    expect(checkApproval([assumida], TRECHOS).ok).toBe(true);
+  });
+
+  it("fonte repetida não impede a aprovação", () => {
+    const repetida = { path: "conduta[1]", text: "x", sources: ["seg_c", "seg_c"] };
+    expect(checkApproval([repetida], TRECHOS).ok).toBe(true);
+  });
+
+  it("lista todas as pendências, não só a primeira", () => {
+    const r = checkApproval([semFonte, inventada], TRECHOS);
+    expect(r.pending).toHaveLength(2);
+  });
+
+  it("nota vazia é aprovável — não há o que conferir", () => {
+    expect(checkApproval([], TRECHOS).ok).toBe(true);
+  });
+});
+
+describe("allStatements", () => {
+  it("achata as seções preservando a ordem", () => {
+    const r = allStatements([
+      { statements: [{ path: "a[0]", text: "1", sources: [] }] },
+      { statements: [{ path: "b[0]", text: "2", sources: [] }] },
+    ]);
+    expect(r.map((s) => s.path)).toEqual(["a[0]", "b[0]"]);
   });
 });

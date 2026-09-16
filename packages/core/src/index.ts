@@ -61,14 +61,18 @@ export {
 } from "./roles";
 
 export type {
+  ApprovalCheck,
   ClinicalNote,
   NoteSection,
   NoteValidation,
   ParsedNote,
+  ReviewedStatement,
   SecaoChave,
 } from "./note";
 export {
+  allStatements,
   buildNotePrompt,
+  checkApproval,
   parseNoteResponse,
   PROMPT_VERSION,
   NOTE_RESPONSE_SCHEMA,

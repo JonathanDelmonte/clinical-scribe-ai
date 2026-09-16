@@ -299,3 +299,68 @@ export const NOTE_RESPONSE_SCHEMA = {
   },
   required: ["secoes"],
 } as const;
+
+/**
+ * Uma afirmação depois de passar pelas mãos do profissional.
+ *
+ * `confirmedAt` é o campo que carrega a decisão clínica, e ele existe por uma
+ * razão específica.
+ *
+ * A conferência determinística responde "a máquina inventou isto?". Ela NÃO
+ * responde "isto é verdade?" — e há casos legítimos em que uma afirmação está
+ * certa e sem âncora válida: o profissional reescreveu a frase, ou juntou duas
+ * em uma, ou sabe de algo que o microfone não pegou.
+ *
+ * Travar a aprovação nesses casos empurraria a pessoa a apagar informação
+ * correta para conseguir assinar — o pior resultado possível. Então a saída é
+ * TRANSFERIR a responsabilidade explicitamente: sem citação válida, vale a
+ * palavra de quem assina, e fica registrado que foi assim. É o que a lei já
+ * supõe de um prontuário, escrito no dado.
+ */
+export interface ReviewedStatement extends CitedStatement {
+  /** Quando o profissional alterou o texto gerado. */
+  readonly editedAt?: string;
+  /** Quando o profissional assumiu uma afirmação sem âncora válida. */
+  readonly confirmedAt?: string;
+}
+
+export interface ApprovalCheck {
+  readonly ok: boolean;
+  /** Caminhos das afirmações que ainda impedem a aprovação. */
+  readonly pending: readonly string[];
+}
+
+/**
+ * A nota pode virar documento?
+ *
+ * Só bloqueia o que é insustentável: afirmação sem fonte alguma, ou citando
+ * trecho que não existe — e que ninguém assumiu. Fonte repetida não bloqueia,
+ * como em `validateNote`.
+ *
+ * Determinístico, sem IA, testável sem banco. A aprovação é o momento em que
+ * um rascunho vira registro clínico, e essa fronteira não pode depender de
+ * julgamento de modelo.
+ */
+export function checkApproval(
+  statements: readonly ReviewedStatement[],
+  segments: readonly TranscriptSegment[],
+): ApprovalCheck {
+  const issues = validateCitations(statements, segments);
+  const problematicos = new Set(
+    issues.filter((i) => i.kind !== "duplicate_source").map((i) => i.path),
+  );
+
+  const assumidos = new Set(
+    statements.filter((s) => s.confirmedAt !== undefined).map((s) => s.path),
+  );
+
+  const pending = [...problematicos].filter((p) => !assumidos.has(p)).sort();
+  return { ok: pending.length === 0, pending };
+}
+
+/** Todas as afirmações de uma nota, achatadas. */
+export function allStatements(
+  sections: readonly { statements: readonly ReviewedStatement[] }[],
+): ReviewedStatement[] {
+  return sections.flatMap((s) => [...s.statements]);
+}
