@@ -40,7 +40,18 @@ const schema = z.object({
   GOOGLE_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
 
-  LLM_MODEL: z.string().default("gemini-2.5-flash"),
+  /**
+   * Nome exato do modelo, nunca um apelido como `gemini-flash-latest`.
+   *
+   * A tabela `documents` grava `model` em cada nota para que uma regressão de
+   * qualidade possa ser investigada depois. Um apelido que aponta sempre para
+   * o mais novo transforma esse registro em mentira: duas notas gravadas com o
+   * mesmo nome podem ter saído de modelos diferentes.
+   *
+   * Este padrão envelhece — catálogos mudam e modelos são aposentados. Rode
+   * `pnpm llm:models` para ver o que a sua chave acessa hoje.
+   */
+  LLM_MODEL: z.string().default("gemini-3.8-flash"),
 
   /**
    * O piso de tratamento de dados que ESTE ambiente aceita.
