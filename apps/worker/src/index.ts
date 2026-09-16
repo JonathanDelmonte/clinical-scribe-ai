@@ -25,6 +25,7 @@ import {
   completeJob,
   failJob,
   LEASE_RENEW_MS,
+  reapAbandoned,
   renewLease,
   type ClaimedJob,
 } from "./queue.js";
@@ -133,6 +134,12 @@ async function loop(workerId: number): Promise<void> {
     try {
       const didWork = await processOne();
       if (!didWork) {
+        // Só quando a fila está vazia: é varredura de manutenção, e competir
+        // com trabalho de verdade por conexão de banco não faz sentido.
+        const enterrados = await reapAbandoned(db);
+        if (enterrados > 0) {
+          log.error({ enterrados }, "jobs abandonados sem tentativas restantes");
+        }
         await sleep(config.WORKER_POLL_INTERVAL_MS);
       }
     } catch (error) {

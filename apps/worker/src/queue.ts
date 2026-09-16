@@ -48,9 +48,11 @@ export const LEASE_RENEW_MS = 30_000;
  * significar "considere abandonado depois disto" — que é a mesma pergunta:
  * *a partir de quando outro worker pode pegar este job?*
  *
- * A retomada conta como tentativa. Isso é deliberado: um job que derruba o
- * worker toda vez que roda esgota as tentativas e vira falha visível, em vez
- * de reiniciar o worker em laço para sempre.
+ * A retomada conta como tentativa, e o `attempts < max_attempts` no `select`
+ * é o que impede o laço infinito: um job que MATA o worker nunca chega ao
+ * `failJob` — quem morre não registra a própria falha — então sem esse limite
+ * ele seria retomado para sempre, derrubando o processo a cada ciclo. Passado
+ * o limite, quem o enterra é `reapAbandoned`.
  */
 export async function claimJob(db: Database): Promise<ClaimedJob | null> {
   const rows = await db.execute(sql`
@@ -68,6 +70,7 @@ export async function claimJob(db: Database): Promise<ClaimedJob | null> {
          from jobs
         where status in ('pending', 'running')
           and run_after <= now()
+          and (status = 'pending' or attempts < max_attempts)
         order by run_after
           for update skip locked
         limit 1
@@ -93,6 +96,37 @@ export async function claimJob(db: Database): Promise<ClaimedJob | null> {
     attempts: Number(row["attempts"]),
     maxAttempts: Number(row["maxAttempts"]),
   };
+}
+
+/**
+ * Enterra os jobs abandonados que não têm mais tentativas.
+ *
+ * Existe porque a fila tem um ponto cego: quem morre não registra a própria
+ * falha. Um job que derruba o worker — memória estourada, processo morto —
+ * nunca passa por `failJob`, e por isso nunca vira `failed` sozinho.
+ *
+ * `claimJob` para de retomá-lo depois do limite de tentativas, o que impede o
+ * laço. Mas parar de retomar deixaria o job `running` para sempre, e a sessão
+ * pendurada do mesmo jeito. Esta varredura fecha o ciclo: o job vira falha
+ * visível, com um motivo que diz o que aconteceu.
+ *
+ * Devolve quantos enterrou, porque um número diferente de zero aqui merece
+ * investigação — significa que algo está matando o worker.
+ */
+export async function reapAbandoned(db: Database): Promise<number> {
+  const rows = await db.execute(sql`
+    update jobs
+       set status = 'failed',
+           finished_at = now(),
+           last_error = 'O worker morreu durante este job em todas as ' ||
+                        max_attempts || ' tentativas. O processamento foi ' ||
+                        'interrompido; os dados já gravados estão preservados.'
+     where status = 'running'
+       and run_after <= now()
+       and attempts >= max_attempts
+    returning id
+  `);
+  return (rows as unknown as unknown[]).length;
 }
 
 /**
