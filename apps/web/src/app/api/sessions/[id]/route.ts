@@ -1,5 +1,5 @@
 import { documents, jobs, patients, sessions, transcriptSegments } from "@scribe/db";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
@@ -64,12 +64,32 @@ export async function GET(
       .orderBy(desc(jobs.createdAt))
       .limit(1);
 
+    // Os documentos do objetivo da sessão — receita, encaminhamento, etc.
+    // Vários por sessão, ao contrário da nota: o profissional pode pedir a
+    // receita E o encaminhamento da mesma consulta.
+    const objectives = await tx
+      .select()
+      .from(documents)
+      .where(
+        and(eq(documents.sessionId, session.id), ne(documents.type, "clinical_note")),
+      )
+      .orderBy(desc(documents.createdAt));
+
+    const [objectiveJob] = await tx
+      .select({ status: jobs.status, error: jobs.lastError })
+      .from(jobs)
+      .where(and(eq(jobs.sessionId, session.id), eq(jobs.kind, "generate_objective")))
+      .orderBy(desc(jobs.createdAt))
+      .limit(1);
+
     return {
       session,
       patient: patient ?? null,
       segments,
       note: note ?? null,
       noteJob: noteJob ?? null,
+      objectives,
+      objectiveJob: objectiveJob ?? null,
     };
   });
 

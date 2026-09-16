@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ClinicalNote, type NoteDoc } from "./ClinicalNote";
+import { SessionObjectives, type ObjectiveDoc } from "./SessionObjectives";
 import { SessionProgress } from "./SessionProgress";
 import { ROLE_LABEL, SpeakerRoles, type Assignment } from "./SpeakerRoles";
 
@@ -35,6 +36,8 @@ interface SessionData {
   segments: Segment[];
   note: NoteDoc | null;
   noteJob: { status: string; error: string | null } | null;
+  objectives: ObjectiveDoc[];
+  objectiveJob: { status: string; error: string | null } | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -90,7 +93,8 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         // quando alguém recarregasse a página.
         const trabalhando =
           IN_PROGRESS.has(body.session.status) ||
-          (body.noteJob !== null && JOB_ATIVO.has(body.noteJob.status));
+          (body.noteJob !== null && JOB_ATIVO.has(body.noteJob.status)) ||
+          (body.objectiveJob !== null && JOB_ATIVO.has(body.objectiveJob.status));
 
         if (trabalhando) {
           timer = setTimeout(() => void poll(), 1500);
@@ -172,7 +176,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     return <p className="text-sm text-muted">carregando…</p>;
   }
 
-  const { session, segments, note, noteJob } = data;
+  const { session, segments, note, noteJob, objectives, objectiveJob } = data;
   const working = IN_PROGRESS.has(session.status);
   const notaEmAndamento =
     gerando || (noteJob !== null && JOB_ATIVO.has(noteJob.status));
@@ -321,6 +325,19 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         >
           A geração da nota falhou: {noteJob.error}
         </p>
+      )}
+
+      {segments.length > 0 && !working && (
+        <SessionObjectives
+          sessionId={sessionId}
+          documents={objectives ?? []}
+          working={objectiveJob !== null && JOB_ATIVO.has(objectiveJob.status)}
+          canGenerate={temProfissional}
+          validSegmentIds={idsValidos}
+          activeSources={fontesAtivas}
+          onCite={ouvir}
+          onQueued={() => setRecarga((n) => n + 1)}
+        />
       )}
 
       {segments.length > 0 && (

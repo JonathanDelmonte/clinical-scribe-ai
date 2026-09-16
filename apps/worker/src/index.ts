@@ -18,6 +18,7 @@ import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
 import { config, requireDatabaseUrl } from "./config.js";
 import { logger } from "./logger.js";
 import { makeNoteHandler } from "./handlers/note.js";
+import { makeObjectiveHandler } from "./handlers/objective.js";
 import { makeTranscribeHandler } from "./handlers/transcribe.js";
 import { resolveLlm } from "./llm/index.js";
 import {
@@ -53,7 +54,10 @@ const handlers: Record<string, JobHandler> = {
   // problema que nenhuma tentativa resolve — e o job acabaria como "falhou em
   // definitivo", que soa como defeito quando é só configuração faltando.
   ...(llm.provider !== null && llm.blockedReason === null
-    ? { generate_note: makeNoteHandler(db, llm.provider, logger) }
+    ? {
+        generate_note: makeNoteHandler(db, llm.provider, logger),
+        generate_objective: makeObjectiveHandler(db, llm.provider, logger),
+      }
     : {}),
 
   // Marco 6 — retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS

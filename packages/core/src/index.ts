@@ -83,3 +83,14 @@ export {
 
 export type { LlmCompletion, LlmDataPolicy, LlmProvider, LlmUsage } from "./llm";
 export { checkDataPolicy, dataPolicyLabel } from "./llm";
+
+export type { ObjectiveItem, ObjectiveSpec, ParsedObjective } from "./objective";
+export {
+  buildObjectivePrompt,
+  countGaps,
+  objetivoPorSlug,
+  OBJETIVOS_GLOBAIS,
+  parseObjectiveResponse,
+  PROMPT_VERSION_OBJETIVO,
+  validateObjective,
+} from "./objective";
