@@ -2,6 +2,9 @@
 
 import { prepareForUpload } from "@scribe/audio-browser";
 import { useRouter } from "next/navigation";
+
+import { LiveDraft } from "./LiveDraft";
+import { useLiveDraft } from "@/lib/useLiveDraft";
 import { useEffect, useRef, useState } from "react";
 
 type Engine = "local" | "cloud";
@@ -52,6 +55,7 @@ export function SessionRecorder({
   const [objective, setObjective] = useState("");
   const [engine, setEngine] = useState<Engine | "">("");
   const [recording, setRecording] = useState(false);
+  const rascunho = useLiveDraft();
   const [elapsed, setElapsed] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +199,11 @@ export function SessionRecorder({
       recorderRef.current = recorder;
       setElapsed(0);
       setRecording(true);
+
+      // Roda em paralelo, no MESMO fluxo de microfone, e sem `await`: o
+      // rascunho baixa um modelo na primeira vez, e esperar por ele atrasaria
+      // o início da gravação — que é a única coisa aqui que não pode falhar.
+      void rascunho.iniciar(stream);
     } catch (err) {
       setError(
         err instanceof DOMException && err.name === "NotAllowedError"
@@ -207,6 +216,7 @@ export function SessionRecorder({
   function stopRecording() {
     setRecording(false);
     setStatus("processando gravação…");
+    rascunho.parar();
     recorderRef.current?.stop();
     recorderRef.current = null;
   }
@@ -266,6 +276,8 @@ export function SessionRecorder({
           </span>
         </label>
       )}
+
+      <LiveDraft estado={rascunho.estado} trechos={rascunho.trechos} />
 
       <div className="flex flex-wrap items-center gap-3">
         {recording ? (

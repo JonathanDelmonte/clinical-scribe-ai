@@ -57,6 +57,7 @@ export default tseslint.config(
       "apps/worker/**/*.ts",
       "packages/db/src/migrate.ts",
       "packages/db/src/seed.ts",
+      "packages/db/src/seed-demo.ts",
       "packages/db/src/test-rls.ts",
     ],
     rules: { "no-console": "off" },
@@ -65,5 +66,20 @@ export default tseslint.config(
   {
     files: ["**/*.test.ts", "**/*.test.tsx"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+
+  // O AudioWorklet roda num escopo próprio do navegador — nem janela, nem
+  // worker comum. `AudioWorkletProcessor` e `registerProcessor` só existem lá,
+  // e o ESLint não tem como saber disso sem que alguém diga.
+  {
+    files: ["apps/web/public/audio-tap.js"],
+    languageOptions: {
+      globals: {
+        AudioWorkletProcessor: "readonly",
+        registerProcessor: "readonly",
+        sampleRate: "readonly",
+        currentTime: "readonly",
+      },
+    },
   },
 );

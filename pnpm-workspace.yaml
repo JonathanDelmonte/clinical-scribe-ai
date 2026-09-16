@@ -4,5 +4,14 @@ packages:
 
 # esbuild precisa rodar o script de instalação para baixar o binário nativo —
 # é dele que o Vitest e o tsx dependem. Aprovação explícita exigida pelo pnpm 11.
+#
+# Os três abaixo vêm de `@huggingface/transformers` e são DESLIGADOS de
+# propósito. Eles compilam artefatos nativos para rodar inferência no Node, e
+# nós rodamos o Whisper pequeno no NAVEGADOR, num worker. Aprová-los baixaria
+# centenas de megabytes de binário de GPU que nenhuma linha deste projeto
+# executa — e faria o `pnpm install` de todo mundo, e o CI, pagarem por isso.
 allowBuilds:
   esbuild: true
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false

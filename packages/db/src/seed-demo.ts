@@ -19,7 +19,7 @@
  * Idempotente: roda quantas vezes quiser.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { createServiceClient } from "./client";
 import {
@@ -197,25 +197,30 @@ try {
   // existe para detectar, introduzido pelo próprio seed.
   await db.delete(sessions).where(eq(sessions.id, SESSAO_ID));
 
-  const [paciente] = await db
-    .insert(patients)
-    .values({
-      professionalId: dona.id,
-      name: "Marina Alves (exemplo)",
-      birthDate: new Date("1991-08-23"),
-      notes: "Paciente fictícia, criada por `pnpm db:demo`.",
-    })
-    .onConflictDoNothing()
-    .returning({ id: patients.id });
+  // `onConflictDoNothing` não serve aqui: ele depende de uma restrição de
+  // unicidade, e não existe uma sobre o nome do paciente — nem deveria, já que
+  // dois pacientes podem se chamar igual. Sem restrição, o conflito nunca
+  // acontece e cada execução do seed criava outra Marina.
+  const NOME_EXEMPLO = "Marina Alves (exemplo)";
+
+  const [existente] = await db
+    .select({ id: patients.id })
+    .from(patients)
+    .where(and(eq(patients.professionalId, dona.id), eq(patients.name, NOME_EXEMPLO)))
+    .limit(1);
 
   const pacienteId =
-    paciente?.id ??
+    existente?.id ??
     (
       await db
-        .select({ id: patients.id })
-        .from(patients)
-        .where(eq(patients.professionalId, dona.id))
-        .limit(1)
+        .insert(patients)
+        .values({
+          professionalId: dona.id,
+          name: NOME_EXEMPLO,
+          birthDate: new Date("1991-08-23"),
+          notes: "Paciente fictícia, criada por `pnpm db:demo`.",
+        })
+        .returning({ id: patients.id })
     )[0]?.id;
 
   if (pacienteId === undefined) throw new Error("não foi possível criar o paciente");

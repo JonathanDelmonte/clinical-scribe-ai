@@ -88,7 +88,7 @@ const FAIXA_MINIMA_DB = 12;
  * fronteira a encontrar: ou é tudo fala, ou é tudo sala. Aí a decisão passa a
  * ser absoluta, que é o único critério disponível.
  */
-function limiarDb(energias: readonly number[], ratio: number): number {
+export function limiarDb(energias: readonly number[], ratio: number): number {
   if (energias.length === 0) return Number.POSITIVE_INFINITY;
 
   const dB = energias.map((e) => 20 * Math.log10(Math.max(e, 1e-9)));
