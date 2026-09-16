@@ -23,6 +23,7 @@ interface LocalResponse {
   diarization_error: string | null;
   truncated: boolean;
   uncovered_ms: number;
+  voice_matching_applied: boolean;
   speakers: string[];
   segments: {
     start_ms: number;
@@ -30,6 +31,7 @@ interface LocalResponse {
     text: string;
     speaker_label: string;
     confidence: number | null;
+    voice_similarity?: number | null;
   }[];
 }
 
@@ -97,12 +99,43 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
     }
   }
 
+  /** Cadastra a voz do profissional a partir de uma amostra de fala. */
+  async enrollVoice(
+    audio: Uint8Array<ArrayBuffer>,
+    filename: string,
+  ): Promise<{ embedding: number[]; durationSeconds: number }> {
+    const form = new FormData();
+    form.append("file", new Blob([audio]), filename);
+    const res = await fetch(`${this.baseUrl}/voice-embedding`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(5 * 60 * 1000),
+    });
+    if (!res.ok) {
+      const corpo = (await res.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+      throw new Error(corpo?.detail ?? `asr-local respondeu ${res.status}`);
+    }
+    const body = (await res.json()) as {
+      embedding: number[];
+      duration_s: number;
+    };
+    return { embedding: body.embedding, durationSeconds: body.duration_s };
+  }
+
   async transcribe(input: TranscriptionInput): Promise<TranscriptionResult> {
     const form = new FormData();
     // `Blob` e `FormData` são globais no Node desde a 18 (via undici). Não
     // precisa de biblioteca de multipart — e o worker fica sem os tipos de
     // DOM, que ele não deveria ter mesmo.
     form.append("file", new Blob([input.audio]), input.filename);
+    if (input.professionalEmbedding != null) {
+      form.append(
+        "professional_embedding",
+        JSON.stringify(input.professionalEmbedding),
+      );
+    }
 
     const params = new URLSearchParams({
       language: input.language ?? "pt",
@@ -132,6 +165,7 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
       realtimeFactor: body.realtime_factor,
       diarizationApplied: body.diarization_applied,
       diarizationError: body.diarization_error,
+      voiceMatchingApplied: body.voice_matching_applied ?? false,
       truncated: body.truncated ?? false,
       uncoveredMs: body.uncovered_ms ?? 0,
       speakers: body.speakers,
@@ -141,6 +175,7 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
         text: s.text,
         speakerLabel: s.speaker_label,
         confidence: s.confidence,
+        voiceSimilarity: s.voice_similarity ?? null,
       })),
     };
   }

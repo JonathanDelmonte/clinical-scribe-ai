@@ -22,6 +22,7 @@ function result(overrides: Partial<TranscriptionResult> = {}): TranscriptionResu
     durationMs: 60_000,
     processingMs: 5_000,
     realtimeFactor: 12,
+    voiceMatchingApplied: false,
     diarizationApplied: true,
     diarizationError: null,
     truncated: false,

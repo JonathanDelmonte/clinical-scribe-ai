@@ -324,3 +324,151 @@ export function roleByLabel(
   for (const a of assignments) mapa[a.speakerLabel] = a.role;
   return mapa;
 }
+
+// -----------------------------------------------------------------------------
+// Método A — impressão vocal
+//
+// A camada acústica, sobre a de conteúdo. Não substitui: acrescenta.
+//
+// As duas respondem perguntas diferentes, e é por isso que se somam bem:
+//
+//   CONTEÚDO  responde "qual GRUPO fala como profissional?", olhando a
+//             conversa inteira. Robusto, barato, funciona sem cadastro.
+//   VOZ       responde "esta FALA é a voz dele?", trecho a trecho. É a única
+//             que alcança o erro que sobrou — falas do médico atribuídas ao
+//             rótulo do paciente pela diarização.
+// -----------------------------------------------------------------------------
+
+export interface VoiceScoredSegment {
+  readonly speakerLabel: string;
+  /**
+   * −1 a 1. Ausente ou `null` quando não há voz cadastrada, ou quando o trecho
+   * é curto demais para medir.
+   */
+  readonly voiceSimilarity?: number | null;
+}
+
+/**
+ * Margem mínima para reatribuir um trecho contra o rótulo dele.
+ *
+ * Sem margem, trechos exatamente no meio do caminho entre as duas vozes
+ * oscilariam por ruído de medição, e a transcrição ficaria pior que antes —
+ * trocando erros estáveis por erros instáveis.
+ */
+export const MARGEM_VOZ = 0.06;
+
+export interface VoiceRefinement {
+  readonly assignments: readonly SpeakerAssignment[];
+  /** Índices dos trechos cujo papel a voz corrigiu. */
+  readonly correctedIndexes: readonly number[];
+  /** A voz discordou do conteúdo sobre quem é o profissional? */
+  readonly disagreed: boolean;
+}
+
+/**
+ * Refina os papéis usando a voz cadastrada do profissional.
+ *
+ * Quando as duas evidências concordam, a confiança sobe — são fontes
+ * independentes apontando para o mesmo lugar.
+ *
+ * Quando discordam, a VOZ vence. O conteúdo infere o papel a partir de como se
+ * fala; a voz compara com uma amostra que o próprio profissional gravou. Uma é
+ * dedução, a outra é medição contra uma referência conhecida.
+ *
+ * Mas a discordância é sinalizada, nunca silenciada: ela costuma indicar
+ * cadastro de voz ruim ou consulta atípica, e o profissional precisa saber que
+ * as duas fontes brigaram.
+ */
+export function refineRolesByVoice(
+  assignments: readonly SpeakerAssignment[],
+  segments: readonly VoiceScoredSegment[],
+): VoiceRefinement {
+  const medidos = segments.filter(
+    (s) => s.voiceSimilarity !== null && s.voiceSimilarity !== undefined,
+  );
+  if (medidos.length === 0 || assignments.length === 0) {
+    return { assignments, correctedIndexes: [], disagreed: false };
+  }
+
+  // Média de semelhança com a voz cadastrada, por rótulo.
+  const media = new Map<string, { soma: number; n: number }>();
+  for (const s of medidos) {
+    const atual = media.get(s.speakerLabel) ?? { soma: 0, n: 0 };
+    atual.soma += s.voiceSimilarity ?? 0;
+    atual.n += 1;
+    media.set(s.speakerLabel, atual);
+  }
+
+  const porRotulo = [...media.entries()].map(([label, d]) => ({
+    label,
+    media: d.soma / d.n,
+  }));
+  porRotulo.sort((a, b) => b.media - a.media);
+
+  const maisParecido = porRotulo[0];
+  if (maisParecido === undefined) {
+    return { assignments, correctedIndexes: [], disagreed: false };
+  }
+
+  const peloConteudo = assignments.find((a) => a.role === "professional");
+  const disagreed =
+    peloConteudo !== undefined && peloConteudo.speakerLabel !== maisParecido.label;
+
+  // A voz decide quem é o profissional; os demais seguem a ordem de semelhança,
+  // do menos parecido para o mais — quem menos soa como o profissional é o
+  // paciente.
+  const restantes = porRotulo.slice(1).sort((a, b) => a.media - b.media);
+  const novoPapel = new Map<string, SpeakerRole>([
+    [maisParecido.label, "professional"],
+  ]);
+  restantes.forEach((e, i) => {
+    novoPapel.set(e.label, i === 0 ? "patient" : "other");
+  });
+
+  const refinados: SpeakerAssignment[] = assignments.map((a) => {
+    const papel = novoPapel.get(a.speakerLabel) ?? a.role;
+    const concorda = papel === a.role && a.role !== "unknown";
+    return {
+      ...a,
+      role: papel,
+      // Duas fontes independentes apontando para o mesmo lugar valem mais que
+      // qualquer uma sozinha; quando brigam, o resultado fica explicitamente
+      // menos confiável.
+      confidence: concorda
+        ? Math.min(1, a.confidence + (1 - a.confidence) * 0.5)
+        : Math.max(0.4, a.confidence * 0.7),
+      evidence: [
+        {
+          signal: disagreed
+            ? "voz cadastrada discorda do conteúdo"
+            : "voz cadastrada confirma",
+          excerpt: `semelhança média ${maisParecido.media.toFixed(2)} em ${maisParecido.label}`,
+          weight: disagreed ? -1 : 1,
+        },
+        ...a.evidence,
+      ],
+    };
+  });
+
+  // Correção trecho a trecho — o que só a voz alcança.
+  const centroide = new Map(porRotulo.map((e) => [e.label, e.media]));
+  const doProfissional = centroide.get(maisParecido.label) ?? 0;
+  const doPaciente = Math.min(...porRotulo.map((e) => e.media));
+
+  const correctedIndexes: number[] = [];
+  segments.forEach((s, i) => {
+    const sim = s.voiceSimilarity;
+    if (sim === null || sim === undefined) return;
+    const distProf = Math.abs(sim - doProfissional);
+    const distPac = Math.abs(sim - doPaciente);
+    if (Math.abs(distProf - distPac) < MARGEM_VOZ) return;
+
+    const papelPelaVoz = distProf < distPac ? "professional" : "patient";
+    const papelDoRotulo = novoPapel.get(s.speakerLabel);
+    if (papelDoRotulo !== undefined && papelPelaVoz !== papelDoRotulo) {
+      correctedIndexes.push(i);
+    }
+  });
+
+  return { assignments: refinados, correctedIndexes, disagreed };
+}

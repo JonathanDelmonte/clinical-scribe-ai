@@ -26,6 +26,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 
 // -----------------------------------------------------------------------------
@@ -118,13 +119,28 @@ export const professionals = pgTable(
      * migração mais difícil quando surgir um terceiro cargo.
      */
     preferredEngine: engineEnum("preferred_engine"),
+
+    /**
+     * Impressão vocal do profissional — o Método A da §7 da documentação.
+     *
+     * 256 números que representam o timbre da voz. Comparar este vetor com o de
+     * um trecho diz o quanto aquela fala é dele.
+     *
+     * O plano adiava isto até o Método B (conteúdo) provar-se insuficiente.
+     * Uma consulta real provou: o conteúdo acerta QUAL GRUPO é o profissional,
+     * mas não corrige fala por fala, e é exatamente aí que a diarização erra.
+     * Medido com a voz cadastrada, a separação foi de +0,76 contra +0,20 —
+     * inequívoca onde o conteúdo não alcança.
+     *
+     * Guardado como `vector` e não como JSON porque o pgvector permite
+     * comparar dentro do próprio banco, o que o assistente RAG da Fase 4 vai
+     * querer.
+     */
+    voiceEmbedding: vector("voice_embedding", { dimensions: 256 }),
+    voiceEnrolledAt: timestamp("voice_enrolled_at", { withTimezone: true }),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
-
-    // voiceEmbedding: vector("voice_embedding", { dimensions: 192 })
-    //   → só adicionar se o Marco 3 mostrar que o Método B (classificação por
-    //     conteúdo) fica abaixo de ~95% de acurácia. Cadastrar amostra de voz
-    //     é fricção no onboarding; não pague esse custo antes de precisar.
   },
   (t) => [uniqueIndex("professionals_auth_user_idx").on(t.authUserId)],
 );

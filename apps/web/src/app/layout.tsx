@@ -78,7 +78,13 @@ export default async function RootLayout({
                 {me.specialty ?? "—"}
               </span>
             )}
-            <div className="ml-auto">
+            <Link
+              href="/configuracoes"
+              className="ml-auto text-xs text-muted hover:text-ink"
+            >
+              configurações
+            </Link>
+            <div>
               {users.length > 0 && (
                 <UserSwitcher users={users} currentAuthUserId={authUserId} />
               )}

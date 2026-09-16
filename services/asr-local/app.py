@@ -11,6 +11,7 @@ O áudio entra, os trechos saem, e nada sai deste container pela rede.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -20,7 +21,7 @@ import time
 from typing import Any, Sequence
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from faster_whisper import BatchedInferencePipeline, WhisperModel
 from faster_whisper.audio import decode_audio
 
@@ -59,6 +60,20 @@ CONDITION_ON_PREVIOUS = (
 # Quanto de áudio final pode ficar sem transcrição antes de considerarmos que
 # algo se perdeu. Silêncio no fim da gravação é normal; meio minuto não é.
 MAX_UNCOVERED_S = float(os.getenv("MAX_UNCOVERED_SECONDS", "5"))
+
+# Modelo de impressão vocal — o Método A da §7 da documentação.
+#
+# 256 dimensões. Comparar dois vetores por produto interno diz o quanto duas
+# falas vieram da mesma pessoa. Medido aqui com duas vozes sintéticas: mesma
+# voz 0,49, vozes diferentes 0,19.
+EMBEDDING_MODEL = os.getenv(
+    "EMBEDDING_MODEL", "pyannote/wespeaker-voxceleb-resnet34-LM"
+)
+EMBEDDING_DIMENSIONS = 256
+
+# Trechos curtos não dão impressão vocal confiável: meio segundo de "sim" não
+# carrega timbre suficiente. Abaixo disto o trecho herda a decisão do grupo.
+MIN_VOICE_SAMPLE_S = float(os.getenv("MIN_VOICE_SAMPLE_SECONDS", "1.2"))
 
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 DIARIZATION_MODEL = os.getenv("DIARIZATION_MODEL", "pyannote/speaker-diarization-3.1")
@@ -131,6 +146,7 @@ _whisper: WhisperModel | None = None
 _batched: Any | None = None
 _diarizer: Any | None = None
 _diarizer_error: str | None = None
+_embedder: Any | None = None
 
 # -----------------------------------------------------------------------------
 # Progresso
@@ -231,6 +247,94 @@ def get_diarizer() -> Any | None:
         _diarizer_error = f"falha ao carregar diarização: {exc}"
         log.error(_diarizer_error)
     return _diarizer
+
+
+# -----------------------------------------------------------------------------
+# Impressão vocal
+# -----------------------------------------------------------------------------
+
+
+def get_embedder() -> Any | None:
+    """Modelo que transforma um pedaço de fala num vetor de 256 números."""
+    global _embedder
+    if _embedder is None and HF_TOKEN:
+        try:
+            import torch
+            from pyannote.audio.pipelines.speaker_verification import (
+                PretrainedSpeakerEmbedding,
+            )
+
+            log.info("carregando impressão vocal %s", EMBEDDING_MODEL)
+            _embedder = PretrainedSpeakerEmbedding(
+                EMBEDDING_MODEL,
+                device=torch.device(DEVICE if DEVICE == "cuda" else "cpu"),
+                use_auth_token=HF_TOKEN,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.error("falha ao carregar impressão vocal: %s", exc)
+    return _embedder
+
+
+def _normalizar(v: np.ndarray) -> np.ndarray:
+    """
+    Deixa o vetor com comprimento 1.
+
+    Com vetores normalizados o produto interno JÁ é a similaridade de cosseno,
+    o que torna a comparação uma multiplicação de matriz — importante quando são
+    centenas de trechos contra uma referência.
+    """
+    norma = float(np.linalg.norm(v))
+    return v / norma if norma > 0 else v
+
+
+def voice_embedding(audio: np.ndarray) -> list[float] | None:
+    """Impressão vocal de um pedaço de áudio, normalizada."""
+    emb = get_embedder()
+    if emb is None or len(audio) < MIN_VOICE_SAMPLE_S * SAMPLE_RATE:
+        return None
+    import torch
+
+    tensor = torch.from_numpy(audio).unsqueeze(0).unsqueeze(0)
+    vetor = np.asarray(emb(tensor)).ravel().astype(np.float32)
+    if not np.all(np.isfinite(vetor)):
+        return None
+    return _normalizar(vetor).tolist()
+
+
+def similaridades_por_trecho(
+    audio: np.ndarray,
+    segments: list[dict[str, Any]],
+    referencia: Sequence[float],
+) -> None:
+    """
+    Anota em cada trecho o quanto ele soa como a voz cadastrada.
+
+    Preenche `voice_similarity` no lugar, de −1 a 1.
+
+    É aqui que o Método A ganha da classificação por conteúdo: o conteúdo
+    decide QUAL GRUPO é o profissional, olhando a conversa inteira. Isto
+    responde por TRECHO — e é o trecho que a diarização erra. Numa consulta
+    real medida aqui, falas do médico foram parar no rótulo da paciente; nenhum
+    sinal textual conserta isso, mas a voz sim.
+    """
+    emb = get_embedder()
+    if emb is None:
+        return
+    ref = _normalizar(np.asarray(referencia, dtype=np.float32))
+
+    for seg in segments:
+        inicio = int(seg["start_ms"] / 1000 * SAMPLE_RATE)
+        fim = int(seg["end_ms"] / 1000 * SAMPLE_RATE)
+        pedaco = audio[inicio:fim]
+        vetor = voice_embedding(pedaco)
+        # Trecho curto demais fica sem nota em vez de receber uma nota ruim:
+        # similaridade de um "sim" de meio segundo é ruído, e ruído com
+        # aparência de medida é pior que ausência de medida.
+        seg["voice_similarity"] = (
+            round(float(np.asarray(vetor, dtype=np.float32) @ ref), 4)
+            if vetor is not None
+            else None
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -448,12 +552,55 @@ def health() -> dict[str, Any]:
     }
 
 
+@app.post("/voice-embedding")
+async def create_voice_embedding(file: UploadFile = File(...)) -> dict[str, Any]:
+    """
+    Cadastra a voz do profissional.
+
+    Recebe uma amostra de fala e devolve o vetor que a representa. É o passo
+    único de configuração: depois disso, toda consulta pode ser comparada com
+    esta referência.
+    """
+    if file.filename is None:
+        raise HTTPException(status_code=400, detail="arquivo sem nome")
+    suffix = os.path.splitext(file.filename)[1] or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        path = tmp.name
+    try:
+        audio = await asyncio.to_thread(decode_audio, path, SAMPLE_RATE)
+        duracao = len(audio) / SAMPLE_RATE
+        if duracao < 5:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"amostra curta demais ({duracao:.1f}s). Fale por pelo menos "
+                    "5 segundos — quanto mais fala, mais estável a impressão."
+                ),
+            )
+        vetor = await asyncio.to_thread(voice_embedding, audio)
+        if vetor is None:
+            raise HTTPException(
+                status_code=503,
+                detail="impressão vocal indisponível — verifique o HF_TOKEN",
+            )
+        return {
+            "embedding": vetor,
+            "dimensions": len(vetor),
+            "duration_s": round(duracao, 1),
+            "model": EMBEDDING_MODEL,
+        }
+    finally:
+        os.unlink(path)
+
+
 @app.post("/transcribe")
 async def transcribe(
     file: UploadFile = File(...),
     language: str = Query(default=LANGUAGE),
     diarize_speakers: bool = Query(default=True, alias="diarize"),
     job: str | None = Query(default=None),
+    professional_embedding: str = Form(default=""),
 ) -> dict[str, Any]:
     """
     Recebe o áudio e devolve os trechos.
@@ -477,13 +624,35 @@ async def transcribe(
         tmp.write(await file.read())
         path = tmp.name
 
+    referencia: list[float] | None = None
+    if professional_embedding.strip() != "":
+        try:
+            bruto = json.loads(professional_embedding)
+            if isinstance(bruto, list) and len(bruto) == EMBEDDING_DIMENSIONS:
+                referencia = [float(x) for x in bruto]
+            else:
+                log.warning(
+                    "impressão vocal ignorada: esperava %d números, veio %s",
+                    EMBEDDING_DIMENSIONS,
+                    len(bruto) if isinstance(bruto, list) else type(bruto).__name__,
+                )
+        except (ValueError, TypeError) as exc:
+            # Impressão vocal inválida NÃO derruba a transcrição: ela é uma
+            # camada a mais sobre o que já funciona, e perder a camada é muito
+            # melhor que perder a consulta.
+            log.warning("impressão vocal ilegível, seguindo sem ela: %s", exc)
+
     return await asyncio.to_thread(
-        _processar, path, language, diarize_speakers, job
+        _processar, path, language, diarize_speakers, job, referencia
     )
 
 
 def _processar(
-    path: str, language: str, diarize_speakers: bool, job: str | None
+    path: str,
+    language: str,
+    diarize_speakers: bool,
+    job: str | None,
+    referencia: Sequence[float] | None,
 ) -> dict[str, Any]:
     started = time.time()
     try:
@@ -573,6 +742,16 @@ def _processar(
                 for s in whisper_segments
             ]
 
+        # ---- impressão vocal por trecho ------------------------------------
+        if referencia is not None and segments:
+            set_progress(
+                job,
+                phase="voice",
+                phase_label="comparando com a voz cadastrada",
+                percent=round((PESO_TRANSCRICAO + PESO_DIARIZACAO) * 100),
+            )
+            similaridades_por_trecho(audio, segments, referencia)
+
         elapsed = time.time() - started
 
         # ---- trava de cobertura ------------------------------------------
@@ -606,6 +785,7 @@ def _processar(
             "realtime_factor": round(audio_seconds / elapsed, 2) if elapsed else None,
             "truncated": truncated,
             "uncovered_ms": int(uncovered_s * 1000),
+            "voice_matching_applied": referencia is not None,
             "diarization_applied": turns is not None,
             "diarization_error": None if turns is not None else _diarizer_error,
             "speakers": sorted({s["speaker_label"] for s in segments}),

@@ -21,6 +21,14 @@ export interface RawSegment {
   readonly speakerLabel: string;
   /** 0–1, ou `null` quando o motor não informa. */
   readonly confidence: number | null;
+  /**
+   * Quanto esta fala soa como a voz cadastrada do profissional, de −1 a 1.
+   *
+   * `null` quando não há voz cadastrada, ou quando o trecho é curto demais
+   * para medir — meio segundo de "sim" não carrega timbre, e uma medida ruim
+   * com aparência de medida é pior que nenhuma.
+   */
+  readonly voiceSimilarity?: number | null;
 }
 
 export interface TranscriptionResult {
@@ -56,6 +64,8 @@ export interface TranscriptionResult {
    * retorno. Sem este sinal, a única forma de perceber seria alguém notar que
    * a prescrição sumiu da nota, provavelmente depois do paciente ir embora.
    */
+  /** Havia voz cadastrada e ela foi comparada com os trechos? */
+  readonly voiceMatchingApplied: boolean;
   readonly truncated: boolean;
   /** Quantos milissegundos de áudio ficaram sem transcrição no fim. */
   readonly uncoveredMs: number;
@@ -105,6 +115,8 @@ export interface TranscriptionInput {
   readonly filename: string;
   readonly language?: string;
   readonly diarize?: boolean;
+  /** Impressão vocal do profissional, quando cadastrada. 256 números. */
+  readonly professionalEmbedding?: readonly number[] | null;
 }
 
 export interface TranscriptionProvider {
@@ -114,6 +126,11 @@ export interface TranscriptionProvider {
   transcribe(input: TranscriptionInput): Promise<TranscriptionResult>;
   /** Andamento, para motores que sabem reportá-lo. */
   progress?(jobId: string): Promise<EngineProgress | null>;
+  /** Cadastra a voz do profissional, para motores que suportam. */
+  enrollVoice?(
+    audio: Uint8Array<ArrayBuffer>,
+    filename: string,
+  ): Promise<{ embedding: number[]; durationSeconds: number }>;
 }
 
 /**

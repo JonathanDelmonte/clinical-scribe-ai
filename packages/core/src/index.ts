@@ -43,10 +43,18 @@ export type {
 } from "./transcription";
 export { isUsableForRoleIdentification, speakerCount } from "./transcription";
 
-export type { RoleEvidence, SpeakerAssignment, SpeakerInput } from "./roles";
+export type {
+  RoleEvidence,
+  SpeakerAssignment,
+  SpeakerInput,
+  VoiceRefinement,
+  VoiceScoredSegment,
+} from "./roles";
 export {
   identifyRolesByContent,
   MIN_CONFIDENCE,
+  MARGEM_VOZ,
+  refineRolesByVoice,
   roleByLabel,
   swapRoles,
 } from "./roles";

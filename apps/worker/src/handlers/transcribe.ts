@@ -13,6 +13,7 @@
 import {
   canProcess,
   identifyRolesByContent,
+  refineRolesByVoice,
   resolveEngine,
   roleByLabel,
   type Account,
@@ -149,6 +150,10 @@ export function makeTranscribeHandler(
         filename: session.audioPath,
         diarize: true,
         jobId: job.id,
+        // Camada A, quando houver: a voz cadastrada compara trecho a trecho, o
+        // que o conteúdo não alcança. Sem cadastro, segue sem ela — é adição,
+        // não dependência.
+        professionalEmbedding: owner.voiceEmbedding,
       });
     } finally {
       // Encerra o laço ANTES de qualquer outra escrita na sessão: um
@@ -181,14 +186,30 @@ export function makeTranscribeHandler(
     // Roda sobre o conteúdo, não sobre a acústica. Medido no áudio real: o
     // pyannote erra as fronteiras, mas quem diz "vou solicitar exames" é o
     // profissional independentemente do rótulo que recebeu.
-    const papeis = identifyRolesByContent(result.segments);
+    const porConteudo = identifyRolesByContent(result.segments);
+
+    // A voz entra POR CIMA do conteúdo, nunca no lugar dele. As duas
+    // respondem perguntas diferentes: conteúdo diz qual grupo conduz a
+    // consulta, voz diz se esta fala é dele. Quando concordam, a confiança
+    // sobe; quando brigam, a voz vence e a briga é sinalizada.
+    const refino = result.voiceMatchingApplied
+      ? refineRolesByVoice(porConteudo, result.segments)
+      : { assignments: porConteudo, correctedIndexes: [], disagreed: false };
+
+    const papeis = refino.assignments;
     const porRotulo = roleByLabel(papeis);
     const decisao = papeis.find((p) => p.role === "professional");
+
+    if (refino.disagreed) {
+      log.warn("voz cadastrada discordou do conteúdo sobre quem é o profissional");
+    }
 
     log.info(
       {
         professional: decisao?.speakerLabel ?? null,
         confidence: decisao?.confidence ?? 0,
+        voiceMatching: result.voiceMatchingApplied,
+        voiceCorrections: refino.correctedIndexes.length,
         // Os SINAIS, não os trechos: "chama de doutor" pode ir para o log,
         // o que o paciente disse não.
         signals: decisao?.evidence.map((e) => e.signal) ?? [],
@@ -199,13 +220,21 @@ export function makeTranscribeHandler(
     );
 
     if (result.segments.length > 0) {
+      const corrigidos = new Set(refino.correctedIndexes);
       await db.insert(transcriptSegments).values(
-        result.segments.map((s) => ({
+        result.segments.map((s, i) => ({
           sessionId,
           professionalId: session.professionalId,
           speakerLabel: s.speakerLabel,
-          role: porRotulo[s.speakerLabel] ?? ("unknown" as const),
-          roleSource: "llm" as const,
+          // Trecho que a voz corrigiu recebe o papel oposto ao do seu rótulo:
+          // é o caso em que a diarização pôs a fala na pessoa errada e só a
+          // impressão vocal percebeu.
+          role: corrigidos.has(i)
+            ? porRotulo[s.speakerLabel] === "professional"
+              ? ("patient" as const)
+              : ("professional" as const)
+            : (porRotulo[s.speakerLabel] ?? ("unknown" as const)),
+          roleSource: corrigidos.has(i) ? ("voice_match" as const) : ("llm" as const),
           startMs: s.startMs,
           endMs: s.endMs,
           text: s.text,
