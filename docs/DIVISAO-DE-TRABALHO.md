@@ -128,42 +128,98 @@ de verdade, avise — dá para gerar uma e mandar só o resultado.
 
 ## Quem mexe em quê
 
-A regra de ouro: **não é sobre permissão, é sobre conflito de merge.** Dois
-editando o mesmo arquivo na mesma semana é o custo que a divisão existe para
-evitar.
+**A Trilha A é fechada. Ninguém da Trilha B altera esses arquivos — em hipótese
+alguma, nem para uma correção de uma linha.**
 
-### Trilha B é dona de
+Isso não é hierarquia nem desconfiança. É que a Trilha A contém os mecanismos
+que impedem o produto de inventar informação clínica, e esses mecanismos falham
+de um jeito particular: **quando quebram, continuam funcionando.**
+
+Um exemplo concreto, do próprio repositório. A conferência de citações marca uma
+afirmação sem fonte como problema bloqueante:
+
+```ts
+const blocking = issues.filter((i) => i.kind !== "duplicate_source");
+```
+
+Alguém ajustando um alerta que aparece demais pode, com toda a boa intenção,
+transformar isso em `i.kind === "unknown_segment"`. Os testes passam. A tela
+continua bonita. E afirmação sem nenhuma âncora no áudio passa a ser aceita em
+silêncio — que é exatamente o caso dos 62% de achados fabricados que os médicos
+não perceberam na revisão (§11 da documentação).
+
+Nenhuma revisão de código apressada pega isso. Quem escreveu a regra pega em
+cinco segundos. Por isso a barreira é de propriedade, não de bom senso.
+
+### Trilha B é dona de — pode mexer à vontade
 
 ```
 apps/web/src/app/           exceto sessoes/[id]/
-apps/web/src/components/    exceto SessionView, SessionProgress,
-                            SpeakerRoles, ClinicalNote, VoiceEnrollment
+apps/web/src/components/    exceto os cinco listados abaixo
 apps/web/src/lib/auth.ts    (a substituição do seletor de dev é sua)
 packages/db/sql/rls.sql     (políticas novas para tabelas novas)
 docs/                       privacidade, termos
 ```
 
-### Trilha A é dona de
+### Trilha A — FECHADA
 
 ```
-services/asr-local/
-packages/core/
-apps/worker/
-apps/web/src/components/SessionView.tsx, SessionProgress.tsx,
-                        SpeakerRoles.tsx, ClinicalNote.tsx, VoiceEnrollment.tsx
+packages/core/                       domínio, prompts, validação, papéis
+apps/worker/                         pipeline, LLM, fila
+services/asr-local/                  Whisper, pyannote, diarização
+packages/db/src/seed-demo.ts         o exemplo de desenvolvimento
+
+apps/web/src/components/SessionView.tsx
+apps/web/src/components/ClinicalNote.tsx
+apps/web/src/components/SpeakerRoles.tsx
+apps/web/src/components/SessionProgress.tsx
+apps/web/src/components/VoiceEnrollment.tsx
 ```
 
-### Combinado antes de mexer
+### Precisa de uma mudança na Trilha A? O processo
+
+Vai acontecer, e é normal — a tela de revisão precisa de um campo novo, o
+handler precisa devolver mais um dado. O caminho é este:
+
+1. **Não edite.** Nem para testar localmente num commit que "depois eu reverto".
+2. **Abra uma issue** descrevendo o que você precisa **em termos de resultado**,
+   não de implementação: *"a tela de revisão precisa saber se a nota já foi
+   exportada em PDF"* — não *"adicione um campo `exported` em ClinicalNote"*.
+3. **Siga trabalhando no resto.** A dependência raramente bloqueia a tarefa
+   inteira; costuma bloquear um pedaço.
+4. **O dono da Trilha A implementa e avisa.**
+
+O passo 2 é o que faz isso funcionar em vez de virar gargalo: descrevendo o
+resultado, quem conhece o código escolhe o caminho — que muitas vezes é mais
+curto do que o pedido supunha, e às vezes já existe.
+
+### Fronteira compartilhada — avise antes
 
 ```
-packages/db/src/schema.ts   migration nova = avisa antes
+packages/db/src/schema.ts   migration nova = avisa ANTES de gerar
 package.json / pnpm-workspace.yaml
 .env.example
 ```
 
-Mudança de schema é o único ponto onde as trilhas realmente se encostam. A
-disciplina é simples: **avise antes de gerar a migration**, porque duas
-migrations criadas no mesmo dia colidem na ordem e a correção é chata.
+Mudança de schema é o único ponto onde as trilhas realmente se encostam, e as
+duas podem precisar dela. A disciplina: **avise antes de gerar a migration.**
+Duas migrations criadas no mesmo dia colidem na ordem, e desfazer isso com dados
+já aplicados é trabalhoso.
+
+### Como isso é verificado — automaticamente
+
+A lista acima está em [`.github/CODEOWNERS`](../.github/CODEOWNERS). O GitHub
+lê esse arquivo e **pede revisão do dono automaticamente** sempre que um PR toca
+um caminho da Trilha A. Ninguém precisa lembrar da regra nem conferir a lista de
+arquivos à mão.
+
+Para o GitHub **bloquear** o merge, e não só pedir revisão, ligue uma vez:
+
+> Settings → Branches → Add rule para `main`
+> ☑ Require a pull request before merging
+> ☑ Require review from Code Owners
+
+Sem isso, a revisão é pedida mas o merge passa assim mesmo.
 
 ---
 

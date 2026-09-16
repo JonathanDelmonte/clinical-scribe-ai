@@ -1,0 +1,46 @@
+# Donos de código — a Trilha A, mecanizada.
+#
+# O GitHub lê este arquivo e pede revisão automaticamente de quem é dono,
+# sempre que um PR toca um caminho listado aqui. Ninguém precisa lembrar da
+# regra, e ninguém precisa conferir a lista de arquivos à mão.
+#
+# Ver docs/DIVISAO-DE-TRABALHO.md para o porquê. Em resumo: os mecanismos que
+# impedem o produto de inventar informação clínica falham de um jeito
+# particular — quando quebram, continuam funcionando. Uma mudança de uma linha
+# pode desligar uma validação sem quebrar teste nenhum.
+#
+# ⚠️  Isto PEDE revisão; não BLOQUEIA o merge sozinho. Para bloquear:
+#     Settings → Branches → Add rule para `main`
+#       ☑ Require a pull request before merging
+#       ☑ Require review from Code Owners
+
+# Padrão: sem dono específico, qualquer um do time revisa.
+
+# ----------------------------------------------------------------------------
+# Trilha A — o motor. Fechada.
+# ----------------------------------------------------------------------------
+
+/packages/core/                @JonathanDelmonte
+/apps/worker/                  @JonathanDelmonte
+/services/asr-local/           @JonathanDelmonte
+/packages/db/src/seed-demo.ts  @JonathanDelmonte
+
+# As telas que exibem o resultado do motor. Mudança de estilo aqui é inofensiva;
+# mudança de lógica não é — e as duas chegam no mesmo diff.
+/apps/web/src/components/SessionView.tsx      @JonathanDelmonte
+/apps/web/src/components/ClinicalNote.tsx     @JonathanDelmonte
+/apps/web/src/components/SpeakerRoles.tsx     @JonathanDelmonte
+/apps/web/src/components/SessionProgress.tsx  @JonathanDelmonte
+/apps/web/src/components/VoiceEnrollment.tsx  @JonathanDelmonte
+
+# ----------------------------------------------------------------------------
+# Fronteira compartilhada — as duas trilhas precisam, então as duas revisam.
+# ----------------------------------------------------------------------------
+
+/packages/db/src/schema.ts   @JonathanDelmonte
+/packages/db/migrations/     @JonathanDelmonte
+/packages/db/sql/            @JonathanDelmonte
+/.github/                    @JonathanDelmonte
+/package.json                @JonathanDelmonte
+/pnpm-workspace.yaml         @JonathanDelmonte
+/.env.example                @JonathanDelmonte
