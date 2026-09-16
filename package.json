@@ -34,7 +34,8 @@
     "asr:logs:gpu": "docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile asr logs -f asr-local",
     "asr:health": "curl -s http://localhost:8001/health",
     "asr:try": "pnpm --filter @scribe/worker try-asr",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "llm:models": "pnpm --filter @scribe/worker llm:models"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

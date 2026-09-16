@@ -17,7 +17,9 @@ import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
 
 import { config, requireDatabaseUrl } from "./config.js";
 import { logger } from "./logger.js";
+import { makeNoteHandler } from "./handlers/note.js";
 import { makeTranscribeHandler } from "./handlers/transcribe.js";
+import { resolveLlm } from "./llm/index.js";
 import { claimJob, completeJob, failJob, type ClaimedJob } from "./queue.js";
 
 const db = createServiceClient(requireDatabaseUrl());
@@ -25,16 +27,40 @@ const storage = createLocalStorage(resolveStorageRoot(config.STORAGE_ROOT));
 
 type JobHandler = (job: ClaimedJob) => Promise<void>;
 
+/**
+ * O LLM é resolvido UMA vez, aqui, e não dentro do handler.
+ *
+ * Chave ausente ou política de dados incompatível são erros de configuração:
+ * eles não mudam entre um job e outro. Descobri-los na partida coloca a
+ * mensagem na primeira tela de quem rodou `pnpm dev`; descobri-los no job
+ * coloca a mesma mensagem num log, depois de alguém ter esperado.
+ */
+const llm = resolveLlm();
+
 const handlers: Record<string, JobHandler> = {
   transcribe: makeTranscribeHandler(db, storage, logger),
 
-  // Marco 3 — LLM lê a transcrição diarizada e atribui PROFISSIONAL × PACIENTE
-  // identify_roles: handleIdentifyRoles,
-  // Marco 4 — gera a nota com citações por ID e valida deterministicamente
-  // generate_note: handleGenerateNote,
+  // O handler da nota só é registrado se houver um LLM utilizável. Registrá-lo
+  // sempre e falhar dentro dele consumiria as 3 tentativas da fila contra um
+  // problema que nenhuma tentativa resolve — e o job acabaria como "falhou em
+  // definitivo", que soa como defeito quando é só configuração faltando.
+  ...(llm.provider !== null && llm.blockedReason === null
+    ? { generate_note: makeNoteHandler(db, llm.provider, logger) }
+    : {}),
+
   // Marco 6 — retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS
   // delete_audio: handleDeleteAudio,
 };
+
+if (llm.blockedReason !== null) {
+  logger.warn(
+    { llmProvider: llm.provider?.name ?? null },
+    `GERAÇÃO DE NOTA INDISPONÍVEL
+
+${llm.blockedReason}
+`,
+  );
+}
 
 let running = true;
 
@@ -121,7 +147,11 @@ logger.info(
     asrLocalUrl: config.ASR_LOCAL_URL,
     storage: storage.kind,
     handlers: Object.keys(handlers),
-    milestone: 2,
+    llm:
+      llm.provider !== null && llm.blockedReason === null
+        ? `${llm.provider.name}:${llm.provider.model} (${llm.provider.dataPolicy})`
+        : "indisponível",
+    milestone: 4,
   },
   "worker iniciado",
 );

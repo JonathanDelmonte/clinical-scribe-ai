@@ -71,7 +71,11 @@ export {
   buildNotePrompt,
   parseNoteResponse,
   PROMPT_VERSION,
+  NOTE_RESPONSE_SCHEMA,
   SECOES,
   sectionTitle,
   validateNote,
 } from "./note";
+
+export type { LlmCompletion, LlmDataPolicy, LlmProvider, LlmUsage } from "./llm";
+export { checkDataPolicy, dataPolicyLabel } from "./llm";

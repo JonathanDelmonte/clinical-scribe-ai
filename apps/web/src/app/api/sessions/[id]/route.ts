@@ -1,5 +1,5 @@
-import { patients, sessions, transcriptSegments } from "@scribe/db";
-import { asc, eq } from "drizzle-orm";
+import { documents, jobs, patients, sessions, transcriptSegments } from "@scribe/db";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
@@ -41,7 +41,36 @@ export async function GET(
       .where(eq(transcriptSegments.sessionId, session.id))
       .orderBy(asc(transcriptSegments.startMs));
 
-    return { session, patient: patient ?? null, segments };
+    // A nota mais recente. Gerar de novo insere outra linha em vez de
+    // sobrescrever: as versões anteriores são o histórico que permite
+    // investigar uma regressão de qualidade depois de mudar o prompt.
+    const [note] = await tx
+      .select()
+      .from(documents)
+      .where(
+        and(eq(documents.sessionId, session.id), eq(documents.type, "clinical_note")),
+      )
+      .orderBy(desc(documents.createdAt))
+      .limit(1);
+
+    // O status da sessão volta a "ready_for_review" assim que o worker
+    // termina, então ele não distingue "sem nota" de "nota a caminho". O job
+    // pendente distingue — e é o que mantém o botão desabilitado enquanto o
+    // modelo trabalha.
+    const [noteJob] = await tx
+      .select({ status: jobs.status, error: jobs.lastError })
+      .from(jobs)
+      .where(and(eq(jobs.sessionId, session.id), eq(jobs.kind, "generate_note")))
+      .orderBy(desc(jobs.createdAt))
+      .limit(1);
+
+    return {
+      session,
+      patient: patient ?? null,
+      segments,
+      note: note ?? null,
+      noteJob: noteJob ?? null,
+    };
   });
 
   if (result === null || result === undefined) {

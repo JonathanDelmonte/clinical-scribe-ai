@@ -98,3 +98,89 @@ export async function POST(
 
   return NextResponse.json(result, { status: 202 });
 }
+
+const CONTENT_TYPES: Record<string, string> = {
+  webm: "audio/webm",
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  mp4: "audio/mp4",
+  ogg: "audio/ogg",
+  opus: "audio/ogg",
+  flac: "audio/flac",
+};
+
+/**
+ * Devolve o áudio da consulta, para a revisão ancorada.
+ *
+ * É a metade que falta do mecanismo anti-alucinação. A conferência
+ * determinística prova que a fonte citada EXISTE; só ouvir prova que ela
+ * SUSTENTA a afirmação. Sem áudio clicável, "revisar a nota" vira reler um
+ * texto fluente — que é exatamente a situação em que 62% dos achados
+ * fabricados passaram despercebidos (§11 da documentação).
+ *
+ * Responde a `Range` porque o navegador precisa disso para pular direto ao
+ * segundo 7:42 sem baixar os 11 minutos antes. Sem cabeçalho de faixa, o
+ * Chrome recusa o seek em webm e o clique numa citação não faz nada.
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const found = await asCurrentProfessional(async (tx) => {
+    const [session] = await tx
+      .select({ audioPath: sessions.audioPath })
+      .from(sessions)
+      .where(eq(sessions.id, id))
+      .limit(1);
+    return session?.audioPath ?? null;
+  });
+
+  if (found === null || found === undefined) {
+    return NextResponse.json({ error: "áudio não encontrado" }, { status: 404 });
+  }
+
+  const bytes = await storage.get(found).catch(() => null);
+  if (bytes === null) {
+    return NextResponse.json({ error: "arquivo ausente no storage" }, { status: 404 });
+  }
+
+  const type = CONTENT_TYPES[extensionOf(found)] ?? "application/octet-stream";
+  const total = bytes.byteLength;
+
+  const comum = {
+    "content-type": type,
+    "accept-ranges": "bytes",
+    // Áudio de consulta nunca pode encostar num cache compartilhado.
+    "cache-control": "private, no-store",
+  };
+
+  const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get("range") ?? "");
+  if (range === null) {
+    return new Response(bytes, {
+      status: 200,
+      headers: { ...comum, "content-length": String(total) },
+    });
+  }
+
+  const inicio = range[1] === "" ? 0 : Number(range[1]);
+  const fim = range[2] === "" ? total - 1 : Math.min(Number(range[2]), total - 1);
+
+  if (Number.isNaN(inicio) || inicio > fim || inicio >= total) {
+    return new Response(null, {
+      status: 416,
+      headers: { "content-range": `bytes */${total}` },
+    });
+  }
+
+  return new Response(bytes.subarray(inicio, fim + 1), {
+    status: 206,
+    headers: {
+      ...comum,
+      "content-range": `bytes ${inicio}-${fim}/${total}`,
+      "content-length": String(fim - inicio + 1),
+    },
+  });
+}

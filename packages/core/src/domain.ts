@@ -16,9 +16,14 @@
  */
 export type SpeakerRole = "professional" | "patient" | "other" | "unknown";
 
-/** Como o papel foi determinado — usado para medir acurácia e decidir se o
- *  Método A (impressão vocal) vale o custo de implementar. Ver Marco 3. */
-export type SpeakerRoleSource = "llm" | "voice-match" | "manual" | "channel";
+/**
+ * Como o papel foi determinado — usado para medir acurácia e para saber quanto
+ * o Método A (impressão vocal) está de fato contribuindo. Ver Marco 3.
+ *
+ * `snake_case` porque estes valores SÃO os do enum `role_source` no Postgres.
+ * Uma grafia diferente aqui não é estilo: é um valor que o banco recusa.
+ */
+export type SpeakerRoleSource = "llm" | "voice_match" | "manual" | "channel";
 
 /**
  * Um trecho de fala atribuído a um falante.

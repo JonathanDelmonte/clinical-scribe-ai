@@ -256,3 +256,46 @@ export function validateNote(
 export function sectionTitle(key: SecaoChave): string {
   return SECOES.find((s) => s.chave === key)?.titulo ?? key;
 }
+
+/**
+ * Esquema da resposta, para fornecedores que sabem impor formato.
+ *
+ * Gemini e outros aceitam um esquema (subconjunto do OpenAPI 3.0) e passam a
+ * **garantir** a forma da saída — some a classe inteira de falha "o modelo
+ * respondeu em prosa" ou "embrulhou em bloco de código".
+ *
+ * Isso NÃO substitui `validateNote`, e a distinção é o ponto central deste
+ * arquivo: o esquema garante que `fontes` é uma lista de textos. Ele não tem
+ * como garantir que esses textos são identificadores que existem. Um modelo
+ * pode devolver `["seg_zzz"]` — perfeitamente válido para o esquema, e uma
+ * fabricação. Quem pega isso é a conferência determinística, sem IA no meio.
+ *
+ * Forma imposta pelo esquema · conteúdo conferido por nós. As duas camadas.
+ */
+export const NOTE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    secoes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          chave: { type: "string", enum: SECOES.map((s) => s.chave) },
+          afirmacoes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                texto: { type: "string" },
+                fontes: { type: "array", items: { type: "string" } },
+              },
+              required: ["texto", "fontes"],
+            },
+          },
+        },
+        required: ["chave", "afirmacoes"],
+      },
+    },
+  },
+  required: ["secoes"],
+} as const;

@@ -33,6 +33,29 @@ const schema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().positive().max(16).default(2),
   WORKER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
 
+  /**
+   * Chave do Google AI Studio — https://aistudio.google.com/apikey
+   * Nível gratuito, sem cartão. Ver a política de dados logo abaixo.
+   */
+  GOOGLE_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+
+  LLM_MODEL: z.string().default("gemini-2.5-flash"),
+
+  /**
+   * O piso de tratamento de dados que ESTE ambiente aceita.
+   *
+   * O padrão é `contractual` de propósito, e o padrão é a decisão importante
+   * aqui: um ambiente novo — um deploy, a máquina do outro desenvolvedor, o
+   * servidor de produção — nasce recusando fornecedor que treina com os
+   * prompts. Para usar o nível gratuito é preciso dizer isso em voz alta.
+   *
+   * O inverso (padrão `training`, "lembrar de trocar antes de produção")
+   * funciona até o dia em que ninguém lembra. E o dia em que ninguém lembra é
+   * o dia em que consulta de paciente real vira dado de treino de terceiro.
+   */
+  LLM_DATA_POLICY: z.enum(["training", "contractual"]).default("contractual"),
+
   /** Opcional aqui; obrigatório no worker — ver `requireDatabaseUrl()`. */
   DATABASE_URL: z.string().optional(),
 });
