@@ -23,6 +23,53 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 
 ---
 
+## Estado atual — 15/09/2026
+
+> Atualize esta tabela ao fechar cada marco. Um plano que não diz onde o projeto
+> está é um plano que ninguém consulta.
+
+| Marco | Estado | O que falta |
+|---|---|---|
+| **0** — Fundação | ✅ completo | — |
+| **1** — Spike de ASR ⭐ | ✅ **no que decide** | Os 4 fornecedores de nuvem não foram medidos. O motor local passou no portão de qualidade, o que responde à pergunta que podia matar o produto. ADR-0002 segue aberto para o dia em que o `cloud` for necessário. |
+| **2** — Esqueleto andante | ✅ completo | — |
+| **3** — Papel | ✅ **completo, e além** | Método B **e** Método A (impressão vocal), que o plano só previa se B ficasse abaixo de 95%. Ver a ressalva de calibração abaixo. |
+| **4** — Nota ancorada ⭐ | ✅ **funcional** | Verificador de suporte (2ª passada); edição livre da nota; aprovação com clique; execução do objetivo da sessão como geração separada. |
+| **5** — Produto ao redor | ❌ não iniciado | Tudo. É o maior bloco restante — ver [DIVISAO-DE-TRABALHO.md](./DIVISAO-DE-TRABALHO.md). |
+| **6** — Endurecimento e LGPD | 🔨 parcial | Só os testes de RLS existem (17 asserções, no CI). |
+
+**Os dois marcos ⭐ estão vencidos.** O que resta é majoritariamente trabalho
+conhecido — que leva tempo mas não falha.
+
+### Três medições que mudaram o plano
+
+**1. O motor local é mais rápido do que este documento supunha.** A §1 previa
+10 a 40 minutos para uma consulta de 30 em CPU. Medido em GPU, com inferência
+sequencial: **12,8x o tempo real** em áudio limpo, **3,4x** em áudio real de
+consultório. Uma consulta de 30 minutos sai em 2 a 9 minutos. O plano grátis
+fecha com folga — ver ADR-0002 para a tabela completa.
+
+**2. Inferência em lote trunca o áudio em silêncio.** 27x de velocidade, HTTP
+200, texto coerente — e o final da consulta ausente. Desligada. Correção vale
+mais que o dobro de velocidade quando o que some é a conduta.
+
+**3. A impressão vocal (Método A) cede em áudio real.** Separação entre as vozes:
+**0,66** em gravação limpa, **0,17** em consulta com máscara e microfone de
+celular. Abaixo de 0,30 a correção fala a fala é desligada, e só a escolha no
+nível do falante — que é média sobre dezenas de trechos — continua valendo. O
+Método A ajuda; ele não sustenta o peso sozinho.
+
+### O que ainda não funciona bem
+
+**Atribuição fala a fala em áudio ruim.** O pyannote acerta *quantos* falantes
+existem e erra *onde* cada um começa: na consulta real medida, 49 de 147 turnos
+ficaram abaixo de 0,7 s. O papel no nível do falante está certo; algumas falas
+individuais aparecem atribuídas à pessoa errada. Nem pós-processamento por
+conteúdo nem a camada de voz resolvem nessa qualidade de áudio — é o item aberto
+mais relevante do motor.
+
+---
+
 ## Sumário
 
 1. [Decisões de stack](#1-decisões-de-stack)
