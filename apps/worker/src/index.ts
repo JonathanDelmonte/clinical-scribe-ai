@@ -20,7 +20,14 @@ import { logger } from "./logger.js";
 import { makeNoteHandler } from "./handlers/note.js";
 import { makeTranscribeHandler } from "./handlers/transcribe.js";
 import { resolveLlm } from "./llm/index.js";
-import { claimJob, completeJob, failJob, type ClaimedJob } from "./queue.js";
+import {
+  claimJob,
+  completeJob,
+  failJob,
+  LEASE_RENEW_MS,
+  renewLease,
+  type ClaimedJob,
+} from "./queue.js";
 
 const db = createServiceClient(requireDatabaseUrl());
 const storage = createLocalStorage(resolveStorageRoot(config.STORAGE_ROOT));
@@ -88,6 +95,19 @@ async function processOne(): Promise<boolean> {
   }
 
   const startedAt = Date.now();
+
+  // Enquanto o handler trabalha, avisa a fila que este job segue vivo. Sem
+  // isso, a concessão venceria no meio de uma transcrição longa e outro worker
+  // começaria a refazer o mesmo trabalho.
+  const heartbeat = setInterval(() => {
+    void renewLease(db, job.id).catch((err: unknown) => {
+      // Uma renovação perdida não é fatal: a concessão dura quatro vezes o
+      // intervalo, então há três chances antes de o job ser dado como órfão.
+      log.debug({ err }, "falha ao renovar a concessão do job");
+    });
+  }, LEASE_RENEW_MS);
+  heartbeat.unref();
+
   try {
     await handler(job);
     await completeJob(db, job.id);
@@ -99,6 +119,8 @@ async function processOne(): Promise<boolean> {
       { exhausted, retryInSeconds, durationMs: Date.now() - startedAt },
       exhausted ? "job falhou em definitivo" : "job falhou, reagendado",
     );
+  } finally {
+    clearInterval(heartbeat);
   }
   return true;
 }
