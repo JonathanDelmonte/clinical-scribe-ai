@@ -35,7 +35,8 @@
     "asr:health": "curl -s http://localhost:8001/health",
     "asr:try": "pnpm --filter @scribe/worker try-asr",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
-    "llm:models": "pnpm --filter @scribe/worker llm:models"
+    "llm:models": "pnpm --filter @scribe/worker llm:models",
+    "db:demo": "pnpm --filter @scribe/db seed:demo"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

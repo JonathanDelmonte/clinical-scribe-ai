@@ -12,7 +12,16 @@ export interface Assignment {
   speakerLabel: string;
   role: string;
   confidence: number;
-  evidence: Evidence[];
+  /**
+   * Opcional porque vem de uma coluna `jsonb`, e `jsonb` não garante forma.
+   *
+   * O tipo aqui é uma AFIRMAÇÃO sobre o que está gravado, não uma verificação.
+   * Uma linha escrita por uma versão anterior do pipeline, por um seed, ou por
+   * qualquer outro processo, satisfaz o banco e quebra a tela. Marcar como
+   * opcional faz o compilador cobrar o tratamento em vez de deixar a descoberta
+   * para a primeira linha antiga que alguém abrir.
+   */
+  evidence?: Evidence[];
 }
 
 export const ROLE_LABEL: Record<string, string> = {
@@ -87,7 +96,7 @@ export function SpeakerRoles({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          {profissional !== undefined && profissional.evidence.length > 0 && (
+          {profissional !== undefined && (profissional.evidence?.length ?? 0) > 0 && (
             <button
               onClick={() => setAberto((v) => !v)}
               className="text-xs text-muted underline underline-offset-2 hover:text-ink"
@@ -114,7 +123,7 @@ export function SpeakerRoles({
 
       {aberto && profissional !== undefined && (
         <ul className="mt-3 space-y-1.5 border-t border-line pt-3">
-          {profissional.evidence.map((e, i) => (
+          {(profissional.evidence ?? []).map((e, i) => (
             <li key={i} className="text-xs">
               <span className="text-accent">{e.signal}</span>
               <span className="text-muted"> — “{e.excerpt}”</span>

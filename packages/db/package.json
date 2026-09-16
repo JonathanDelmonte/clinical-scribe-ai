@@ -15,7 +15,8 @@
     "test:rls": "node --env-file-if-exists=../../.env src/test-rls.ts",
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
-    "seed": "node --env-file-if-exists=../../.env --import tsx src/seed.ts"
+    "seed": "node --env-file-if-exists=../../.env --import tsx src/seed.ts",
+    "seed:demo": "node --env-file-if-exists=../../.env --import tsx src/seed-demo.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
