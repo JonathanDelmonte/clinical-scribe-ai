@@ -10,7 +10,13 @@
  * a disciplina precisa estar no código.
  */
 
-import { canProcess, resolveEngine, type Account } from "@scribe/core";
+import {
+  canProcess,
+  identifyRolesByContent,
+  resolveEngine,
+  roleByLabel,
+  type Account,
+} from "@scribe/core";
 import {
   professionals,
   sessions,
@@ -171,15 +177,34 @@ export function makeTranscribeHandler(
       .delete(transcriptSegments)
       .where(eq(transcriptSegments.sessionId, sessionId));
 
+    // ---- identificação de papel (Marco 3) ------------------------------
+    // Roda sobre o conteúdo, não sobre a acústica. Medido no áudio real: o
+    // pyannote erra as fronteiras, mas quem diz "vou solicitar exames" é o
+    // profissional independentemente do rótulo que recebeu.
+    const papeis = identifyRolesByContent(result.segments);
+    const porRotulo = roleByLabel(papeis);
+    const decisao = papeis.find((p) => p.role === "professional");
+
+    log.info(
+      {
+        professional: decisao?.speakerLabel ?? null,
+        confidence: decisao?.confidence ?? 0,
+        // Os SINAIS, não os trechos: "chama de doutor" pode ir para o log,
+        // o que o paciente disse não.
+        signals: decisao?.evidence.map((e) => e.signal) ?? [],
+      },
+      decisao === undefined
+        ? "papel não identificado — revisão manual necessária"
+        : "papel identificado",
+    );
+
     if (result.segments.length > 0) {
       await db.insert(transcriptSegments).values(
         result.segments.map((s) => ({
           sessionId,
           professionalId: session.professionalId,
           speakerLabel: s.speakerLabel,
-          // O papel (profissional × paciente) é atribuído no Marco 3. Até lá
-          // fica "unknown" — honesto, em vez de um palpite que parece dado.
-          role: "unknown" as const,
+          role: porRotulo[s.speakerLabel] ?? ("unknown" as const),
           roleSource: "llm" as const,
           startMs: s.startMs,
           endMs: s.endMs,
@@ -242,6 +267,7 @@ export function makeTranscribeHandler(
         engineUsed: provider.engine,
         durationMs: result.durationMs,
         failureReason: null,
+        roleAssignment: papeis,
         progressPercent: null,
         progressPhase: null,
         progressEtaSeconds: null,

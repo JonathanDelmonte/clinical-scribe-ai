@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { SessionProgress } from "./SessionProgress";
+import { ROLE_LABEL, SpeakerRoles, type Assignment } from "./SpeakerRoles";
 
 interface Segment {
   id: string;
@@ -27,6 +28,7 @@ interface SessionData {
     progressPhase: string | null;
     progressEtaSeconds: number | null;
     progressPreview: string | null;
+    roleAssignment: Assignment[] | null;
   };
   patient: { name: string } | null;
   segments: Segment[];
@@ -54,6 +56,7 @@ function timestamp(ms: number): string {
 export function SessionView({ sessionId }: { sessionId: string }) {
   const [data, setData] = useState<SessionData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -91,7 +94,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [sessionId]);
+  }, [sessionId, recarga]);
 
   if (error !== null && data === null) {
     return <p className="text-sm text-red-500">{error}</p>;
@@ -163,6 +166,14 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         />
       )}
 
+      {session.roleAssignment !== null && session.roleAssignment.length > 0 && (
+        <SpeakerRoles
+          sessionId={session.id}
+          assignment={session.roleAssignment}
+          onChanged={() => setRecarga((n) => n + 1)}
+        />
+      )}
+
       {segments.length > 0 && (
         <section>
           <h2 className="mb-3 text-xs font-medium tracking-widest text-muted uppercase">
@@ -184,8 +195,22 @@ export function SessionView({ sessionId }: { sessionId: string }) {
                 <span className="w-12 shrink-0 font-mono text-xs text-muted tabular-nums">
                   {timestamp(s.startMs)}
                 </span>
-                <span className="w-24 shrink-0 text-xs text-muted">
-                  {s.speakerLabel}
+                {/*
+                 * O PAPEL, não o rótulo acústico. "SPEAKER_01" não diz nada a
+                 * um profissional lendo a própria consulta; "Paciente" diz
+                 * tudo. O rótulo cru fica como título, para diagnóstico.
+                 */}
+                <span
+                  title={s.speakerLabel}
+                  className={`w-24 shrink-0 text-xs ${
+                    s.role === "professional"
+                      ? "font-medium text-accent"
+                      : s.role === "unknown"
+                        ? "text-muted/60 italic"
+                        : "text-muted"
+                  }`}
+                >
+                  {ROLE_LABEL[s.role] ?? s.speakerLabel}
                 </span>
                 <span className="min-w-0">{s.text}</span>
               </li>

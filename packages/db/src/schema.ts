@@ -218,6 +218,19 @@ export const sessions = pgTable(
      * transforma a espera de "uma barra andando" em "está funcionando, olha aí
      * o que ele já entendeu".
      */
+    /**
+     * Quem é quem, e por quê.
+     *
+     * Guarda a decisão de papel junto com a EVIDÊNCIA que a sustenta — os
+     * sinais encontrados no texto. Mesma disciplina das citações: o
+     * profissional precisa poder ver por que o sistema decidiu, e discordar.
+     *
+     * Fica na sessão e não só nos trechos porque a decisão é sobre o FALANTE,
+     * não sobre cada fala. Repetir confiança e evidência em 197 linhas seria
+     * redundância que dessincroniza na primeira correção manual.
+     */
+    roleAssignment: jsonb("role_assignment"),
+
     progressPercent: integer("progress_percent"),
     progressPhase: text("progress_phase"),
     progressEtaSeconds: integer("progress_eta_seconds"),
