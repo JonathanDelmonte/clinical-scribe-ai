@@ -60,9 +60,20 @@ export function SessionRecorder({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  /**
+   * Se o `onstop` que vem a seguir deve descartar em vez de enviar.
+   *
+   * Um ref, e não estado: `onstop` é um retorno de chamada preso ao
+   * MediaRecorder na hora em que ele foi criado, e leria o estado congelado
+   * daquele instante. Aqui a diferença entre ler o valor velho e o novo é
+   * enviar uma gravação que a pessoa mandou descartar.
+   */
+  const descartarRef = useRef(false);
 
   // Soltar o microfone ao sair da página. Sem isto o indicador de gravação
   // continua aceso no navegador, o que é assustador num app de saúde — e é a
@@ -77,6 +88,24 @@ export function SessionRecorder({
     if (!recording) return;
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
+  }, [recording]);
+
+  /**
+   * Avisa antes de fechar a aba com gravação em andamento.
+   *
+   * A mesma falta que o botão de descartar cobre, pelo outro lado: sair da
+   * página no meio da consulta apaga tudo sem perguntar nada. A diferença é
+   * que descartar é uma escolha e fechar a aba costuma ser um acidente — um
+   * toque errado, um atalho do teclado, o navegador restaurando sessão.
+   *
+   * O navegador mostra um texto próprio e ignora qualquer mensagem que a
+   * gente tente passar. O que importa é existir a pergunta.
+   */
+  useEffect(() => {
+    if (!recording) return;
+    const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
   }, [recording]);
 
   async function createSessionAndUpload(file: File) {
@@ -183,6 +212,15 @@ export function SessionRecorder({
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+
+        if (descartarRef.current) {
+          descartarRef.current = false;
+          chunksRef.current = [];
+          setStatus(null);
+          setElapsed(0);
+          return;
+        }
+
         const blob = new Blob(chunksRef.current, {
           type: mimeType ?? "audio/webm",
         });
@@ -215,7 +253,30 @@ export function SessionRecorder({
 
   function stopRecording() {
     setRecording(false);
+    setConfirmandoCancelamento(false);
     setStatus("processando gravação…");
+    rascunho.parar();
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+  }
+
+  /**
+   * Descarta a gravação em andamento.
+   *
+   * Pede confirmação, e isso não é excesso de zelo: a consulta que está sendo
+   * gravada aconteceu uma vez. Não existe desfazer, não existe regravar — as
+   * pessoas já foram embora. É a única ação desta tela que destrói algo
+   * irrecuperável, e a única que merece uma pergunta no meio.
+   */
+  function cancelRecording() {
+    if (!confirmandoCancelamento) {
+      setConfirmandoCancelamento(true);
+      return;
+    }
+    descartarRef.current = true;
+    setRecording(false);
+    setConfirmandoCancelamento(false);
+    setError(null);
     rascunho.parar();
     recorderRef.current?.stop();
     recorderRef.current = null;
@@ -281,13 +342,45 @@ export function SessionRecorder({
 
       <div className="flex flex-wrap items-center gap-3">
         {recording ? (
-          <button
-            onClick={stopRecording}
-            className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white"
-          >
-            <span className="size-2.5 animate-pulse rounded-full bg-white" />
-            Parar · {formatElapsed(elapsed)}
-          </button>
+          <>
+            <button
+              onClick={stopRecording}
+              className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white"
+            >
+              <span className="size-2.5 animate-pulse rounded-full bg-white" />
+              Parar · {formatElapsed(elapsed)}
+            </button>
+
+            {/*
+             * Descartar fica DEPOIS de parar, e discreto.
+             *
+             * São ações opostas com consequências muito diferentes, e a
+             * destrutiva não pode disputar atenção com a normal. Quem
+             * termina a consulta clica no vermelho sem pensar; quem quer
+             * jogar fora procura — e encontra.
+             */}
+            <button
+              onClick={cancelRecording}
+              className={`rounded-lg px-4 py-2.5 text-sm ${
+                confirmandoCancelamento
+                  ? "bg-red-500/15 font-medium text-red-500"
+                  : "text-muted underline underline-offset-2 hover:text-ink"
+              }`}
+            >
+              {confirmandoCancelamento
+                ? "Confirmar: apagar esta gravação"
+                : "descartar"}
+            </button>
+
+            {confirmandoCancelamento && (
+              <button
+                onClick={() => setConfirmandoCancelamento(false)}
+                className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+              >
+                continuar gravando
+              </button>
+            )}
+          </>
         ) : (
           <button
             onClick={() => void startRecording()}
