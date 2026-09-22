@@ -3,7 +3,7 @@ import "server-only";
 import { professionals, type Database } from "@scribe/db";
 import { redirect } from "next/navigation";
 
-import { db, withProfessional } from "./db";
+import { getDb, withProfessional } from "./db";
 import { lerSessao } from "./auth/session";
 
 /**
@@ -45,7 +45,7 @@ export async function currentProfessional(): Promise<Professional | null> {
   const authUserId = await currentAuthUserId();
   if (authUserId === null) return null;
 
-  return withProfessional(db, authUserId, async (tx) => {
+  return withProfessional(getDb(), authUserId, async (tx) => {
     const rows = await tx.select().from(professionals).limit(2);
     return rows[0] ?? null;
   });
@@ -55,7 +55,7 @@ export async function currentProfessional(): Promise<Professional | null> {
 export async function asCurrentUser<T>(fn: (tx: Tx) => Promise<T>): Promise<T | null> {
   const authUserId = await currentAuthUserId();
   if (authUserId === null) return null;
-  return withProfessional(db, authUserId, fn);
+  return withProfessional(getDb(), authUserId, fn);
 }
 
 /** Como `asCurrentUser`, mas entrega também o profissional já carregado. */
@@ -65,7 +65,7 @@ export async function asCurrentProfessional<T>(
   const authUserId = await currentAuthUserId();
   if (authUserId === null) return null;
 
-  return withProfessional(db, authUserId, async (tx) => {
+  return withProfessional(getDb(), authUserId, async (tx) => {
     const rows = await tx.select().from(professionals).limit(1);
     const me = rows[0];
     if (me === undefined) return null;

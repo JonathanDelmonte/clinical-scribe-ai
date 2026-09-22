@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 
 import { SairButton } from "@/components/SairButton";
+import { ServiceWorker } from "@/components/ServiceWorker";
 import { currentProfessional } from "@/lib/auth";
 
 import "./globals.css";
@@ -13,6 +14,17 @@ export const metadata: Metadata = {
   // A documentação (§4) recomenda "clínico" no lugar de "médico" — o termo
   // mantém a porta aberta para nutricionistas, psicólogos, fisioterapeutas e
   // dentistas, um mercado maior e menos disputado.
+
+  // O iOS ignora o manifesto para o ícone do atalho e só olha este link.
+  appleWebApp: {
+    capable: true,
+    title: "Consulta Viva",
+    statusBarStyle: "default",
+    startupImage: [],
+  },
+  icons: {
+    apple: "/icones/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -21,6 +33,12 @@ export const viewport: Viewport = {
   // Mobile-first de verdade: a consulta é gravada no celular, muitas vezes
   // com o aparelho na mesa.
   maximumScale: 5,
+  // A cor da barra do sistema quando instalado. Acompanha o tema para que a
+  // borda superior não fique branca num aparelho no modo escuro.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fcfcfd" },
+    { media: "(prefers-color-scheme: dark)", color: "#1c1f26" },
+  ],
 };
 
 export default async function RootLayout({
@@ -45,6 +63,7 @@ export default async function RootLayout({
        * sendo reportados normalmente — que é o que queremos.
        */}
       <body className="min-h-dvh antialiased" suppressHydrationWarning>
+        <ServiceWorker />
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-3xl items-center gap-4 px-5 py-3">
             <Link href="/" className="font-semibold tracking-tight">

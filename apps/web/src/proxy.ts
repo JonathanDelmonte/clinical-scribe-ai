@@ -105,6 +105,6 @@ export const config = {
    * arquivo, o que quebra a própria tela de login que ele precisa ver.
    */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|sw.js).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|icones/|offline.html|manifest.webmanifest|sw.js).*)",
   ],
 };
