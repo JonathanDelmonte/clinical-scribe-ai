@@ -126,6 +126,72 @@ create policy audit_read_own on public.audit_log
   for select to authenticated
   using (professional_id = auth.professional_id());
 
+-- -----------------------------------------------------------------------------
+-- Como a trilha de auditoria é ESCRITA — e por que não por uma política
+--
+-- A aplicação precisa registrar quem viu e quem editou o quê (§10, NGS1). Mas
+-- quem roda a aplicação é o próprio auditado: a conexão da web carrega a
+-- identidade dele e nenhuma outra.
+--
+-- A saída óbvia seria uma política de INSERT. Ela funcionaria, e abriria uma
+-- porta pequena e feia: o cliente escolheria `professional_id`, `actor_id`,
+-- `ip` e `created_at` de cada linha. Não daria para forjar em nome de outro
+-- profissional — o `with check` barraria —, mas daria para forjar a própria
+-- trilha com carimbo e origem à escolha, que é metade do estrago.
+--
+-- A outra saída seria a aplicação web carregar uma credencial `service_role`,
+-- que IGNORA todas as políticas. Trocar "pode escrever a própria auditoria"
+-- por "pode ler os dados de todo mundo" é um péssimo negócio.
+--
+-- Esta função é o meio-termo correto: o cliente diz O QUE aconteceu; QUEM e
+-- QUANDO são preenchidos aqui dentro, a partir da sessão autenticada, sem
+-- passar pelo chamador. Nenhuma política de INSERT é criada — a tabela
+-- continua negando escrita direta, e `update`/`delete` seguem impossíveis.
+--
+-- ⚠️ `p_metadata` NUNCA recebe conteúdo clínico. IDs e rótulos, como manda a
+--    regra nº 4 do README. Log é o vazamento de dado de saúde mais fácil de
+--    cometer, e a trilha de auditoria é justamente onde dá vontade de gravar
+--    "o que mudou".
+-- -----------------------------------------------------------------------------
+create or replace function public.audit_append(
+  p_action     text,
+  p_entity     text,
+  p_entity_id  uuid    default null,
+  p_metadata   jsonb   default null,
+  p_ip         text    default null,
+  p_user_agent text    default null
+) returns uuid
+  language plpgsql
+  security definer
+  set search_path = public, auth, pg_temp
+as $$
+declare
+  dono uuid := auth.professional_id();
+  novo uuid;
+begin
+  -- Falha fechada: sem profissional resolvido não existe a quem atribuir o
+  -- registro, e uma linha de auditoria sem dono é ruído que atrapalha a
+  -- leitura da trilha justamente no dia em que ela for lida a sério.
+  if dono is null then
+    raise exception 'audit_append chamada sem profissional autenticado'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  insert into public.audit_log
+    (actor_id, professional_id, action, entity, entity_id, metadata, ip, user_agent)
+  values
+    (auth.uid(), dono, p_action, p_entity, p_entity_id, p_metadata, p_ip, p_user_agent)
+  returning id into novo;
+
+  return novo;
+end;
+$$;
+
+revoke all on function public.audit_append(text, text, uuid, jsonb, text, text)
+  from public;
+grant execute on function public.audit_append(text, text, uuid, jsonb, text, text)
+  to authenticated;
+
 -- `jobs` é o caso que exige precisão: a aplicação PRECISA enfileirar (é ela
 -- quem recebe o upload e dispara o processamento), mas não pode tocar em job
 -- nenhum depois disso.
