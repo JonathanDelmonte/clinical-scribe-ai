@@ -60,6 +60,12 @@ export default async function Configuracoes() {
           <Link href="/auditoria" className="text-sm text-accent hover:underline">
             trilha de auditoria →
           </Link>
+          <Link
+            href="/configuracoes/dados"
+            className="text-sm text-accent hover:underline"
+          >
+            seus dados e exclusão de conta →
+          </Link>
         </p>
         {me.role === "developer" && (
           <p className="mt-3 text-xs text-muted">
