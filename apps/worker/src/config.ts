@@ -29,6 +29,16 @@ const schema = z.object({
    */
   STORAGE_ROOT: z.string().default(".storage"),
 
+  /**
+   * Dias de retenção do áudio da consulta. `0` apaga assim que a sessão chega
+   * a um estado terminal.
+   *
+   * Minimização de dado pessoal (LGPD Art. 6º) — e a defesa mais barata que
+   * existe, porque dado apagado não vaza. Negativo desliga a varredura, o que
+   * é útil em desenvolvimento e **não** deve existir com paciente real.
+   */
+  AUDIO_RETENTION_DAYS: z.coerce.number().int().default(30),
+
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().max(16).default(2),
   WORKER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),

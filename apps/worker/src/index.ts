@@ -18,6 +18,7 @@ import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
 import { config, requireDatabaseUrl } from "./config.js";
 import { logger } from "./logger.js";
 import { makeNoteHandler } from "./handlers/note.js";
+import { makeDeleteAudioHandler, sweepRetention } from "./handlers/retention.js";
 import { makeObjectiveHandler } from "./handlers/objective.js";
 import { makeTranscribeHandler } from "./handlers/transcribe.js";
 import { resolveLlm } from "./llm/index.js";
@@ -60,8 +61,9 @@ const handlers: Record<string, JobHandler> = {
       }
     : {}),
 
-  // Marco 6 — retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS
-  // delete_audio: handleDeleteAudio,
+  // Retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS.
+  // Quem enfileira é `sweepRetention`, no laço abaixo.
+  delete_audio: makeDeleteAudioHandler(db, storage, logger),
 };
 
 if (llm.blockedReason !== null) {
@@ -144,6 +146,20 @@ async function loop(workerId: number): Promise<void> {
         if (enterrados > 0) {
           log.error({ enterrados }, "jobs abandonados sem tentativas restantes");
         }
+
+        // Só o worker 0 varre: N workers ociosos rodariam a mesma consulta ao
+        // mesmo tempo, e a proteção contra duplicar jobs é uma condição de
+        // corrida esperando acontecer.
+        if (workerId === 0) {
+          await sweepRetention(db, config.AUDIO_RETENTION_DAYS, log).catch(
+            (err: unknown) => {
+              // Varredura de manutenção não derruba o laço: o trabalho de
+              // verdade continua, e a próxima passagem tenta de novo.
+              log.error({ err }, "falha na varredura de retenção");
+            },
+          );
+        }
+
         await sleep(config.WORKER_POLL_INTERVAL_MS);
       }
     } catch (error) {
@@ -180,6 +196,7 @@ logger.info(
     asrLocalUrl: config.ASR_LOCAL_URL,
     storage: storage.kind,
     handlers: Object.keys(handlers),
+    retencaoDias: config.AUDIO_RETENTION_DAYS,
     llm:
       llm.provider !== null && llm.blockedReason === null
         ? `${llm.provider.name}:${llm.provider.model} (${llm.provider.dataPolicy})`
