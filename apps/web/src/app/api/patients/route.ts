@@ -1,13 +1,16 @@
 import { patients } from "@scribe/db";
-import { desc, isNull } from "drizzle-orm";
+import { and, desc, ilike, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { asCurrentProfessional } from "@/lib/auth";
+import { padraoDeBusca } from "@/lib/patients";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const padrao = padraoDeBusca(new URL(request.url).searchParams.get("q") ?? "");
+
   const rows = await asCurrentProfessional((tx) =>
     // Sem `where professional_id = ...`: a política RLS já reduziu a tabela
     // aos pacientes deste profissional. Um filtro aqui seria redundante — e
@@ -15,7 +18,11 @@ export async function GET() {
     tx
       .select()
       .from(patients)
-      .where(isNull(patients.deletedAt))
+      .where(
+        padrao === null
+          ? isNull(patients.deletedAt)
+          : and(isNull(patients.deletedAt), ilike(patients.name, padrao)),
+      )
       .orderBy(desc(patients.createdAt)),
   );
 
@@ -46,7 +53,12 @@ export async function POST(request: Request) {
       .values({
         professionalId: me.id,
         name: parsed.data.name,
-        birthDate: parsed.data.birthDate ? new Date(parsed.data.birthDate) : null,
+        // `T00:00:00Z` explícito: sem o fuso, o construtor de `Date` lê a
+        // string curta como meia-noite LOCAL, e a coluna `date` guarda o dia
+        // anterior em todo o Brasil.
+        birthDate: parsed.data.birthDate
+          ? new Date(`${parsed.data.birthDate}T00:00:00Z`)
+          : null,
         notes: parsed.data.notes ?? null,
       })
       .returning();
