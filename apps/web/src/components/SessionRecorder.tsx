@@ -2,6 +2,7 @@
 
 import { prepareForUpload } from "@scribe/audio-browser";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LiveDraft } from "./LiveDraft";
 import {
@@ -10,8 +11,25 @@ import {
   textoParaExibicao,
   type ConsentMethod,
 } from "@/lib/consent";
+import {
+  bufferDisponivel,
+  descartarGravacao,
+  gravarPedaco,
+  iniciarGravacao,
+  limparAntigas,
+  listarPendentes,
+  montarGravacao,
+  type GravacaoPendente,
+} from "@/lib/recording/buffer";
+import {
+  bateria,
+  BATERIA_BAIXA,
+  manterTelaAcesa,
+  permissaoDeMicrofone,
+  vigiarMicrofone,
+} from "@/lib/recording/dispositivo";
+import { enviarEmPartes, finalizarEnvio } from "@/lib/recording/enviar";
 import { useLiveDraft } from "@/lib/useLiveDraft";
-import { useEffect, useRef, useState } from "react";
 
 type Engine = "local" | "cloud";
 
@@ -46,13 +64,26 @@ function formatElapsed(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * Pedaços de 5 segundos.
+ *
+ * O valor decide quanto se perde no pior caso — o que ainda não foi entregue
+ * ao `ondataavailable` quando a aba morre. Um segundo perderia menos e
+ * escreveria no IndexedDB sessenta vezes por minuto durante uma hora, o que em
+ * celular antigo compete com a própria gravação. Cinco segundos é a troca:
+ * doze escritas por minuto, cinco segundos de risco.
+ */
+const INTERVALO_DE_PEDACO_MS = 5000;
+
 export function SessionRecorder({
   patientId,
+  patientName,
   canChooseEngine,
   defaultEngine,
   minutosRestantes,
 }: {
   patientId: string;
+  patientName: string;
   canChooseEngine: boolean;
   defaultEngine: Engine;
   /** `null` = plano sem teto. Ver packages/core/src/account.ts. */
@@ -69,12 +100,15 @@ export function SessionRecorder({
   const [elapsed, setElapsed] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [pendentes, setPendentes] = useState<GravacaoPendente[]>([]);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const indiceRef = useRef(0);
+  const soltarTelaRef = useRef<(() => void) | null>(null);
+  const pararVigiaRef = useRef<(() => void) | null>(null);
   /**
    * Se o `onstop` que vem a seguir deve descartar em vez de enviar.
    *
@@ -84,13 +118,34 @@ export function SessionRecorder({
    * enviar uma gravação que a pessoa mandou descartar.
    */
   const descartarRef = useRef(false);
+  /**
+   * As escritas no IndexedDB, em fila.
+   *
+   * `ondataavailable` não espera: dois pedaços que chegam perto abririam duas
+   * transações ao mesmo tempo, e a segunda leria o contador antes de a
+   * primeira gravar. Encadear as promessas serializa sem bloquear o callback,
+   * que precisa voltar rápido para não atrapalhar a captura.
+   */
+  const filaRef = useRef<Promise<void>>(Promise.resolve());
 
-  // Soltar o microfone ao sair da página. Sem isto o indicador de gravação
-  // continua aceso no navegador, o que é assustador num app de saúde — e é a
-  // reclamação certa.
+  const recarregarPendentes = useCallback(() => {
+    if (!bufferDisponivel()) return;
+    void limparAntigas()
+      .then(listarPendentes)
+      .then(setPendentes)
+      .catch(() => setPendentes([]));
+  }, []);
+
+  useEffect(() => recarregarPendentes(), [recarregarPendentes]);
+
+  // Soltar o microfone e a trava de tela ao sair da página. Sem isto o
+  // indicador de gravação continua aceso no navegador, o que é assustador num
+  // app de saúde — e é a reclamação certa.
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      soltarTelaRef.current?.();
+      pararVigiaRef.current?.();
     };
   }, []);
 
@@ -103,13 +158,8 @@ export function SessionRecorder({
   /**
    * Avisa antes de fechar a aba com gravação em andamento.
    *
-   * A mesma falta que o botão de descartar cobre, pelo outro lado: sair da
-   * página no meio da consulta apaga tudo sem perguntar nada. A diferença é
-   * que descartar é uma escolha e fechar a aba costuma ser um acidente — um
-   * toque errado, um atalho do teclado, o navegador restaurando sessão.
-   *
-   * O navegador mostra um texto próprio e ignora qualquer mensagem que a
-   * gente tente passar. O que importa é existir a pergunta.
+   * Continua valendo mesmo com o buffer no dispositivo: o buffer garante que a
+   * gravação sobrevive, não que a pessoa vá lembrar de voltar para enviá-la.
    */
   useEffect(() => {
     if (!recording) return;
@@ -118,105 +168,43 @@ export function SessionRecorder({
     return () => window.removeEventListener("beforeunload", avisar);
   }, [recording]);
 
-  async function createSessionAndUpload(file: File) {
-    setError(null);
-    setStatus("criando sessão…");
-
-    const created = await fetch("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patientId,
-        objectiveText: objective.trim() === "" ? undefined : objective.trim(),
-        engineChoice: engine === "" ? null : engine,
-        consentMethod,
-      }),
-    });
-
-    if (!created.ok) {
-      setStatus(null);
-      setError("não foi possível criar a sessão");
-      return;
-    }
-
-    const { session } = (await created.json()) as { session: { id: string } };
-
-    // ---- a metade do navegador ------------------------------------------
-    //
-    // O dispositivo reamostra para 16 kHz mono e corta o silêncio ANTES de
-    // enviar. Reamostrar é ganho puro: o Whisper converte para 16 kHz de
-    // qualquer jeito, então mandar 48 kHz estéreo é subir seis vezes mais
-    // bytes para o servidor descartar cinco sextos.
-    //
-    // E o ruído da sala — o silêncio entre as falas — nunca sai daqui.
-    setStatus("preparando o áudio no seu dispositivo…");
-
-    let envio = file;
-    let mapa: { regions: unknown; removedMs: number; durationMs: number } | null = null;
-
-    try {
-      const pronto = await prepareForUpload(file);
-      envio = pronto.file;
-      // `trimmedMs` e não `originalMs`: o que a quota cobra é o que vai ser
-      // transcrito, e o silêncio cortado não chega a ser transcrito.
-      mapa = {
-        regions: pronto.regions,
-        removedMs: pronto.removedMs,
-        durationMs: pronto.trimmedMs,
-      };
-
-      const economia = 1 - pronto.bytes / pronto.originalBytes;
-      setStatus(
-        `${(pronto.bytes / 1024 / 1024).toFixed(1)} MB` +
-          (economia > 0.05 ? ` · ${Math.round(economia * 100)}% menor` : "") +
-          (pronto.removedMs > 2000
-            ? ` · ${Math.round(pronto.removedMs / 1000)}s de silêncio removidos`
-            : ""),
+  /** Confere o que o aparelho pode atrapalhar, antes de a consulta começar. */
+  async function conferirDispositivo(): Promise<string | null> {
+    const permissao = await permissaoDeMicrofone();
+    if (permissao === "negada") {
+      return (
+        "O microfone está bloqueado para este site. Libere nas permissões do " +
+        "navegador — no celular, no cadeado ao lado do endereço."
       );
-    } catch {
-      // Codec que o navegador não decodifica, memória insuficiente num celular
-      // antigo, AudioContext bloqueado. Enviar o original é a degradação certa:
-      // upload maior e processamento mais lento, nunca consulta perdida.
-      setStatus(`enviando ${(file.size / 1024 / 1024).toFixed(1)} MB…`);
     }
 
-    const form = new FormData();
-    form.append("file", envio);
-    if (mapa !== null) form.append("audioMap", JSON.stringify(mapa));
-
-    const uploaded = await fetch(`/api/sessions/${session.id}/audio`, {
-      method: "POST",
-      body: form,
-    });
-
-    if (!uploaded.ok) {
-      const body: unknown = await uploaded.json().catch(() => null);
-      const mensagem =
-        typeof body === "object" && body !== null && "error" in body
-          ? String((body as { error: unknown }).error)
-          : "falha no envio";
-
-      /**
-       * Quota estourada (402) não é falha de envio: o áudio FOI guardado, e a
-       * sessão existe com o motivo escrito nela. Ficar nesta tela com uma
-       * mensagem vermelha daria a impressão de que a consulta se perdeu — que
-       * é exatamente o oposto do que aconteceu.
-       */
-      if (uploaded.status === 402) {
-        router.push(`/sessoes/${session.id}`);
-        return;
-      }
-
-      setStatus(null);
-      setError(mensagem);
-      return;
+    const energia = await bateria();
+    if (energia !== null && !energia.carregando && energia.nivel < BATERIA_BAIXA) {
+      setAviso(
+        `Bateria em ${Math.round(energia.nivel * 100)}%. Uma consulta longa pode ` +
+          `não caber — vale ligar na tomada antes de começar.`,
+      );
+    } else if (!bufferDisponivel()) {
+      setAviso(
+        "Este navegador não permite guardar a gravação no aparelho (janela " +
+          "anônima?). Se a aba fechar durante a consulta, a gravação se perde.",
+      );
     }
 
-    router.push(`/sessoes/${session.id}`);
+    return null;
   }
 
   async function startRecording() {
     setError(null);
+    setAviso(null);
+
+    const impedimento = await conferirDispositivo();
+    if (impedimento !== null) {
+      setError(impedimento);
+      return;
+    }
+
+    setStatus("preparando…");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -227,51 +215,102 @@ export function SessionRecorder({
       });
       streamRef.current = stream;
 
+      /**
+       * A sessão é criada AGORA, antes de gravar, e não no fim.
+       *
+       * É o que faz o registro de ciência carimbar o instante em que o
+       * paciente foi informado — que é antes da consulta. Criada no fim, a
+       * hora do consentimento ficaria deslocada pela duração inteira do
+       * atendimento, que é justamente o número que um registro de
+       * consentimento precisa acertar.
+       */
+      const criada = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId,
+          objectiveText: objective.trim() === "" ? undefined : objective.trim(),
+          engineChoice: engine === "" ? null : engine,
+          consentMethod,
+        }),
+      });
+
+      if (!criada.ok) {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        setStatus(null);
+        setError("não foi possível criar a sessão");
+        return;
+      }
+
+      const { session } = (await criada.json()) as { session: { id: string } };
+
       const mimeType = pickMimeType();
+      indiceRef.current = 0;
+
+      if (bufferDisponivel()) {
+        await iniciarGravacao({
+          sessionId: session.id,
+          patientId,
+          patientName,
+          mimeType: mimeType ?? "audio/webm",
+          extensao: extensionFor(mimeType),
+        }).catch(() => undefined);
+      }
+
       const recorder = new MediaRecorder(
         stream,
         mimeType === undefined ? undefined : { mimeType },
       );
-      chunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size === 0) return;
+        const indice = indiceRef.current++;
+        filaRef.current = filaRef.current.then(() =>
+          gravarPedaco(session.id, indice, e.data).catch(() => undefined),
+        );
       };
 
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        soltarTelaRef.current?.();
+        soltarTelaRef.current = null;
+        pararVigiaRef.current?.();
+        pararVigiaRef.current = null;
 
         if (descartarRef.current) {
           descartarRef.current = false;
-          chunksRef.current = [];
-          setStatus(null);
-          setElapsed(0);
+          void descartarTudo(session.id);
           return;
         }
 
-        const blob = new Blob(chunksRef.current, {
-          type: mimeType ?? "audio/webm",
-        });
-        const file = new File([blob], `consulta.${extensionFor(mimeType)}`, {
-          type: blob.type,
-        });
-        void createSessionAndUpload(file);
+        void concluir(session.id, mimeType ?? "audio/webm", extensionFor(mimeType));
       };
 
-      // Pedaços de 1s. Se a aba cair no meio, o que já chegou está no array em
-      // vez de perdido num buffer interno — a base para retomada de sessão,
-      // que o consultório de internet instável vai exigir.
-      recorder.start(1000);
+      pararVigiaRef.current = vigiarMicrofone(stream, () => {
+        setAviso(
+          "O microfone foi desconectado ou tomado por outro aplicativo. " +
+            "Pare a gravação e confira antes de continuar.",
+        );
+      });
+
+      recorder.start(INTERVALO_DE_PEDACO_MS);
       recorderRef.current = recorder;
       setElapsed(0);
       setRecording(true);
+      setStatus(null);
+
+      soltarTelaRef.current = await manterTelaAcesa();
 
       // Roda em paralelo, no MESMO fluxo de microfone, e sem `await`: o
       // rascunho baixa um modelo na primeira vez, e esperar por ele atrasaria
       // o início da gravação — que é a única coisa aqui que não pode falhar.
       void rascunho.iniciar(stream);
     } catch (err) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      setStatus(null);
       setError(
         err instanceof DOMException && err.name === "NotAllowedError"
           ? "permissão de microfone negada — libere no navegador e tente de novo"
@@ -306,9 +345,205 @@ export function SessionRecorder({
     setRecording(false);
     setConfirmandoCancelamento(false);
     setError(null);
+    setAviso(null);
     rascunho.parar();
     recorderRef.current?.stop();
     recorderRef.current = null;
+  }
+
+  async function descartarTudo(sessionId: string) {
+    setStatus(null);
+    setElapsed(0);
+    await filaRef.current.catch(() => undefined);
+    await descartarGravacao(sessionId).catch(() => undefined);
+    // A sessão vazia também some: ela só existia para carimbar o
+    // consentimento de uma consulta que não chegou a ser gravada.
+    await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" }).catch(
+      () => undefined,
+    );
+    recarregarPendentes();
+  }
+
+  /**
+   * Monta, prepara e envia.
+   *
+   * É o mesmo caminho para a gravação que acabou de terminar e para a que foi
+   * recuperada do aparelho dias depois — e é por isso que ele começa lendo o
+   * IndexedDB em vez de receber os pedaços em memória.
+   */
+  async function concluir(sessionId: string, mimeType: string, extensao: string) {
+    setError(null);
+    setStatus("juntando a gravação…");
+
+    try {
+      await filaRef.current.catch(() => undefined);
+
+      const bruto = await montarGravacao(sessionId, mimeType);
+      if (bruto === null || bruto.size === 0) {
+        setStatus(null);
+        setError("a gravação não foi encontrada no aparelho");
+        return;
+      }
+
+      // ---- a metade do navegador ------------------------------------------
+      //
+      // O dispositivo reamostra para 16 kHz mono e corta o silêncio ANTES de
+      // enviar. Reamostrar é ganho puro: o Whisper converte para 16 kHz de
+      // qualquer jeito, então mandar 48 kHz estéreo é subir seis vezes mais
+      // bytes para o servidor descartar cinco sextos.
+      //
+      // E o ruído da sala — o silêncio entre as falas — nunca sai daqui.
+      setStatus("preparando o áudio no seu dispositivo…");
+
+      let envio: Blob = bruto;
+      let extensaoFinal = extensao;
+      let mapa: { regions: unknown; removedMs: number; durationMs: number } | null =
+        null;
+
+      try {
+        const arquivo = new File([bruto], `consulta.${extensao}`, { type: mimeType });
+        const pronto = await prepareForUpload(arquivo);
+        envio = pronto.file;
+        extensaoFinal = "wav";
+        // `trimmedMs` e não `originalMs`: o que a quota cobra é o que vai ser
+        // transcrito, e o silêncio cortado não chega a ser transcrito.
+        mapa = {
+          regions: pronto.regions,
+          removedMs: pronto.removedMs,
+          durationMs: pronto.trimmedMs,
+        };
+      } catch {
+        // Codec que o navegador não decodifica, memória insuficiente num
+        // celular antigo, AudioContext bloqueado. Enviar o original é a
+        // degradação certa: upload maior e processamento mais lento, nunca
+        // consulta perdida.
+      }
+
+      const bytes = envio.size;
+      const total = await enviarEmPartes({
+        sessionId,
+        arquivo: envio,
+        onProgresso: (p) =>
+          setStatus(
+            `enviando ${p.enviadas} de ${p.total} · ` +
+              `${(bytes / 1024 / 1024).toFixed(1)} MB`,
+          ),
+      });
+
+      setStatus("concluindo…");
+      const fim = await finalizarEnvio(sessionId, {
+        total,
+        extensao: extensaoFinal,
+        durationMs: mapa?.durationMs ?? null,
+        removedMs: mapa?.removedMs ?? null,
+        regions: mapa?.regions ?? null,
+      });
+
+      /**
+       * Quota estourada (402) não é falha: o áudio FOI guardado no servidor, e
+       * a sessão existe com o motivo escrito nela. Tratar como erro aqui daria
+       * a impressão de que a consulta se perdeu — o oposto do que aconteceu.
+       */
+      if (!fim.ok && fim.status !== 402) {
+        setStatus(null);
+        setError(
+          `${fim.erro ?? "falha ao concluir o envio"}. A gravação continua no ` +
+            `aparelho — tente enviar de novo.`,
+        );
+        recarregarPendentes();
+        return;
+      }
+
+      await descartarGravacao(sessionId).catch(() => undefined);
+      router.push(`/sessoes/${sessionId}`);
+    } catch (erro) {
+      setStatus(null);
+      setError(
+        `${erro instanceof Error ? erro.message : "falha no envio"}. A gravação ` +
+          `continua no aparelho — tente enviar de novo.`,
+      );
+      recarregarPendentes();
+    }
+  }
+
+  /** Envia um arquivo escolhido na tela, pelo caminho direto. */
+  async function enviarArquivo(file: File) {
+    setError(null);
+    setStatus("criando sessão…");
+
+    const criada = await fetch("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientId,
+        objectiveText: objective.trim() === "" ? undefined : objective.trim(),
+        engineChoice: engine === "" ? null : engine,
+        consentMethod,
+      }),
+    });
+
+    if (!criada.ok) {
+      setStatus(null);
+      setError("não foi possível criar a sessão");
+      return;
+    }
+
+    const { session } = (await criada.json()) as { session: { id: string } };
+
+    setStatus("preparando o áudio no seu dispositivo…");
+    let envio: Blob = file;
+    let nome = file.name;
+    let mapa: { regions: unknown; removedMs: number; durationMs: number } | null = null;
+
+    try {
+      const pronto = await prepareForUpload(file);
+      envio = pronto.file;
+      nome = pronto.file.name;
+      mapa = {
+        regions: pronto.regions,
+        removedMs: pronto.removedMs,
+        durationMs: pronto.trimmedMs,
+      };
+    } catch {
+      // segue com o original
+    }
+
+    setStatus(`enviando ${(envio.size / 1024 / 1024).toFixed(1)} MB…`);
+
+    const form = new FormData();
+    form.append("file", new File([envio], nome, { type: envio.type }));
+    if (mapa !== null) form.append("audioMap", JSON.stringify(mapa));
+
+    const enviado = await fetch(`/api/sessions/${session.id}/audio`, {
+      method: "POST",
+      body: form,
+    });
+
+    if (!enviado.ok && enviado.status !== 402) {
+      const corpo: unknown = await enviado.json().catch(() => null);
+      setStatus(null);
+      setError(
+        typeof corpo === "object" && corpo !== null && "error" in corpo
+          ? String((corpo as { error: unknown }).error)
+          : "falha no envio",
+      );
+      return;
+    }
+
+    router.push(`/sessoes/${session.id}`);
+  }
+
+  async function reenviarPendente(g: GravacaoPendente) {
+    setPendentes([]);
+    await concluir(g.sessionId, g.mimeType, g.extensao);
+  }
+
+  async function apagarPendente(g: GravacaoPendente) {
+    await descartarGravacao(g.sessionId).catch(() => undefined);
+    await fetch(`/api/sessions/${g.sessionId}`, { method: "DELETE" }).catch(
+      () => undefined,
+    );
+    recarregarPendentes();
   }
 
   const busy = status !== null;
@@ -316,6 +551,48 @@ export function SessionRecorder({
 
   return (
     <div className="space-y-5">
+      {/*
+       * Gravações que ficaram no aparelho. Aparecem antes de tudo: quem abre
+       * esta tela com uma consulta pendente precisa resolvê-la primeiro, e
+       * descobrir isso no fim da página seria descobrir tarde.
+       */}
+      {pendentes.length > 0 && !recording && (
+        <div className="rounded-lg border border-accent bg-accent/5 px-4 py-3">
+          <p className="text-sm font-medium">
+            {pendentes.length === 1
+              ? "Há uma gravação neste aparelho que não chegou a ser enviada."
+              : `Há ${pendentes.length} gravações neste aparelho que não chegaram a ser enviadas.`}
+          </p>
+          <ul className="mt-3 space-y-2">
+            {pendentes.map((g) => (
+              <li key={g.sessionId} className="flex flex-wrap items-center gap-3">
+                <span className="text-sm">
+                  {g.patientName} ·{" "}
+                  {new Date(g.criadaEm).toLocaleString("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                </span>
+                <button
+                  onClick={() => void reenviarPendente(g)}
+                  disabled={busy}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-surface disabled:opacity-40"
+                >
+                  Enviar agora
+                </button>
+                <button
+                  onClick={() => void apagarPendente(g)}
+                  disabled={busy}
+                  className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+                >
+                  descartar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="rounded-lg border border-line px-4 py-3">
         <label className="flex items-start gap-3">
           <input
@@ -336,10 +613,10 @@ export function SessionRecorder({
         </label>
 
         {/*
-         * O método aparece só depois da confirmação, e é isso que fica
-         * gravado na sessão junto com o texto correspondente. Perguntar antes
-         * de a pessoa confirmar seria pedir um detalhe sobre algo que ela
-         * ainda não disse ter feito.
+         * O método aparece só depois da confirmação, e é isso que fica gravado
+         * na sessão junto com o texto correspondente. Perguntar antes de a
+         * pessoa confirmar seria pedir um detalhe sobre algo que ela ainda não
+         * disse ter feito.
          */}
         {consent && (
           <div className="mt-3 border-t border-line pt-3">
@@ -387,7 +664,7 @@ export function SessionRecorder({
           placeholder="ex.: gerar plano alimentar e pontos de acompanhamento"
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
-          disabled={busy}
+          disabled={busy || recording}
         />
       </label>
 
@@ -400,7 +677,7 @@ export function SessionRecorder({
             className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
             value={engine}
             onChange={(e) => setEngine(e.target.value as Engine | "")}
-            disabled={busy}
+            disabled={busy || recording}
           >
             <option value="">padrão do plano ({defaultEngine})</option>
             <option value="local">local — Whisper no servidor</option>
@@ -429,9 +706,9 @@ export function SessionRecorder({
              * Descartar fica DEPOIS de parar, e discreto.
              *
              * São ações opostas com consequências muito diferentes, e a
-             * destrutiva não pode disputar atenção com a normal. Quem
-             * termina a consulta clica no vermelho sem pensar; quem quer
-             * jogar fora procura — e encontra.
+             * destrutiva não pode disputar atenção com a normal. Quem termina
+             * a consulta clica no vermelho sem pensar; quem quer jogar fora
+             * procura — e encontra.
              */}
             <button
               onClick={cancelRecording}
@@ -480,7 +757,7 @@ export function SessionRecorder({
             disabled={!ready}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void createSessionAndUpload(file);
+              if (file) void enviarArquivo(file);
             }}
           />
         </label>
@@ -492,6 +769,11 @@ export function SessionRecorder({
         </p>
       )}
       {status !== null && <p className="text-sm text-muted">{status}</p>}
+      {aviso !== null && (
+        <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+          {aviso}
+        </p>
+      )}
       {error !== null && (
         <p role="alert" className="text-sm text-red-500">
           {error}
