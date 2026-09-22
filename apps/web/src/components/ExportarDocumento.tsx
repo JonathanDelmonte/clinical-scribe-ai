@@ -60,13 +60,23 @@ export function ExportarDocumento({
           setErro("libere as janelas deste site para ver o texto");
           return;
         }
-        janela.document.write(
-          `<pre style="white-space:pre-wrap;font:14px/1.5 system-ui;padding:24px">${texto.replace(
-            /[<>&]/g,
-            (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c,
-          )}</pre>`,
-        );
-        janela.document.close();
+
+        /**
+         * Montado pelo DOM, com `textContent`, em vez de `document.write` com
+         * o texto interpolado.
+         *
+         * A versão anterior escapava `<`, `>` e `&` à mão e estava correta —
+         * mas escapar à mão é o tipo de coisa que continua correta até alguém
+         * acrescentar um atributo, e o conteúdo aqui é uma nota clínica
+         * produzida por um modelo de linguagem. `textContent` não tem como
+         * interpretar nada como marcação.
+         */
+        const pre = janela.document.createElement("pre");
+        pre.style.cssText =
+          "white-space:pre-wrap;font:14px/1.5 system-ui,sans-serif;padding:24px;margin:0";
+        pre.textContent = texto;
+        janela.document.body.append(pre);
+        janela.document.title = doc.titulo;
       }
     } catch {
       setErro("sem conexão com o servidor");

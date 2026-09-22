@@ -28,12 +28,17 @@ export default function Cadastrar() {
           O áudio fica no Brasil e é processado pelo motor local — sem fornecedor
           externo no caminho.
         </p>
-        {/*
-         * Os links para os termos e a política entram junto com as páginas,
-         * na Fase 12 do plano da Trilha B. Prometer aqui um documento que
-         * ainda não existe, num produto cujo argumento é confiança, custaria
-         * mais do que a linha vale.
-         */}
+        <p className="mt-2">
+          Ao criar a conta você aceita os{" "}
+          <Link href="/termos" className="text-accent hover:underline">
+            termos de uso
+          </Link>{" "}
+          e a{" "}
+          <Link href="/privacidade" className="text-accent hover:underline">
+            política de privacidade
+          </Link>
+          .
+        </p>
       </div>
 
       <p className="mt-6 text-sm text-muted">
