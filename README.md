@@ -65,8 +65,20 @@ pnpm dev
 pnpm dev:worker
 ```
 
-A aplicação sobe em http://localhost:3000. Crie um paciente, grave ou envie
-um áudio, e acompanhe a transcrição aparecer.
+A aplicação sobe em http://localhost:3000 e pede login. O `pnpm db:seed` cria
+duas contas de desenvolvimento e imprime a senha no fim:
+
+| E-mail | Cargo | Plano |
+|---|---|---|
+| `ana@consultaviva.local` | `professional` | `free` |
+| `dev@consultaviva.local` | `developer` | `free` |
+
+> A senha é a mesma para as duas e é pública — estas contas só existem em banco
+> local, e o domínio `.local` não resolve em lugar nenhum. Ver
+> [ADR-0004](docs/adr/0004-autenticacao.md).
+
+Depois de entrar: crie um paciente, grave ou envie um áudio, e acompanhe a
+transcrição aparecer.
 
 Para conferir o isolamento entre profissionais a qualquer momento:
 
@@ -99,6 +111,7 @@ apps/
   web/          Next.js — PWA, rotas de API, gravação e revisão
   worker/       processo Node: fila → motor → trechos no banco
 packages/
+  auth/         senha (scrypt) e token de sessão assinado — puro, sem I/O
   core/         domínio puro: cargos, motores, citações (sem I/O)
   db/           schema Drizzle, migrations e políticas RLS
   storage/      áudio das consultas — disco hoje, Supabase Storage depois
@@ -159,7 +172,7 @@ pnpm asr:try audio.wav --role professional --plan free --engine cloud
 
 O `--engine cloud` será descartado, e a saída diz por quê.
 
-## Três regras que não se negociam
+## Cinco regras que não se negociam
 
 ### 1. Toda tabela com dado de paciente carrega `professional_id` direto
 
@@ -183,7 +196,18 @@ conseguir. Ele já pegou um bug real na primeira execução — faltava `grant u
 on schema auth`, e sem isso *nenhuma* consulta funcionava. Política escrita não
 é política testada.
 
-### 4. Log registra IDs, nunca conteúdo
+### 4. Identidade vem do cookie assinado, autorização vem do banco
+
+O token de sessão carrega `sub` e `exp`, e mais nada. Cargo, plano e quota são
+lidos do banco a cada requisição — um token é uma fotografia, e autorização
+decidida por fotografia é autorização defasada no dia em que alguém muda de
+plano. Ver [ADR-0004](docs/adr/0004-autenticacao.md).
+
+`src/proxy.ts` confere o mesmo cookie antes, mas para redirecionar quem não
+entrou. **Ele não é a fronteira de segurança** — quem decide o que pode ser
+lido é a política RLS, com a identidade que `lib/auth.ts` resolve.
+
+### 5. Log registra IDs, nunca conteúdo
 
 `sessionId` sim; o texto da transcrição, não. Log é o vazamento de dado de
 saúde mais fácil de cometer e mais difícil de perceber. O logger redige por

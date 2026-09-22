@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 import type { AudioStorage } from "./index";
@@ -61,6 +61,30 @@ export function createLocalStorage(root: string): AudioStorage {
       } catch {
         return false;
       }
+    },
+
+    async list(prefix) {
+      const raiz = pathFor(prefix);
+      let entradas;
+      try {
+        entradas = await readdir(raiz, { withFileTypes: true, recursive: true });
+      } catch {
+        // Pasta que não existe é lista vazia. Numa retomada de upload isso
+        // significa "nenhum pedaço chegou ainda", que é o estado normal do
+        // primeiro envio — não um erro para tratar.
+        return [];
+      }
+
+      return entradas
+        .filter((e) => e.isFile())
+        .map((e) => {
+          const relativa = resolve(e.parentPath, e.name).slice(base.length + 1);
+          // Chaves usam `/` em qualquer sistema. No Windows o caminho vem com
+          // `\\`, e uma chave com barra invertida não casa com a que foi
+          // gravada — o pedaço existiria e não seria encontrado.
+          return relativa.split(sep).join("/");
+        })
+        .sort();
     },
   };
 }

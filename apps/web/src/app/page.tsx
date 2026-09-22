@@ -4,34 +4,24 @@ import { desc, isNull } from "drizzle-orm";
 import Link from "next/link";
 
 import { NewPatientForm } from "@/components/NewPatientForm";
-import { asCurrentProfessional } from "@/lib/auth";
+import { asCurrentUser, exigirProfissional } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const data = await asCurrentProfessional(async (tx, me) => {
-    const rows = await tx
-      .select()
-      .from(patients)
-      .where(isNull(patients.deletedAt))
-      .orderBy(desc(patients.createdAt));
-    return { me, rows };
-  }).catch(() => null);
+  // Redireciona para o login, ou para o onboarding se o perfil estiver
+  // incompleto. Daqui para baixo, `me` existe.
+  const me = await exigirProfissional();
 
-  if (data === null) {
-    return (
-      <main className="mx-auto max-w-3xl px-5 py-16">
-        <h1 className="text-xl font-semibold">Banco não configurado</h1>
-        <p className="mt-3 text-muted">
-          Rode <code className="text-ink">pnpm db:up</code>,{" "}
-          <code className="text-ink">pnpm db:migrate</code> e{" "}
-          <code className="text-ink">pnpm db:seed</code>.
-        </p>
-      </main>
-    );
-  }
+  const rows =
+    (await asCurrentUser((tx) =>
+      tx
+        .select()
+        .from(patients)
+        .where(isNull(patients.deletedAt))
+        .orderBy(desc(patients.createdAt)),
+    ).catch(() => null)) ?? [];
 
-  const { me, rows } = data;
   const account: Account = {
     role: me.role,
     plan: me.plan,

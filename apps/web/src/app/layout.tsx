@@ -1,10 +1,8 @@
-import { professionals } from "@scribe/db";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 
-import { UserSwitcher } from "@/components/UserSwitcher";
-import { currentAuthUserId, currentProfessional } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { SairButton } from "@/components/SairButton";
+import { currentProfessional } from "@/lib/auth";
 
 import "./globals.css";
 
@@ -25,31 +23,10 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-async function devUsers() {
-  // Lê com a conexão de serviço porque é uma lista de TODOS os profissionais
-  // — algo que RLS corretamente proíbe. É exclusivo do seletor de dev e some
-  // junto com ele quando o Auth real entrar.
-  try {
-    const rows = await db.select().from(professionals).limit(10);
-    return rows.map((p) => ({
-      authUserId: p.authUserId,
-      name: p.name,
-      role: p.role,
-      plan: p.plan,
-    }));
-  } catch {
-    return [];
-  }
-}
-
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const [me, users, authUserId] = await Promise.all([
-    currentProfessional().catch(() => null),
-    devUsers(),
-    currentAuthUserId(),
-  ]);
+  const me = await currentProfessional().catch(() => null);
 
   return (
     <html lang="pt-BR">
@@ -78,17 +55,23 @@ export default async function RootLayout({
                 {me.specialty ?? "—"}
               </span>
             )}
-            <Link
-              href="/configuracoes"
-              className="ml-auto text-xs text-muted hover:text-ink"
-            >
-              configurações
-            </Link>
-            <div>
-              {users.length > 0 && (
-                <UserSwitcher users={users} currentAuthUserId={authUserId} />
-              )}
-            </div>
+            {/*
+             * O cabeçalho só mostra navegação de conta para quem tem conta. Na
+             * tela de login, "configurações" e "sair" seriam links que não
+             * levam a lugar nenhum — e um "sair" visível para quem não entrou
+             * é o tipo de detalhe que faz a pessoa duvidar se entrou.
+             */}
+            {me !== null && (
+              <>
+                <Link
+                  href="/configuracoes"
+                  className="ml-auto text-xs text-muted hover:text-ink"
+                >
+                  configurações
+                </Link>
+                <SairButton />
+              </>
+            )}
           </div>
         </header>
         {children}

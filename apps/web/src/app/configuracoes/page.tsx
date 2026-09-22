@@ -2,22 +2,12 @@ import { PLAN_DEFAULT_ENGINE, resolveEngine, type Account } from "@scribe/core";
 import Link from "next/link";
 
 import { VoiceEnrollment } from "@/components/VoiceEnrollment";
-import { asCurrentProfessional } from "@/lib/auth";
+import { exigirProfissional } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Configuracoes() {
-  const me = await asCurrentProfessional(
-    async (_tx, professional) => professional,
-  ).catch(() => null);
-
-  if (me === null || me === undefined) {
-    return (
-      <main className="mx-auto max-w-3xl px-5 py-16">
-        <p className="text-muted">Não foi possível carregar seu perfil.</p>
-      </main>
-    );
-  }
+  const me = await exigirProfissional();
 
   const account: Account = {
     role: me.role,
@@ -43,6 +33,8 @@ export default async function Configuracoes() {
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
           <dt className="text-muted">nome</dt>
           <dd>{me.name}</dd>
+          <dt className="text-muted">e-mail</dt>
+          <dd>{me.email ?? "—"}</dd>
           <dt className="text-muted">especialidade</dt>
           <dd>{me.specialty ?? "—"}</dd>
           <dt className="text-muted">cargo</dt>
@@ -61,6 +53,11 @@ export default async function Configuracoes() {
             </span>
           </dd>
         </dl>
+        <p className="mt-4">
+          <Link href="/bem-vindo" className="text-sm text-accent hover:underline">
+            editar perfil e assinatura →
+          </Link>
+        </p>
         {me.role === "developer" && (
           <p className="mt-3 text-xs text-muted">
             Como desenvolvedor você escolhe o motor em cada sessão. No plano {me.plan} o
