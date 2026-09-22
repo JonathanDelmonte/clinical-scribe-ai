@@ -82,4 +82,28 @@ export default tseslint.config(
       },
     },
   },
+
+  // O service worker também tem escopo próprio: `self` é o
+  // ServiceWorkerGlobalScope, e `caches` só existe lá.
+  {
+    files: ["apps/web/public/sw.js"],
+    languageOptions: {
+      globals: {
+        self: "readonly",
+        caches: "readonly",
+        fetch: "readonly",
+        Response: "readonly",
+        URL: "readonly",
+      },
+    },
+  },
+
+  // Scripts de geração rodam em Node, pela linha de comando.
+  {
+    files: ["apps/web/scripts/*.mjs"],
+    languageOptions: {
+      globals: { Buffer: "readonly", console: "readonly", process: "readonly" },
+    },
+    rules: { "no-console": "off" },
+  },
 );

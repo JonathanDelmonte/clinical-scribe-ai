@@ -1,10 +1,26 @@
 /**
- * Configuração da autenticação — lida uma vez, na partida.
+ * Configuração da autenticação.
  *
- * Segredo ausente é erro de ambiente, não de requisição: descobri-lo aqui
- * coloca a mensagem na primeira tela de quem rodou `pnpm dev`; descobri-lo no
- * primeiro login coloca a mesma mensagem num log, depois de alguém ter tentado
- * entrar. É a mesma disciplina que o worker usa com a chave do LLM.
+ * ## Por que a leitura é preguiçosa
+ *
+ * A primeira versão lia o segredo na avaliação do módulo, para que a falta
+ * dele derrubasse a partida em vez de aparecer num log depois. A intenção
+ * estava certa; o momento, errado — e o `next build` provou isso:
+ *
+ *     Error: Failed to collect page data for /api/auth/entrar
+ *       [cause]: AUTH_SECRET não definida.
+ *
+ * O build do Next avalia os módulos de cada rota com `NODE_ENV=production`
+ * para descobrir a configuração dela. Nesse instante não existe segredo
+ * nenhum — segredo é coisa de tempo de execução, injetada no contêiner que
+ * roda, e não na máquina que compila. Ler no topo do módulo transformava
+ * "esqueci de configurar o ambiente" em "o build quebrou", que é uma mensagem
+ * sobre outro problema.
+ *
+ * Lido sob demanda, o erro volta para onde pertence: a primeira requisição que
+ * precisa assinar ou conferir uma sessão falha alto, com a mensagem certa, e o
+ * build passa. O valor é memoizado, então a conferência acontece uma vez por
+ * processo — que é o que a versão anterior queria.
  */
 
 export type AuthProvider = "password" | "supabase";
@@ -20,14 +36,19 @@ const PRODUCAO = process.env["NODE_ENV"] === "production";
  * reinício do `next dev` deslogaria quem estava testando, e reinício em
  * desenvolvimento acontece a cada arquivo salvo.
  *
- * Em produção, a ausência de `AUTH_SECRET` derruba a partida. Um cookie de
- * sessão assinado com um segredo que está no Git é um cookie que qualquer um
- * assina.
+ * Em produção, a ausência de `AUTH_SECRET` derruba a primeira requisição
+ * autenticada. Um cookie de sessão assinado com um segredo que está no Git é
+ * um cookie que qualquer um assina.
  */
 const SEGREDO_DE_DESENVOLVIMENTO = "consulta-viva-desenvolvimento-nao-use-em-producao";
 
+let segredoMemoizado: string | null = null;
+
 function lerSegredo(): string {
+  if (segredoMemoizado !== null) return segredoMemoizado;
+
   const bruto = process.env["AUTH_SECRET"] ?? "";
+
   if (bruto !== "") {
     if (bruto.length < 32) {
       throw new Error(
@@ -35,6 +56,7 @@ function lerSegredo(): string {
           "Gere um com: node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
       );
     }
+    segredoMemoizado = bruto;
     return bruto;
   }
 
@@ -46,7 +68,8 @@ function lerSegredo(): string {
     );
   }
 
-  return SEGREDO_DE_DESENVOLVIMENTO;
+  segredoMemoizado = SEGREDO_DE_DESENVOLVIMENTO;
+  return segredoMemoizado;
 }
 
 /**
@@ -76,8 +99,13 @@ function lerProvedor(): AuthProvider {
 }
 
 export const authConfig = {
-  provider: lerProvedor(),
-  secret: lerSegredo(),
+  /** Lido na primeira vez que alguém assina ou confere uma sessão. */
+  get secret(): string {
+    return lerSegredo();
+  },
+  get provider(): AuthProvider {
+    return lerProvedor();
+  },
   cookieName: "scribe_session",
   /**
    * Sete dias. Curto o bastante para que um token roubado não valha para

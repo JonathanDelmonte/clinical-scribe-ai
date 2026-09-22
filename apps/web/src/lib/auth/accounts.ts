@@ -2,10 +2,10 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { professionals } from "@scribe/db";
+import { professionals, type Database } from "@scribe/db";
 import { eq, sql } from "drizzle-orm";
 
-import { db, withProfessional } from "@/lib/db";
+import { getDb, withProfessional } from "@/lib/db";
 import { codigoPostgres, UNIQUE_VIOLATION } from "@/lib/pg-error";
 
 import { authConfig } from "./config";
@@ -59,10 +59,10 @@ export function emailInvalido(email: string): string | null {
  * quem já tem conta. Aqui o alcance é este arquivo, e as duas consultas abaixo
  * são as únicas que ele faz.
  */
-async function semIsolamento<T>(fn: (tx: typeof db) => Promise<T>): Promise<T> {
-  return db.transaction(async (tx) => {
+async function semIsolamento<T>(fn: (tx: Database) => Promise<T>): Promise<T> {
+  return getDb().transaction(async (tx) => {
     await tx.execute(sql`set local role service_role`);
-    return fn(tx as unknown as typeof db);
+    return fn(tx as unknown as Database);
   });
 }
 
@@ -99,7 +99,7 @@ export async function criarConta(entrada: {
      * e passa apenas para a própria linha. Uma conta criada aqui não consegue,
      * nem por erro de código, nascer apontando para outra pessoa.
      */
-    await withProfessional(db, authUserId, async (tx) => {
+    await withProfessional(getDb(), authUserId, async (tx) => {
       await tx.insert(professionals).values({
         authUserId,
         email,

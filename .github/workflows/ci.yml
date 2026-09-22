@@ -37,6 +37,26 @@ jobs:
       - name: Testes
         run: pnpm test
 
+  build:
+    name: Build de produção
+    runs-on: ubuntu-latest
+
+    # Sem banco e sem segredos, de propósito. Compilar não pode depender de
+    # configuração de tempo de execução — e este job existe porque um dia
+    # dependeu: `AUTH_SECRET` era lido na avaliação do módulo, e o `next build`
+    # quebrava com uma mensagem sobre variável de ambiente, que é uma mensagem
+    # sobre outro problema.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
   database:
     name: Schema e políticas RLS
     runs-on: ubuntu-latest
