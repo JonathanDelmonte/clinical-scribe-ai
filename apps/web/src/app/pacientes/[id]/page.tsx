@@ -113,10 +113,13 @@ export default async function PatientPage({
         ) : (
           <ul className="space-y-2">
             {sessionRows.map((s) => (
-              <li key={s.id}>
+              <li
+                key={s.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line px-4 py-3"
+              >
                 <Link
                   href={`/sessoes/${s.id}`}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line px-4 py-3 transition-colors hover:border-accent"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 hover:text-accent"
                 >
                   <span className="text-sm">{s.createdAt.toLocaleString("pt-BR")}</span>
                   <span
@@ -133,8 +136,20 @@ export default async function PatientPage({
                   {s.engineUsed !== null && (
                     <span className="text-xs text-muted">motor {s.engineUsed}</span>
                   )}
-                  <span className="ml-auto text-sm text-muted">abrir →</span>
                 </Link>
+
+                {/*
+                 * Exportar só aparece quando há o que exportar. Um botão que
+                 * leva a uma tela vazia ensina a pessoa a não clicar nele.
+                 */}
+                {(s.status === "ready_for_review" || s.status === "approved") && (
+                  <Link
+                    href={`/exportar/${s.id}`}
+                    className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+                  >
+                    exportar
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
