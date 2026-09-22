@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 
 import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
+import { limitarPorProfissional } from "@/lib/limites";
 import { verificarQuota } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  const barrado = await limitarPorProfissional("upload");
+  if (barrado !== null) return barrado;
 
   const resultado = await asCurrentProfessional(async (tx, me) => {
     const [session] = await tx

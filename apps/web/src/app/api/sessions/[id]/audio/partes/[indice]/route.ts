@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
+import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; indice: string }> },
 ) {
   const { id, indice } = await params;
+
+  const barrado = await limitarPorProfissional("pedaco");
+  if (barrado !== null) return barrado;
 
   const n = Number(indice);
   if (!Number.isInteger(n) || n < 0 || n >= MAX_PARTES) {

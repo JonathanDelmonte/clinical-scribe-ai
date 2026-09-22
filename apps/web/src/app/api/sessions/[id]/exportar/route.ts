@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { ACOES, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
+import { limitarPorProfissional } from "@/lib/limites";
 import { gerarPdf } from "@/lib/export/pdf";
 import {
   notaComoTexto,
@@ -33,6 +34,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  const barrado = await limitarPorProfissional("exportacao");
+  if (barrado !== null) return barrado;
+
   const url = new URL(request.url);
   const formato = url.searchParams.get("formato") ?? "texto";
   const documento = url.searchParams.get("documento") ?? "nota";

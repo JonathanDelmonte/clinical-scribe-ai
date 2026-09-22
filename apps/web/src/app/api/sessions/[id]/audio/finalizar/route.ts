@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { asCurrentProfessional } from "@/lib/auth";
+import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
 import { EXTENSOES_ACEITAS, MAX_AUDIO_BYTES, registrarAudio } from "@/lib/upload";
 
@@ -33,6 +34,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  const barrado = await limitarPorProfissional("upload");
+  if (barrado !== null) return barrado;
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
