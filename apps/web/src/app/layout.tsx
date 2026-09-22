@@ -82,9 +82,12 @@ export default async function RootLayout({
              */}
             {me !== null && (
               <>
+                <Link href="/uso" className="ml-auto text-xs text-muted hover:text-ink">
+                  uso
+                </Link>
                 <Link
                   href="/configuracoes"
-                  className="ml-auto text-xs text-muted hover:text-ink"
+                  className="text-xs text-muted hover:text-ink"
                 >
                   configurações
                 </Link>
