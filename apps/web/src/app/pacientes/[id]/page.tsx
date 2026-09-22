@@ -8,6 +8,7 @@ import { PatientDetails } from "@/components/PatientDetails";
 import { SessionRecorder } from "@/components/SessionRecorder";
 import { asCurrentUser, exigirProfissional } from "@/lib/auth";
 import { dataParaFormulario } from "@/lib/patients";
+import { quotaDoMes } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,12 @@ export default async function PatientPage({
 
   const me = await exigirProfissional();
 
+  const account: Account = {
+    role: me.role,
+    plan: me.plan,
+    preferredEngine: me.preferredEngine,
+  };
+
   const data = await asCurrentUser(async (tx) => {
     // Sob RLS: paciente de outro profissional não é encontrado, ponto.
     const [patient] = await tx
@@ -46,17 +53,17 @@ export default async function PatientPage({
       .where(eq(sessions.patientId, patient.id))
       .orderBy(desc(sessions.createdAt));
 
-    return { patient, sessions: rows };
+    // A quota vem na mesma transação: é uma consulta a mais, não uma ida a
+    // mais ao banco, e é o que permite avisar ANTES de a pessoa gravar em vez
+    // de depois de ela subir o áudio.
+    const quota = await quotaDoMes(tx, account);
+
+    return { patient, sessions: rows, quota };
   }).catch(() => null);
 
   if (data === null || data === undefined) notFound();
 
-  const { patient, sessions: sessionRows } = data;
-  const account: Account = {
-    role: me.role,
-    plan: me.plan,
-    preferredEngine: me.preferredEngine,
-  };
+  const { patient, sessions: sessionRows, quota } = data;
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
@@ -92,6 +99,7 @@ export default async function PatientPage({
           patientId={patient.id}
           canChooseEngine={canChooseEngine(account)}
           defaultEngine={PLAN_DEFAULT_ENGINE[me.plan]}
+          minutosRestantes={quota.restantes}
         />
       </section>
 

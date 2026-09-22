@@ -4,6 +4,12 @@ import { prepareForUpload } from "@scribe/audio-browser";
 import { useRouter } from "next/navigation";
 
 import { LiveDraft } from "./LiveDraft";
+import {
+  CONSENT_METHOD_LABEL,
+  CONSENT_METHODS,
+  textoParaExibicao,
+  type ConsentMethod,
+} from "@/lib/consent";
 import { useLiveDraft } from "@/lib/useLiveDraft";
 import { useEffect, useRef, useState } from "react";
 
@@ -44,14 +50,18 @@ export function SessionRecorder({
   patientId,
   canChooseEngine,
   defaultEngine,
+  minutosRestantes,
 }: {
   patientId: string;
   canChooseEngine: boolean;
   defaultEngine: Engine;
+  /** `null` = plano sem teto. Ver packages/core/src/account.ts. */
+  minutosRestantes: number | null;
 }) {
   const router = useRouter();
 
   const [consent, setConsent] = useState(false);
+  const [consentMethod, setConsentMethod] = useState<ConsentMethod>("verbal-in-person");
   const [objective, setObjective] = useState("");
   const [engine, setEngine] = useState<Engine | "">("");
   const [recording, setRecording] = useState(false);
@@ -119,6 +129,7 @@ export function SessionRecorder({
         patientId,
         objectiveText: objective.trim() === "" ? undefined : objective.trim(),
         engineChoice: engine === "" ? null : engine,
+        consentMethod,
       }),
     });
 
@@ -141,12 +152,18 @@ export function SessionRecorder({
     setStatus("preparando o áudio no seu dispositivo…");
 
     let envio = file;
-    let mapa: { regions: unknown; removedMs: number } | null = null;
+    let mapa: { regions: unknown; removedMs: number; durationMs: number } | null = null;
 
     try {
       const pronto = await prepareForUpload(file);
       envio = pronto.file;
-      mapa = { regions: pronto.regions, removedMs: pronto.removedMs };
+      // `trimmedMs` e não `originalMs`: o que a quota cobra é o que vai ser
+      // transcrito, e o silêncio cortado não chega a ser transcrito.
+      mapa = {
+        regions: pronto.regions,
+        removedMs: pronto.removedMs,
+        durationMs: pronto.trimmedMs,
+      };
 
       const economia = 1 - pronto.bytes / pronto.originalBytes;
       setStatus(
@@ -174,12 +191,24 @@ export function SessionRecorder({
 
     if (!uploaded.ok) {
       const body: unknown = await uploaded.json().catch(() => null);
-      setStatus(null);
-      setError(
+      const mensagem =
         typeof body === "object" && body !== null && "error" in body
           ? String((body as { error: unknown }).error)
-          : "falha no envio",
-      );
+          : "falha no envio";
+
+      /**
+       * Quota estourada (402) não é falha de envio: o áudio FOI guardado, e a
+       * sessão existe com o motivo escrito nela. Ficar nesta tela com uma
+       * mensagem vermelha daria a impressão de que a consulta se perdeu — que
+       * é exatamente o oposto do que aconteceu.
+       */
+      if (uploaded.status === 402) {
+        router.push(`/sessoes/${session.id}`);
+        return;
+      }
+
+      setStatus(null);
+      setError(mensagem);
       return;
     }
 
@@ -287,22 +316,67 @@ export function SessionRecorder({
 
   return (
     <div className="space-y-5">
-      <label className="flex items-start gap-3 rounded-lg border border-line px-4 py-3">
-        <input
-          type="checkbox"
-          className="mt-1"
-          checked={consent}
-          onChange={(e) => setConsent(e.target.checked)}
-        />
-        <span className="text-sm">
-          O paciente foi informado de que a consulta será gravada.
-          <span className="mt-1 block text-xs text-muted">
-            A base legal do tratamento é a tutela da saúde (LGPD Art. 11, II,
-            &ldquo;f&rdquo;), mas a transparência é obrigatória: o paciente precisa
-            estar ciente.
+      <div className="rounded-lg border border-line px-4 py-3">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            disabled={busy || recording}
+          />
+          <span className="text-sm">
+            O paciente foi informado de que a consulta será gravada.
+            <span className="mt-1 block text-xs text-muted">
+              A base legal do tratamento é a tutela da saúde (LGPD Art. 11, II,
+              &ldquo;f&rdquo;), mas a transparência é obrigatória: o paciente precisa
+              estar ciente.
+            </span>
           </span>
-        </span>
-      </label>
+        </label>
+
+        {/*
+         * O método aparece só depois da confirmação, e é isso que fica
+         * gravado na sessão junto com o texto correspondente. Perguntar antes
+         * de a pessoa confirmar seria pedir um detalhe sobre algo que ela
+         * ainda não disse ter feito.
+         */}
+        {consent && (
+          <div className="mt-3 border-t border-line pt-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
+                Como foi informado
+              </span>
+              <select
+                className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+                value={consentMethod}
+                onChange={(e) => setConsentMethod(e.target.value as ConsentMethod)}
+                disabled={busy || recording}
+              >
+                {CONSENT_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {CONSENT_METHOD_LABEL[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="mt-2 text-xs text-muted">
+              Fica registrado nesta sessão: &ldquo;{textoParaExibicao(consentMethod)}
+              &rdquo;
+            </p>
+          </div>
+        )}
+      </div>
+
+      {minutosRestantes !== null && (
+        <p
+          className={`text-xs ${minutosRestantes <= 0 ? "text-red-500" : "text-muted"}`}
+        >
+          {minutosRestantes <= 0
+            ? "Quota do mês esgotada. A gravação é guardada, mas só será processada no próximo mês ou com outro plano."
+            : `Restam ${Math.floor(minutosRestantes)} minutos de processamento neste mês.`}
+        </p>
+      )}
 
       <label className="block">
         <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">

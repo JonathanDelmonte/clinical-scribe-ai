@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { asCurrentProfessional } from "@/lib/auth";
+import { CONSENT_METHODS, textoDoConsentimento } from "@/lib/consent";
+import { quotaDoMes } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +15,29 @@ const createSchema = z.object({
   objectiveText: z.string().max(2000).optional(),
   /** Só respeitado para o cargo `developer` — ver resolveEngine(). */
   engineChoice: z.enum(["local", "cloud"]).nullable().optional(),
+  /**
+   * Como a ciência da gravação foi obtida.
+   *
+   * Obrigatório, e é a mudança que importa nesta rota: antes o servidor
+   * gravava `consent_recorded_at` e um método fixo em toda sessão, sem que o
+   * cliente precisasse afirmar coisa alguma. A caixa de seleção existia na
+   * tela e não chegava até aqui — ou seja, o registro dizia que o paciente foi
+   * informado mesmo quando ninguém tinha marcado nada.
+   */
+  consentMethod: z.enum(CONSENT_METHODS),
 });
 
 export async function POST(request: Request) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
+    const problema = parsed.error.issues[0];
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "dados inválidos" },
+      {
+        error:
+          problema?.path[0] === "consentMethod"
+            ? "registre a ciência da gravação antes de iniciar"
+            : (problema?.message ?? "dados inválidos"),
+      },
       { status: 400 },
     );
   }
@@ -43,6 +61,16 @@ export async function POST(request: Request) {
     };
     const decision = resolveEngine(account, parsed.data.engineChoice ?? null);
 
+    /**
+     * A quota é conferida aqui só para AVISAR, e de novo no upload para
+     * BARRAR.
+     *
+     * Criar a sessão não custa nada; processar o áudio custa. Recusar a
+     * criação seria recusar a gravação de uma consulta que está prestes a
+     * acontecer — e uma consulta perdida é pior que uma quota estourada.
+     */
+    const quota = await quotaDoMes(tx, account);
+
     const [session] = await tx
       .insert(sessions)
       .values({
@@ -52,16 +80,17 @@ export async function POST(request: Request) {
         startedAt: new Date(),
         objectiveText: parsed.data.objectiveText ?? null,
         engineChoice: parsed.data.engineChoice ?? null,
-        // Registro de ciência da gravação. A base legal do tratamento é a
-        // tutela da saúde (LGPD Art. 11, II, "f"), mas a transparência é
-        // obrigatória: o paciente precisa estar ciente de que está sendo
-        // gravado. A interface exibe isso antes de habilitar o botão.
+        // A base legal do tratamento é a tutela da saúde (LGPD Art. 11, II,
+        // "f"), mas a transparência é obrigatória: o paciente precisa estar
+        // ciente. O TEXTO vai junto porque o carimbo sozinho não responde
+        // "com o que a pessoa concordou".
         consentRecordedAt: new Date(),
-        consentMethod: "verbal-in-person",
+        consentMethod: parsed.data.consentMethod,
+        consentText: textoDoConsentimento(parsed.data.consentMethod),
       })
       .returning();
 
-    return { session, decision } as const;
+    return { session, decision, quota } as const;
   });
 
   if (result === null) {
@@ -72,7 +101,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { session: result.session, engine: result.decision },
+    { session: result.session, engine: result.decision, quota: result.quota },
     { status: 201 },
   );
 }
