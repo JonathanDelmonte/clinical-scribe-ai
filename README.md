@@ -4,9 +4,14 @@
 > (profissional × paciente) e devolve a nota estruturada — com cada afirmação
 > ancorada no trecho de áudio que a originou.
 
-**Status:** Marco 0 (fundação) · pré-MVP
+**Status:** Marcos 0 a 6 fechados · MVP funcional, sem usuário real ainda
 
-📄 [Documentação de produto](docs/DOCUMENTACAO.md) · 🗺️ [Plano de desenvolvimento](docs/PLANO-DE-DESENVOLVIMENTO.md) · 🧱 [Decisões (ADR)](docs/adr/)
+📄 [Documentação de produto](docs/DOCUMENTACAO.md) · 🗺️ [Plano de desenvolvimento](docs/PLANO-DE-DESENVOLVIMENTO.md) · 🧱 [Decisões (ADR)](docs/adr/) · 🔒 [Revisão de segurança](docs/REVISAO-DE-SEGURANCA.md)
+
+> Antes do primeiro usuário real, o checklist de implantação da
+> [revisão de segurança](docs/REVISAO-DE-SEGURANCA.md#antes-de-apontar-isto-para-a-internet)
+> é obrigatório — em especial `AUTH_SECRET`, HTTPS e o proxy reverso
+> sobrescrevendo `x-forwarded-for`.
 
 ---
 

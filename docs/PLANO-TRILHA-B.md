@@ -3,7 +3,56 @@
 > Companheiro de [DIVISAO-DE-TRABALHO.md](./DIVISAO-DE-TRABALHO.md), que define
 > **quem faz o quê**. Este documento define **em que ordem** a Trilha B é feita,
 > e por quê nessa ordem.
-> Criado em 22/09/2026.
+> Criado em 22/09/2026 · **Concluído em 22/09/2026.**
+
+---
+
+## Estado: as doze fases estão fechadas
+
+| # | Fase | Onde ver |
+|---|---|---|
+| 0 | Migration anunciada | `migrations/0006` · `sql/rls.sql` · 21 asserções em `sql/test-rls.sql` |
+| 1 | Auth real + onboarding | `packages/auth/` · `lib/auth/` · [ADR-0004](./adr/0004-autenticacao.md) |
+| 2 | Pacientes | `/` com busca · `/pacientes/[id]` com ficha editável |
+| 3 | Consentimento + quota | `lib/consent.ts` · `lib/quota.ts` · `lib/upload.ts` |
+| 4 | Gravação endurecida | `lib/recording/` — buffer em IndexedDB, envio em pedaços com retomada |
+| 5 | Export | `lib/export/` · `/exportar/[id]` |
+| 6 | PWA | `app/manifest.ts` · `public/sw.js` · `scripts/gerar-icones.mjs` |
+| 7 | Telemetria de uso | `/uso` |
+| 8 | Auditoria | `lib/audit.ts` · `/auditoria` |
+| 9 | Retenção de áudio | `apps/worker/src/handlers/retention.ts` |
+| 10 | LGPD Art. 18 | `lib/lgpd.ts` · `/configuracoes/dados` |
+| 11 | Rate limiting | `lib/rate-limit.ts` · `lib/limites.ts` |
+| 12 | Privacidade, termos, revisão | `/privacidade` · `/termos` · [REVISAO-DE-SEGURANCA.md](./REVISAO-DE-SEGURANCA.md) |
+
+**O que ficou de fora, de propósito e nomeado:** as oito pendências da
+[revisão de segurança](./REVISAO-DE-SEGURANCA.md#️-o-que-continua-aberto).
+Nenhuma bloqueia o primeiro usuário; todas precisam de decisão antes de
+escalar.
+
+**Três coisas que este plano previa de um jeito e foram feitas de outro**, cada
+uma explicada no lugar em que está implementada:
+
+1. **Auth pelo Supabase** virou auth por senha atrás de uma costura. Construir
+   só contra o Supabase exigiria projeto provisionado para qualquer pessoa
+   rodar `pnpm dev` — inclusive a Trilha A, que não tem nada a ver com login —
+   e código de integração nunca executado é rascunho com cara de pronto.
+   [ADR-0004](./adr/0004-autenticacao.md).
+2. **Retenção de áudio** virou varredura em vez de job agendado no envio: só a
+   varredura respeita uma mudança de `AUDIO_RETENTION_DAYS` sobre o que já
+   existe, que é justamente quando se quer efeito imediato.
+3. **A exportação** ganhou tela própria em vez de entrar na revisão da
+   consulta, porque aquela tela é da Trilha A. `ExportarDocumento` é um
+   componente exatamente para que ela possa incorporá-lo quando quiser.
+
+---
+
+## Como isto foi construído (o plano original, preservado)
+
+O que vem abaixo é o plano como foi escrito antes de a primeira linha existir,
+inclusive o aviso de migration da Fase 0. Preservado no tempo verbal original:
+é o registro do raciocínio, e reescrevê-lo no passado apagaria a diferença
+entre o que foi previsto e o que foi descoberto fazendo.
 
 ---
 

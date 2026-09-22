@@ -55,36 +55,45 @@ pode não funcionar.
 
 ## Trilha B — o escopo completo
 
+> **Estado em 22/09/2026: as duas listas abaixo estão fechadas.** O caminho
+> percorrido, fase a fase e com as decisões de cada uma, está em
+> [PLANO-TRILHA-B.md](./PLANO-TRILHA-B.md); as pendências de segurança que
+> sobraram — nomeadas, não escondidas — estão em
+> [REVISAO-DE-SEGURANCA.md](./REVISAO-DE-SEGURANCA.md).
+
 ### Marco 5 — o produto ao redor
 
-- [ ] **Auth real** substituindo o seletor de usuário de desenvolvimento
-      (`UserSwitcher`). Supabase Auth, região `sa-east-1`.
-- [ ] **Onboarding**: perfil, especialidade, registro profissional, assinatura
-- [ ] **CRUD de pacientes com busca** — hoje existe só o cadastro mínimo
-- [ ] **Gravação no navegador endurecida**: upload em pedaços, retomada se a rede
+- [x] **Auth real** substituindo o seletor de usuário de desenvolvimento
+      (`UserSwitcher`, removido). Feita com senha própria atrás de uma costura;
+      o Supabase Auth entra por ela sem tocar em rota nem em consulta — o que
+      falta está no [ADR-0004](./adr/0004-autenticacao.md).
+- [x] **Onboarding**: perfil, especialidade, registro profissional, assinatura
+- [x] **CRUD de pacientes com busca** — hoje existe só o cadastro mínimo
+- [x] **Gravação no navegador endurecida**: upload em pedaços, retomada se a rede
       cair, aviso de bateria e de permissão de microfone.
       *Este item parece pequeno e não é. É onde o mobile real machuca.*
-- [ ] **Pasta do paciente** com histórico de sessões
-- [ ] **Registro de consentimento** antes de gravar (texto + carimbo de tempo + método)
-- [ ] **Export**: PDF e "copiar para o prontuário"
-- [ ] **Quota do plano grátis verificada ANTES de processar** — nunca depois,
+- [x] **Pasta do paciente** com histórico de sessões
+- [x] **Registro de consentimento** antes de gravar (texto + carimbo de tempo + método)
+- [x] **Export**: PDF e "copiar para o prontuário"
+- [x] **Quota do plano grátis verificada ANTES de processar** — nunca depois,
       senão o custo já foi pago quando o limite é descoberto
-- [ ] **PWA**: manifest, service worker, instalável, ícone
-- [ ] **Telemetria de custo por sessão** — a tabela `usage_events` já existe e já
-      recebe dados; falta a tela que os lê
+- [x] **PWA**: manifest, service worker, instalável, ícone
+- [x] **Telemetria de custo por sessão** — a tela está em `/uso`
 
 ### Marco 6 — endurecimento e LGPD
 
-- [ ] Trilha de auditoria (`audit_log` já existe no schema, ninguém escreve nela)
-- [ ] Retenção: apagar o áudio após `AUDIO_RETENTION_DAYS` — é um handler novo no
+- [x] Trilha de auditoria — `audit_log` recebe escrita por `audit_append()`, e
+      o profissional lê a própria em `/auditoria`
+- [x] Retenção: apagar o áudio após `AUDIO_RETENTION_DAYS` — é um handler novo no
       worker, registrado ao lado de `transcribe` e `generate_note`
-- [ ] Exclusão de conta e portabilidade (LGPD Art. 18)
-- [ ] Política de privacidade e termos, com subprocessadores listados
-- [ ] Rate limiting nas rotas caras
-- [ ] Revisão de segurança antes do primeiro usuário real
+- [x] Exclusão de conta e portabilidade (LGPD Art. 18)
+- [x] Política de privacidade e termos, com subprocessadores listados
+- [x] Rate limiting nas rotas caras
+- [x] Revisão de segurança antes do primeiro usuário real
 
-> Os testes de RLS do Marco 6 **já estão prontos** (`pnpm db:test-rls`, 17
-> asserções). Rode-os sempre que mexer no schema.
+> Os testes de RLS do Marco 6 **já estão prontos** (`pnpm db:test-rls`, agora
+> 21 asserções — as quatro novas cobrem a escrita da trilha de auditoria).
+> Rode-os sempre que mexer no schema.
 
 ---
 
@@ -274,6 +283,6 @@ Na Trilha B você não precisa de LLM nenhum. Se em algum momento precisar, use
 | Nota ancorada com conferência determinística | `packages/core/src/note.ts` |
 | Scripts de subida no Windows | `atalhos/` |
 
-`usage_events` e `audit_log` **existem no schema e estão vazias**. A primeira já
-recebe escrita do worker; a segunda ainda não recebe de ninguém. São duas das
-tarefas da Trilha B, e as tabelas já estão no lugar.
+`usage_events` e `audit_log` **agora recebem escrita e têm tela**: `/uso` e
+`/auditoria`. Eram as duas tarefas que a Trilha B herdou com a tabela pronta e
+sem ninguém escrevendo nela.

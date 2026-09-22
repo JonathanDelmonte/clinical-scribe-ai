@@ -23,7 +23,7 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 
 ---
 
-## Estado atual — 15/09/2026
+## Estado atual — 22/09/2026
 
 > Atualize esta tabela ao fechar cada marco. Um plano que não diz onde o projeto
 > está é um plano que ninguém consulta.
@@ -35,8 +35,8 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 | **2** — Esqueleto andante | ✅ completo | — |
 | **3** — Papel | ✅ **completo, e além** | Método B **e** Método A (impressão vocal), que o plano só previa se B ficasse abaixo de 95%. Ver a ressalva de calibração abaixo. |
 | **4** — Nota ancorada ⭐ | ✅ **funcional** | Verificador de suporte (2ª passada); edição livre da nota; aprovação com clique; execução do objetivo da sessão como geração separada. |
-| **5** — Produto ao redor | ❌ não iniciado | Tudo. É o maior bloco restante — ver [DIVISAO-DE-TRABALHO.md](./DIVISAO-DE-TRABALHO.md). |
-| **6** — Endurecimento e LGPD | 🔨 parcial | Só os testes de RLS existem (17 asserções, no CI). |
+| **5** — Produto ao redor | ✅ completo | Auth real, onboarding, CRUD de pacientes com busca, gravação endurecida, consentimento versionado, export em texto e PDF, quota antes de processar, PWA, telemetria de custo. Ver [PLANO-TRILHA-B.md](./PLANO-TRILHA-B.md). |
+| **6** — Endurecimento e LGPD | ✅ **completo, com pendências nomeadas** | Auditoria, retenção de áudio, portabilidade e exclusão de conta, rate limiting, privacidade e termos. As 8 pendências de segurança estão listadas e justificadas em [REVISAO-DE-SEGURANCA.md](./REVISAO-DE-SEGURANCA.md) — nenhuma é bloqueante para o primeiro usuário, e todas precisam de decisão antes de escalar. |
 
 ### Fila da Trilha A — o que vem depois
 
@@ -56,8 +56,13 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
    sustenta a afirmação. **Adiado de propósito:** medir a frequência do problema
    antes de gastar uma chamada por nota.
 
-**Os dois marcos ⭐ estão vencidos.** O que resta é majoritariamente trabalho
-conhecido — que leva tempo mas não falha.
+**Os dois marcos ⭐ estão vencidos**, e o trabalho conhecido dos Marcos 5 e 6
+também: a Trilha B fechou as doze fases do
+[PLANO-TRILHA-B.md](./PLANO-TRILHA-B.md).
+
+O que resta para o MVP não é mais construção — é a fila da Trilha A acima, a
+decisão de fornecedor de nuvem (ADR-0002) e as pendências nomeadas na
+[revisão de segurança](./REVISAO-DE-SEGURANCA.md).
 
 ### Três medições que mudaram o plano
 
