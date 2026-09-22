@@ -1,9 +1,11 @@
+import type { Account } from "@scribe/core";
 import { jobs, sessions } from "@scribe/db";
 import { extensionOf, sessionAudioKey } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
+import { verificarQuota } from "@/lib/quota";
 import { storage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -55,11 +57,27 @@ export async function POST(
   const mapaBruto = form?.get("audioMap");
   let silenceRemovedMs: number | null = null;
   let speechRegions: unknown = null;
+  /**
+   * Duração declarada pelo dispositivo, do áudio que está subindo.
+   *
+   * Serve para a conferência de quota ANTES do processamento. Dispositivo
+   * mente, e a defesa não é confiar nele: o consumo do mês vem de
+   * `usage_events`, escrito pelo worker com a duração real medida no áudio.
+   * Uma mentira aqui passa por uma sessão e é barrada na seguinte.
+   */
+  let durationMs: number | null = null;
   if (typeof mapaBruto === "string") {
     try {
-      const m = JSON.parse(mapaBruto) as { regions?: unknown; removedMs?: unknown };
+      const m = JSON.parse(mapaBruto) as {
+        regions?: unknown;
+        removedMs?: unknown;
+        durationMs?: unknown;
+      };
       if (typeof m.removedMs === "number" && Number.isFinite(m.removedMs)) {
         silenceRemovedMs = Math.max(0, Math.round(m.removedMs));
+      }
+      if (typeof m.durationMs === "number" && Number.isFinite(m.durationMs)) {
+        durationMs = Math.max(0, Math.round(m.durationMs));
       }
       if (Array.isArray(m.regions)) speechRegions = m.regions;
     } catch {
@@ -87,7 +105,50 @@ export async function POST(
 
     const key = sessionAudioKey(me.id, session.id, extension);
     const bytes = new Uint8Array(await file.arrayBuffer());
+
+    /**
+     * O áudio é gravado ANTES da conferência de quota, e isso é deliberado.
+     *
+     * A consulta já aconteceu. Recusar o upload por quota apagaria uma
+     * gravação que não existe em outro lugar e não pode ser refeita — as
+     * pessoas já foram embora. O que a quota protege é o CUSTO, e o custo está
+     * no processamento, não no disco.
+     *
+     * Então a ordem é: guarda o áudio, confere a quota, e só enfileira se
+     * couber. Quem estourou o plano fica com a gravação intacta e uma sessão
+     * que diz exatamente o que aconteceu.
+     */
     await storage.put(key, bytes);
+
+    const account: Account = {
+      role: me.role,
+      plan: me.plan,
+      preferredEngine: me.preferredEngine,
+    };
+    const quota = await verificarQuota(
+      tx,
+      account,
+      durationMs === null ? null : durationMs / 60_000,
+    );
+
+    if (!quota.permitido) {
+      await tx
+        .update(sessions)
+        .set({
+          audioPath: key,
+          status: "failed",
+          endedAt: new Date(),
+          durationMs,
+          silenceRemovedMs,
+          speechRegions,
+          failureReason:
+            `${quota.motivo} A gravação está guardada e será processada ` +
+            `quando houver quota — no próximo mês, ou mudando de plano.`,
+        })
+        .where(eq(sessions.id, session.id));
+
+      return { quotaExcedida: true, motivo: quota.motivo, quota: quota.quota } as const;
+    }
 
     await tx
       .update(sessions)
@@ -95,6 +156,7 @@ export async function POST(
         audioPath: key,
         status: "uploaded",
         endedAt: new Date(),
+        durationMs,
         failureReason: null,
         silenceRemovedMs,
         speechRegions,
@@ -110,7 +172,7 @@ export async function POST(
       kind: "transcribe",
     });
 
-    return { ok: true, bytes: file.size, key } as const;
+    return { ok: true, bytes: file.size, key, quota: quota.quota } as const;
   });
 
   if (result === null) {
@@ -118,6 +180,15 @@ export async function POST(
   }
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 404 });
+  }
+  if ("quotaExcedida" in result) {
+    // 402: a requisição está correta, a gravação foi guardada, e o que falta
+    // é plano. 403 diria "você não pode", que não é verdade — pode, no mês que
+    // vem. 429 diria "tente de novo já já", que também não.
+    return NextResponse.json(
+      { error: result.motivo, quota: result.quota, audioPreservado: true },
+      { status: 402 },
+    );
   }
 
   return NextResponse.json(result, { status: 202 });
