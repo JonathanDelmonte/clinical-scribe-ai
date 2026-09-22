@@ -234,6 +234,31 @@ grant usage on schema auth to authenticated;
 grant execute on function auth.uid() to authenticated;
 grant execute on function auth.professional_id() to authenticated;
 
+-- -----------------------------------------------------------------------------
+-- service_role — a identidade que IGNORA as políticas
+--
+-- O papel já era criado em `00-extensions.sql` e não tinha concessão nenhuma:
+-- funcionava porque, em desenvolvimento, a conexão é superusuário e nunca
+-- precisou trocar de papel. Isso deixava uma armadilha pronta — o dia em que
+-- alguém rodasse o worker com um papel comum, tudo falharia com "permission
+-- denied", longe daqui.
+--
+-- Quem precisa dele, e por quê:
+--   • o worker, que escreve trechos e notas de TODOS os profissionais;
+--   • a conferência de e-mail e senha no login, que precisa encontrar uma
+--     conta ANTES de saber de quem ela é — ver lib/auth/accounts.ts.
+--
+-- ⚠️ `set local role service_role` desliga o isolamento multi-tenant inteiro
+--    pelo resto da transação. Toda vez que aparecer, o comentário ao lado
+--    precisa dizer por que não deu para fazer sob RLS.
+-- -----------------------------------------------------------------------------
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage on all sequences in schema public to service_role;
+grant usage on schema auth to service_role;
+grant execute on function auth.uid() to service_role;
+grant execute on function auth.professional_id() to service_role;
+
 -- =============================================================================
 -- LEMBRETE: o Marco 6 exige uma suíte automatizada que tente ler dados de
 -- outro profissional e FALHE O BUILD se conseguir. Política escrita não é

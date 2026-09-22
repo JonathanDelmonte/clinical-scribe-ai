@@ -16,6 +16,18 @@ export interface AudioStorage {
   get(key: string): Promise<Uint8Array<ArrayBuffer>>;
   remove(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
+  /**
+   * As chaves sob um prefixo, em ordem.
+   *
+   * Existe para a retomada de upload: quando a rede cai no meio do envio, o
+   * navegador precisa saber quais pedaços já chegaram, e perguntar
+   * `exists()` para cada índice possível é N requisições para responder o que
+   * uma responde.
+   *
+   * Prefixo vazio devolve tudo; prefixo inexistente devolve lista vazia, e
+   * não erro — "não há nada aqui" é uma resposta, não uma falha.
+   */
+  list(prefix: string): Promise<string[]>;
 }
 
 /**
@@ -34,6 +46,42 @@ export function sessionAudioKey(
 ): string {
   const ext = extension.replace(/^\./, "").toLowerCase();
   return `${professionalId}/${sessionId}.${ext}`;
+}
+
+/**
+ * Chave dos pedaços de um upload em andamento.
+ *
+ * Uma pasta por sessão, separada do áudio final: assim a lista de pedaços é um
+ * `list()` de um prefixo, e a limpeza depois da montagem apaga uma pasta
+ * inteira sem risco de levar junto o arquivo que acabou de ser montado.
+ */
+export function sessionPartKey(
+  professionalId: string,
+  sessionId: string,
+  index: number,
+): string {
+  // Índice com largura fixa: é o que faz a ordenação alfabética das chaves
+  // coincidir com a ordem dos pedaços. Sem o zero à esquerda, "10" vem antes
+  // de "2" — e o áudio remontado fica com o meio da consulta fora de ordem.
+  return `${professionalId}/partes/${sessionId}/${String(index).padStart(5, "0")}`;
+}
+
+/** O prefixo de todos os pedaços de uma sessão. */
+export function sessionPartsPrefix(professionalId: string, sessionId: string): string {
+  return `${professionalId}/partes/${sessionId}`;
+}
+
+/**
+ * Chave de um arquivo do próprio profissional — hoje, a assinatura.
+ *
+ * Mesma regra do áudio: o dono vem primeiro no caminho, para que a política de
+ * acesso do armazenamento seja um prefixo e não uma consulta ao banco.
+ */
+export function professionalFileKey(professionalId: string, name: string): string {
+  if (!/^[a-z0-9._-]+$/.test(name)) {
+    throw new Error(`Nome de arquivo inválido: ${name}`);
+  }
+  return `${professionalId}/perfil/${name}`;
 }
 
 /** Extensão do nome do arquivo, ou `webm` — o formato que o MediaRecorder dá. */

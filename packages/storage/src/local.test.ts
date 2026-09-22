@@ -4,7 +4,14 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { extensionOf, sessionAudioKey, type AudioStorage } from "./index";
+import {
+  extensionOf,
+  professionalFileKey,
+  sessionAudioKey,
+  sessionPartKey,
+  sessionPartsPrefix,
+  type AudioStorage,
+} from "./index";
 import { createLocalStorage } from "./local";
 
 let root: string;
@@ -46,6 +53,40 @@ describe("armazenamento local", () => {
   });
 });
 
+describe("listagem por prefixo", () => {
+  it("devolve lista vazia para prefixo que não existe", async () => {
+    expect(await storage.list("prof-9/partes/inexistente")).toEqual([]);
+  });
+
+  it("devolve as chaves sob o prefixo, e só elas", async () => {
+    await storage.put("prof-2/partes/s1/00000", bytes("a"));
+    await storage.put("prof-2/partes/s1/00001", bytes("b"));
+    await storage.put("prof-2/partes/s2/00000", bytes("c"));
+
+    expect(await storage.list("prof-2/partes/s1")).toEqual([
+      "prof-2/partes/s1/00000",
+      "prof-2/partes/s1/00001",
+    ]);
+  });
+
+  /**
+   * É por isto que o índice leva zeros à esquerda: a ordem da listagem é a
+   * ordem em que os pedaços voltam a ser um áudio. Com "2" e "10" crus, o
+   * décimo pedaço entraria antes do segundo e a consulta remontada teria o
+   * meio fora de lugar — sem erro nenhum, só um áudio errado.
+   */
+  it("ordena o pedaço 10 depois do pedaço 2", async () => {
+    for (const i of [2, 10, 1]) {
+      await storage.put(sessionPartKey("prof-3", "s1", i), bytes(String(i)));
+    }
+    expect(await storage.list(sessionPartsPrefix("prof-3", "s1"))).toEqual([
+      "prof-3/partes/s1/00001",
+      "prof-3/partes/s1/00002",
+      "prof-3/partes/s1/00010",
+    ]);
+  });
+});
+
 describe("travessia de caminho", () => {
   // A chave é composta com dados que vieram do navegador. Se `../` passar,
   // um upload consegue escrever em qualquer lugar do disco do servidor.
@@ -76,6 +117,22 @@ describe("convenção de chave", () => {
   it("aceita extensão com ou sem ponto, e normaliza", () => {
     expect(sessionAudioKey("p", "s", ".WAV")).toBe("p/s.wav");
   });
+
+  it("põe o dono primeiro também nos arquivos de perfil", () => {
+    expect(professionalFileKey("prof-1", "assinatura.png")).toBe(
+      "prof-1/perfil/assinatura.png",
+    );
+  });
+
+  // O nome do arquivo de perfil entra na composição da chave, então precisa
+  // ser recusado ANTES de virar caminho — a defesa de `pathFor` é a segunda
+  // linha, não a única.
+  it.each(["../fora", "a/b", "assinatura.png ", ""])(
+    "recusa o nome de arquivo de perfil %s",
+    (nome) => {
+      expect(() => professionalFileKey("prof-1", nome)).toThrow(/inválido/);
+    },
+  );
 
   it.each([
     ["gravacao.webm", "webm"],

@@ -23,7 +23,7 @@ try {
 const config: NextConfig = {
   // Os pacotes internos exportam TypeScript direto de `src/`, sem passo de
   // build. Um dev solo não precisa compilar pacotes internos para consumi-los.
-  transpilePackages: ["@scribe/core", "@scribe/db", "@scribe/storage"],
+  transpilePackages: ["@scribe/auth", "@scribe/core", "@scribe/db", "@scribe/storage"],
 
   // Vamos lidar com áudio de consulta — vale apertar os cabeçalhos desde já,
   // antes que alguma dependência comece a chamar endpoint inesperado.

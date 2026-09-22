@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // `node:crypto` é a única dependência do pacote — e é o que o torna
+    // possível sem nenhum pacote nativo. Ver password.ts.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

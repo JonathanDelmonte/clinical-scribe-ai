@@ -12,6 +12,7 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@scribe/audio-browser": "workspace:*",
+    "@scribe/auth": "workspace:*",
     "@scribe/core": "workspace:*",
     "@scribe/db": "workspace:*",
     "@scribe/storage": "workspace:*",

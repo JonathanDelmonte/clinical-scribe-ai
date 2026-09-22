@@ -5,7 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SessionRecorder } from "@/components/SessionRecorder";
-import { asCurrentProfessional } from "@/lib/auth";
+import { asCurrentUser, exigirProfissional } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,9 @@ export default async function PatientPage({
 }) {
   const { id } = await params;
 
-  const data = await asCurrentProfessional(async (tx, me) => {
+  const me = await exigirProfissional();
+
+  const data = await asCurrentUser(async (tx) => {
     // Sob RLS: paciente de outro profissional não é encontrado, ponto.
     const [patient] = await tx
       .select()
@@ -42,12 +44,12 @@ export default async function PatientPage({
       .where(eq(sessions.patientId, patient.id))
       .orderBy(desc(sessions.createdAt));
 
-    return { me, patient, sessions: rows };
+    return { patient, sessions: rows };
   }).catch(() => null);
 
   if (data === null || data === undefined) notFound();
 
-  const { me, patient, sessions: sessionRows } = data;
+  const { patient, sessions: sessionRows } = data;
   const account: Account = {
     role: me.role,
     plan: me.plan,
