@@ -97,6 +97,25 @@ export default async function RootLayout({
           </div>
         </header>
         {children}
+
+        {/*
+         * O rodapé fica fora do `main` de cada página e vale para todas,
+         * inclusive as de login e cadastro. Um documento de privacidade que só
+         * é alcançável depois de entrar é um documento que a pessoa lê depois
+         * de já ter decidido confiar.
+         */}
+        <footer className="mt-16 border-t border-line">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-1 px-5 py-4 text-xs text-muted">
+            <span>Consulta Viva</span>
+            <Link href="/privacidade" className="hover:text-ink">
+              privacidade
+            </Link>
+            <Link href="/termos" className="hover:text-ink">
+              termos
+            </Link>
+            <span className="ml-auto">seus dados não treinam nenhuma IA</span>
+          </div>
+        </footer>
       </body>
     </html>
   );
