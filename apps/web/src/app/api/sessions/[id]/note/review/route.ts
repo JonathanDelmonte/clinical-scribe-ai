@@ -8,6 +8,7 @@ import { documents, sessions, transcriptSegments } from "@scribe/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -173,6 +174,25 @@ export async function PATCH(
         .update(sessions)
         .set({ status: "approved" })
         .where(eq(sessions.id, session.id));
+
+      /**
+       * O evento mais importante da trilha: é aqui que um rascunho produzido
+       * por uma máquina vira registro assinado por uma pessoa. Quantas
+       * afirmações foram assumidas sem âncora vai junto — é o número que
+       * responde "com que grau de conferência isto foi assinado".
+       */
+      await auditar(tx, {
+        acao: ACOES.notaAprovada,
+        entidade: "documents",
+        entidadeId: doc.id,
+        metadados: {
+          sessao: session.id,
+          afirmacoes: allStatements(saneadas).length,
+          assumidasSemAncora: allStatements(saneadas).filter(
+            (a) => a.confirmedAt !== undefined,
+          ).length,
+        },
+      });
     }
 
     return { status: 200, approved: querAprovar, pending: check.pending } as const;

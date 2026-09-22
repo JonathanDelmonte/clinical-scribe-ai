@@ -3,6 +3,7 @@ import { professionalFileKey } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { storage } from "@/lib/storage";
 
@@ -82,6 +83,16 @@ export async function POST(request: Request) {
       })
       .where(eq(professionals.id, me.id))
       .returning({ id: professionals.id });
+
+    await auditar(tx, {
+      acao: ACOES.perfilAtualizado,
+      entidade: "professionals",
+      entidadeId: me.id,
+      metadados: {
+        primeiraVez: me.onboardedAt === null,
+        assinatura: signatureKey !== me.signatureUrl,
+      },
+    });
 
     return { ok: true, id: atualizado?.id } as const;
   });

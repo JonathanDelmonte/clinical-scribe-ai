@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { ACOES, auditarSessaoAtual } from "@/lib/audit";
 import { encerrarSessao } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,9 @@ export const dynamic = "force-dynamic";
  * `auth/token.ts` explica a escolha.
  */
 export async function POST() {
+  // Registra ANTES de apagar o cookie: depois dele não há mais identidade a
+  // quem atribuir o evento.
+  await auditarSessaoAtual({ acao: ACOES.sair, entidade: "auth" });
   await encerrarSessao();
   return NextResponse.json({ ok: true });
 }

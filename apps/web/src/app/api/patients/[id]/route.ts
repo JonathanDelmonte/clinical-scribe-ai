@@ -3,6 +3,7 @@ import { count, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +50,20 @@ export async function PATCH(
       .where(eq(patients.id, id))
       .returning();
 
-    return row ?? null;
+    if (row === undefined) return null;
+
+    await auditar(tx, {
+      acao: ACOES.pacienteEditado,
+      entidade: "patients",
+      entidadeId: row.id,
+      // Quais CAMPOS mudaram, nunca o conteúdo deles.
+      metadados: {
+        nascimento: parsed.data.birthDate !== undefined,
+        observacoes: parsed.data.notes !== undefined,
+      },
+    });
+
+    return row;
   });
 
   if (resultado === null || resultado === undefined) {
@@ -88,6 +102,13 @@ export async function DELETE(
       .select({ n: count() })
       .from(sessions)
       .where(eq(sessions.patientId, id));
+
+    await auditar(tx, {
+      acao: ACOES.pacienteArquivado,
+      entidade: "patients",
+      entidadeId: row.id,
+      metadados: { sessoesPreservadas: total?.n ?? 0 },
+    });
 
     return { id: row.id, sessoesPreservadas: total?.n ?? 0 };
   });

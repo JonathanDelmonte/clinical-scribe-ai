@@ -4,6 +4,7 @@ import type { Account } from "@scribe/core";
 import { jobs, sessions } from "@scribe/db";
 import { eq } from "drizzle-orm";
 
+import { ACOES, auditar } from "./audit";
 import type { Professional, Tx } from "./auth";
 import { verificarQuota, type Quota } from "./quota";
 
@@ -96,6 +97,13 @@ export async function registrarAudio(
       })
       .where(eq(sessions.id, sessionId));
 
+    await auditar(tx, {
+      acao: ACOES.audioEnviado,
+      entidade: "sessions",
+      entidadeId: sessionId,
+      metadados: { aceito: false, motivo: "quota", minutos: quota.quota.usados },
+    });
+
     return { quotaExcedida: true, motivo: quota.motivo, quota: quota.quota };
   }
 
@@ -111,6 +119,17 @@ export async function registrarAudio(
     professionalId: me.id,
     sessionId,
     kind: "transcribe",
+  });
+
+  await auditar(tx, {
+    acao: ACOES.audioEnviado,
+    entidade: "sessions",
+    entidadeId: sessionId,
+    metadados: {
+      aceito: true,
+      duracaoMs: audio.durationMs,
+      silencioRemovidoMs: audio.silenceRemovedMs,
+    },
   });
 
   return { ok: true, quota: quota.quota };

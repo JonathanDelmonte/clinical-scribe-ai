@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { ACOES, auditarComIdentidade } from "@/lib/audit";
 import { autenticar } from "@/lib/auth/accounts";
 import { abrirSessao } from "@/lib/auth/session";
 
@@ -35,5 +36,6 @@ export async function POST(request: Request) {
   }
 
   await abrirSessao(authUserId);
+  await auditarComIdentidade(authUserId, { acao: ACOES.entrar, entidade: "auth" });
   return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,7 @@ import { documents, jobs, patients, sessions, transcriptSegments } from "@scribe
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { ACOES, auditar, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +83,21 @@ export async function GET(
       .orderBy(desc(jobs.createdAt))
       .limit(1);
 
+    /**
+     * Esta rota é consultada em intervalos enquanto o worker trabalha, então
+     * auditar toda chamada encheria a trilha de ruído. O acesso que interessa
+     * é o que ENTREGA conteúdo clínico — e só existe conteúdo quando já há
+     * trechos transcritos.
+     */
+    if (segments.length > 0) {
+      await auditarLeitura(tx, {
+        acao: ACOES.sessaoAberta,
+        entidade: "sessions",
+        entidadeId: session.id,
+        metadados: { trechos: segments.length, documentos: objectives.length },
+      });
+    }
+
     return {
       session,
       patient: patient ?? null,
@@ -131,6 +147,12 @@ export async function DELETE(
     if (session.audioPath !== null) {
       return { error: "esta sessão tem gravação e não pode ser descartada" } as const;
     }
+
+    await auditar(tx, {
+      acao: ACOES.sessaoDescartada,
+      entidade: "sessions",
+      entidadeId: session.id,
+    });
 
     await tx.delete(sessions).where(eq(sessions.id, session.id));
     return { ok: true } as const;

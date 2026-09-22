@@ -3,6 +3,7 @@ import { and, desc, ilike, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { padraoDeBusca } from "@/lib/patients";
 
@@ -62,6 +63,15 @@ export async function POST(request: Request) {
         notes: parsed.data.notes ?? null,
       })
       .returning();
+
+    if (row !== undefined) {
+      // Só o ID. O nome do paciente é dado clínico e não entra na trilha.
+      await auditar(tx, {
+        acao: ACOES.pacienteCriado,
+        entidade: "patients",
+        entidadeId: row.id,
+      });
+    }
     return row;
   });
 
