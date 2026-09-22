@@ -97,6 +97,7 @@ export default async function PatientPage({
         </h2>
         <SessionRecorder
           patientId={patient.id}
+          patientName={patient.name}
           canChooseEngine={canChooseEngine(account)}
           defaultEngine={PLAN_DEFAULT_ENGINE[me.plan]}
           minutosRestantes={quota.restantes}

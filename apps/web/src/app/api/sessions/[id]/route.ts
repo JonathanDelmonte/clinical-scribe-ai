@@ -98,3 +98,52 @@ export async function GET(
   }
   return NextResponse.json(result);
 }
+
+/**
+ * Apaga uma sessão que nunca chegou a ter áudio.
+ *
+ * Existe por causa de uma consequência do novo fluxo de gravação: a sessão
+ * passa a ser criada QUANDO A GRAVAÇÃO COMEÇA, e não quando ela termina. Essa
+ * troca é necessária — o registro de ciência precisa carimbar o instante em
+ * que o paciente foi informado, que é antes da consulta, não depois — e tem o
+ * efeito colateral de deixar uma sessão vazia toda vez que alguém começa a
+ * gravar e desiste.
+ *
+ * O limite é rígido e deliberado: **só apaga o que não tem áudio.** Uma sessão
+ * com gravação é registro clínico, e a exclusão de registro clínico é outra
+ * coisa, com outra tela e outra confirmação (LGPD Art. 18). Aqui, uma sessão
+ * com `audio_path` preenchido é recusada, não importa o status.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const resultado = await asCurrentProfessional(async (tx) => {
+    const [session] = await tx
+      .select({ id: sessions.id, audioPath: sessions.audioPath })
+      .from(sessions)
+      .where(eq(sessions.id, id))
+      .limit(1);
+
+    if (session === undefined) return { error: "sessão não encontrada" } as const;
+    if (session.audioPath !== null) {
+      return { error: "esta sessão tem gravação e não pode ser descartada" } as const;
+    }
+
+    await tx.delete(sessions).where(eq(sessions.id, session.id));
+    return { ok: true } as const;
+  });
+
+  if (resultado === null) {
+    return NextResponse.json({ error: "não autenticado" }, { status: 401 });
+  }
+  if ("error" in resultado) {
+    return NextResponse.json(
+      { error: resultado.error },
+      { status: resultado.error === "sessão não encontrada" ? 404 : 409 },
+    );
+  }
+  return NextResponse.json(resultado);
+}

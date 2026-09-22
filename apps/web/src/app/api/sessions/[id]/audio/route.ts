@@ -1,28 +1,31 @@
-import type { Account } from "@scribe/core";
-import { jobs, sessions } from "@scribe/db";
+import { sessions } from "@scribe/db";
 import { extensionOf, sessionAudioKey } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
-import { verificarQuota } from "@/lib/quota";
 import { storage } from "@/lib/storage";
+import {
+  EXTENSOES_ACEITAS,
+  MAX_AUDIO_BYTES,
+  registrarAudio,
+  type AudioRecebido,
+} from "@/lib/upload";
 
 export const dynamic = "force-dynamic";
 
-/** ~200 MB. Uma consulta de uma hora em webm/opus fica bem abaixo disso. */
-const MAX_BYTES = 200 * 1024 * 1024;
-
 /**
- * Extensões aceitas.
+ * Envio direto, de uma vez só — o caminho do arquivo escolhido na tela.
  *
- * Lista fechada em vez de confiar no content-type: o tipo declarado vem do
- * cliente e não custa nada mentir. A extensão só decide o nome do arquivo em
- * disco — quem realmente decodifica é o ffmpeg dentro do serviço de ASR, que
- * olha o conteúdo.
+ * A gravação feita no navegador usa `audio/partes`, que sobe em pedaços e
+ * retoma quando a rede cai. Este caminho continua existindo porque um arquivo
+ * que já está no disco da pessoa não corre o risco que a retomada protege: se
+ * falhar, ele ainda está lá para tentar de novo.
+ *
+ * Os dois terminam em `registrarAudio()`. A regra de quota mora lá, uma vez
+ * só — duplicá-la seria criar um caminho em que ela é esquecida, e esse
+ * caminho custa dinheiro toda vez que alguém passa por ele.
  */
-const ALLOWED = new Set(["webm", "wav", "mp3", "m4a", "ogg", "opus", "flac", "mp4"]);
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -40,9 +43,9 @@ export async function POST(
   if (file.size === 0) {
     return NextResponse.json({ error: "arquivo vazio" }, { status: 400 });
   }
-  if (file.size > MAX_BYTES) {
+  if (file.size > MAX_AUDIO_BYTES) {
     return NextResponse.json(
-      { error: `arquivo maior que ${Math.round(MAX_BYTES / 1024 / 1024)} MB` },
+      { error: `arquivo maior que ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)} MB` },
       { status: 413 },
     );
   }
@@ -54,39 +57,10 @@ export async function POST(
    * pode impedir o áudio de ser gravado. A consulta já aconteceu; perder a
    * gravação por causa de metadado seria trocar o essencial pelo acessório.
    */
-  const mapaBruto = form?.get("audioMap");
-  let silenceRemovedMs: number | null = null;
-  let speechRegions: unknown = null;
-  /**
-   * Duração declarada pelo dispositivo, do áudio que está subindo.
-   *
-   * Serve para a conferência de quota ANTES do processamento. Dispositivo
-   * mente, e a defesa não é confiar nele: o consumo do mês vem de
-   * `usage_events`, escrito pelo worker com a duração real medida no áudio.
-   * Uma mentira aqui passa por uma sessão e é barrada na seguinte.
-   */
-  let durationMs: number | null = null;
-  if (typeof mapaBruto === "string") {
-    try {
-      const m = JSON.parse(mapaBruto) as {
-        regions?: unknown;
-        removedMs?: unknown;
-        durationMs?: unknown;
-      };
-      if (typeof m.removedMs === "number" && Number.isFinite(m.removedMs)) {
-        silenceRemovedMs = Math.max(0, Math.round(m.removedMs));
-      }
-      if (typeof m.durationMs === "number" && Number.isFinite(m.durationMs)) {
-        durationMs = Math.max(0, Math.round(m.durationMs));
-      }
-      if (Array.isArray(m.regions)) speechRegions = m.regions;
-    } catch {
-      // mapa inválido: segue sem ele
-    }
-  }
+  const mapa = lerMapa(form?.get("audioMap"));
 
   const extension = extensionOf(file.name);
-  if (!ALLOWED.has(extension)) {
+  if (!EXTENSOES_ACEITAS.has(extension)) {
     return NextResponse.json(
       { error: `formato .${extension} não aceito` },
       { status: 415 },
@@ -96,7 +70,7 @@ export async function POST(
   const result = await asCurrentProfessional(async (tx, me) => {
     // Sob RLS: sessão de outro profissional simplesmente não é encontrada.
     const [session] = await tx
-      .select()
+      .select({ id: sessions.id })
       .from(sessions)
       .where(eq(sessions.id, id))
       .limit(1);
@@ -104,75 +78,14 @@ export async function POST(
     if (session === undefined) return { error: "sessão não encontrada" } as const;
 
     const key = sessionAudioKey(me.id, session.id, extension);
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    await storage.put(key, new Uint8Array(await file.arrayBuffer()));
 
-    /**
-     * O áudio é gravado ANTES da conferência de quota, e isso é deliberado.
-     *
-     * A consulta já aconteceu. Recusar o upload por quota apagaria uma
-     * gravação que não existe em outro lugar e não pode ser refeita — as
-     * pessoas já foram embora. O que a quota protege é o CUSTO, e o custo está
-     * no processamento, não no disco.
-     *
-     * Então a ordem é: guarda o áudio, confere a quota, e só enfileira se
-     * couber. Quem estourou o plano fica com a gravação intacta e uma sessão
-     * que diz exatamente o que aconteceu.
-     */
-    await storage.put(key, bytes);
+    const audio: AudioRecebido = { key, ...mapa };
+    const registro = await registrarAudio(tx, me, session.id, audio);
 
-    const account: Account = {
-      role: me.role,
-      plan: me.plan,
-      preferredEngine: me.preferredEngine,
-    };
-    const quota = await verificarQuota(
-      tx,
-      account,
-      durationMs === null ? null : durationMs / 60_000,
-    );
-
-    if (!quota.permitido) {
-      await tx
-        .update(sessions)
-        .set({
-          audioPath: key,
-          status: "failed",
-          endedAt: new Date(),
-          durationMs,
-          silenceRemovedMs,
-          speechRegions,
-          failureReason:
-            `${quota.motivo} A gravação está guardada e será processada ` +
-            `quando houver quota — no próximo mês, ou mudando de plano.`,
-        })
-        .where(eq(sessions.id, session.id));
-
-      return { quotaExcedida: true, motivo: quota.motivo, quota: quota.quota } as const;
-    }
-
-    await tx
-      .update(sessions)
-      .set({
-        audioPath: key,
-        status: "uploaded",
-        endedAt: new Date(),
-        durationMs,
-        failureReason: null,
-        silenceRemovedMs,
-        speechRegions,
-      })
-      .where(eq(sessions.id, session.id));
-
-    // Enfileirar por último, e só depois de o áudio estar gravado: um job que
-    // roda antes do arquivo existir falha, faz retry com backoff e polui o
-    // log com um erro que não é erro nenhum.
-    await tx.insert(jobs).values({
-      professionalId: me.id,
-      sessionId: session.id,
-      kind: "transcribe",
-    });
-
-    return { ok: true, bytes: file.size, key, quota: quota.quota } as const;
+    return "ok" in registro
+      ? ({ ok: true, bytes: file.size, key, quota: registro.quota } as const)
+      : registro;
   });
 
   if (result === null) {
@@ -192,6 +105,37 @@ export async function POST(
   }
 
   return NextResponse.json(result, { status: 202 });
+}
+
+/** Lê `durationMs`, `removedMs` e as regiões, ignorando o que vier estranho. */
+function lerMapa(bruto: FormDataEntryValue | null | undefined): {
+  durationMs: number | null;
+  silenceRemovedMs: number | null;
+  speechRegions: unknown;
+} {
+  const vazio = { durationMs: null, silenceRemovedMs: null, speechRegions: null };
+  if (typeof bruto !== "string") return vazio;
+
+  try {
+    const m = JSON.parse(bruto) as {
+      regions?: unknown;
+      removedMs?: unknown;
+      durationMs?: unknown;
+    };
+    return {
+      durationMs:
+        typeof m.durationMs === "number" && Number.isFinite(m.durationMs)
+          ? Math.max(0, Math.round(m.durationMs))
+          : null,
+      silenceRemovedMs:
+        typeof m.removedMs === "number" && Number.isFinite(m.removedMs)
+          ? Math.max(0, Math.round(m.removedMs))
+          : null,
+      speechRegions: Array.isArray(m.regions) ? m.regions : null,
+    };
+  } catch {
+    return vazio;
+  }
 }
 
 const CONTENT_TYPES: Record<string, string> = {
