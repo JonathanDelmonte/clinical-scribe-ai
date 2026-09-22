@@ -1,25 +1,62 @@
 import { PLAN_DEFAULT_ENGINE, resolveEngine, type Account } from "@scribe/core";
-import { patients } from "@scribe/db";
-import { desc, isNull } from "drizzle-orm";
+import { patients, sessions } from "@scribe/db";
+import { and, count, desc, eq, ilike, isNull, max, sql } from "drizzle-orm";
 import Link from "next/link";
 
 import { NewPatientForm } from "@/components/NewPatientForm";
+import { PatientSearch } from "@/components/PatientSearch";
 import { asCurrentUser, exigirProfissional } from "@/lib/auth";
+import { padraoDeBusca } from "@/lib/patients";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   // Redireciona para o login, ou para o onboarding se o perfil estiver
   // incompleto. Daqui para baixo, `me` existe.
   const me = await exigirProfissional();
 
+  const { q } = await searchParams;
+  const padrao = padraoDeBusca(q ?? "");
+
+  /**
+   * A lista traz consultas e última visita junto, num `left join` agregado.
+   *
+   * A alternativa — listar pacientes e consultar as sessões de cada um — é o
+   * problema N+1 clássico: trinta pacientes viram trinta e uma consultas ao
+   * banco, e a tela inicial é a que mais abre no dia.
+   *
+   * `left` e não `inner`: paciente sem consulta nenhuma precisa aparecer. É
+   * justamente quem acabou de ser cadastrado.
+   */
   const rows =
     (await asCurrentUser((tx) =>
       tx
-        .select()
+        .select({
+          id: patients.id,
+          name: patients.name,
+          createdAt: patients.createdAt,
+          sessoes: count(sessions.id),
+          ultimaSessao: max(sessions.createdAt),
+        })
         .from(patients)
-        .where(isNull(patients.deletedAt))
-        .orderBy(desc(patients.createdAt)),
+        .leftJoin(sessions, eq(sessions.patientId, patients.id))
+        .where(
+          padrao === null
+            ? isNull(patients.deletedAt)
+            : and(isNull(patients.deletedAt), ilike(patients.name, padrao)),
+        )
+        .groupBy(patients.id)
+        // Quem foi atendido por último primeiro, e quem nunca foi logo atrás
+        // pela data de cadastro. Ordenar só por cadastro empurraria para o
+        // fim da lista exatamente o paciente que acabou de sair da sala.
+        .orderBy(
+          sql`max(${sessions.createdAt}) desc nulls last`,
+          desc(patients.createdAt),
+        ),
     ).catch(() => null)) ?? [];
 
   const account: Account = {
@@ -57,13 +94,19 @@ export default async function Home() {
         <NewPatientForm />
       </section>
 
+      <section className="mb-4">
+        <PatientSearch total={rows.length} />
+      </section>
+
       <section>
         <h2 className="mb-3 text-xs font-medium tracking-widest text-muted uppercase">
           Pacientes ({rows.length})
         </h2>
         {rows.length === 0 ? (
           <p className="text-sm text-muted">
-            Nenhum paciente ainda. Crie o primeiro acima.
+            {padrao === null
+              ? "Nenhum paciente ainda. Crie o primeiro acima."
+              : "Nenhum paciente com esse nome."}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -73,8 +116,17 @@ export default async function Home() {
                   href={`/pacientes/${p.id}`}
                   className="flex items-center gap-3 rounded-lg border border-line px-4 py-3 transition-colors hover:border-accent"
                 >
-                  <span className="font-medium">{p.name}</span>
-                  <span className="ml-auto text-sm text-muted">abrir pasta →</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{p.name}</span>
+                    <span className="block text-xs text-muted">
+                      {p.sessoes === 0
+                        ? "sem consultas"
+                        : `${p.sessoes} ${p.sessoes === 1 ? "consulta" : "consultas"}`}
+                      {p.ultimaSessao !== null &&
+                        ` · última em ${new Date(p.ultimaSessao).toLocaleDateString("pt-BR")}`}
+                    </span>
+                  </span>
+                  <span className="text-sm text-muted">abrir →</span>
                 </Link>
               </li>
             ))}

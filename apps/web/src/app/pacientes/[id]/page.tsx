@@ -4,8 +4,10 @@ import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { PatientDetails } from "@/components/PatientDetails";
 import { SessionRecorder } from "@/components/SessionRecorder";
 import { asCurrentUser, exigirProfissional } from "@/lib/auth";
+import { dataParaFormulario } from "@/lib/patients";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,22 @@ export default async function PatientPage({
       </nav>
 
       <h1 className="text-2xl font-semibold tracking-tight">{patient.name}</h1>
+      {patient.deletedAt !== null && (
+        <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">
+          Paciente arquivado. As consultas continuam aqui; ele não aparece mais na
+          lista.
+        </p>
+      )}
+
+      <section className="mt-6">
+        <PatientDetails
+          id={patient.id}
+          nome={patient.name}
+          nascimento={dataParaFormulario(patient.birthDate)}
+          observacoes={patient.notes ?? ""}
+          sessoes={sessionRows.length}
+        />
+      </section>
 
       <section className="mt-8">
         <h2 className="mb-4 text-xs font-medium tracking-widest text-muted uppercase">
