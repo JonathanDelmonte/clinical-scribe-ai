@@ -190,12 +190,24 @@ echo.
 echo     Aplicacao:  http://localhost:3000
 echo     Motor:      http://localhost:8001/health
 echo.
+REM ===========================================================================
+REM  A aplicacao pede login desde o Marco 5, e a senha das contas de
+REM  desenvolvimento passa correndo na saida do `pnpm db:seed`, la em cima.
+REM  Repetir aqui e a diferenca entre "abriu e funciona" e "abriu numa tela de
+REM  login e agora?".
+REM ===========================================================================
+echo     ENTRAR COM:
+echo       ana@consultaviva.local   (profissional, plano free)
+echo       dev@consultaviva.local   (developer, escolhe o motor)
+echo.
+echo       senha das duas:  consulta-viva-dev
+echo.
 echo     Duas janelas foram abertas (APLICACAO e WORKER).
 echo     Fechar qualquer uma delas derruba aquela parte.
 echo.
 echo     Para desligar tudo:  parar.bat
 echo.
-start "" http://localhost:3000
+start "" http://localhost:3000/entrar
 ping -n 4 127.0.0.1 >nul
 exit /b 0
 

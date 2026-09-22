@@ -7,6 +7,20 @@ Dois cliques, sem terminal.
 | **`iniciar.bat`** | Sobe tudo: Docker, banco, motor de transcrição, aplicação e worker. Abre o navegador no fim. |
 | **`parar.bat`** | Desliga tudo, preservando banco e modelos. |
 
+## Entrar na aplicação
+
+O navegador abre em `/entrar`, porque a aplicação pede login desde o Marco 5. O
+`pnpm db:seed` cria duas contas de desenvolvimento:
+
+| E-mail | Cargo | O que muda |
+|---|---|---|
+| `ana@consultaviva.local` | `professional` | O caso comum: plano grátis, motor `local`, quota de 300 min |
+| `dev@consultaviva.local` | `developer` | Escolhe o motor em cada sessão e não tem quota |
+
+**Senha das duas: `consulta-viva-dev`.** É pública de propósito — estas contas
+só existem em banco local, e `.local` não resolve em lugar nenhum. Ver
+[ADR-0004](../docs/adr/0004-autenticacao.md).
+
 ## O que o `iniciar.bat` faz, em ordem
 
 1. **Docker Desktop** — abre se estiver fechado e espera o daemon aceitar
