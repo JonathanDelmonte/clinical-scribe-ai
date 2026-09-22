@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
+import { limitarPorProfissional } from "@/lib/limites";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const barrado = await limitarPorProfissional("geracao");
+  if (barrado !== null) return barrado;
+
   const { id } = await params;
 
   const result = await asCurrentProfessional(async (tx, me) => {

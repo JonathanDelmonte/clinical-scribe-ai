@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { ACOES, auditarComIdentidade } from "@/lib/audit";
 import { criarConta } from "@/lib/auth/accounts";
+import { aplicarLimite, origemDaRequisicao } from "@/lib/limites";
 import { abrirSessao } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,12 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "dados inválidos" }, { status: 400 });
   }
+
+  const barrado = aplicarLimite({
+    nome: "cadastro",
+    chave: await origemDaRequisicao(),
+  });
+  if (barrado !== null) return barrado;
 
   const resultado = await criarConta(parsed.data);
   if (!resultado.ok) {

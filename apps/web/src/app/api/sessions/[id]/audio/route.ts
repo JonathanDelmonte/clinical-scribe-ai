@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 
 import { ACOES, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
+import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
 import {
   EXTENSOES_ACEITAS,
@@ -32,6 +33,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  const barrado = await limitarPorProfissional("upload");
+  if (barrado !== null) return barrado;
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ACOES, auditarComIdentidade } from "@/lib/audit";
-import { autenticar } from "@/lib/auth/accounts";
+import { autenticar, normalizarEmail } from "@/lib/auth/accounts";
+import { aplicarLimites, origemDaRequisicao } from "@/lib/limites";
 import { abrirSessao } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,21 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "dados inválidos" }, { status: 400 });
   }
+
+  /**
+   * Dois limites, e o segundo é o que importa.
+   *
+   * Por IP é a barreira óbvia e a mais fácil de contornar: basta trocar de
+   * rede, ou forjar `x-forwarded-for` se não houver um proxy confiável na
+   * frente. Por e-mail não tem como contornar — quem quer entrar NUMA conta
+   * precisa insistir NAQUELE e-mail, e é exatamente essa insistência que o
+   * limite mede.
+   */
+  const barrado = aplicarLimites(
+    { nome: "login", chave: await origemDaRequisicao() },
+    { nome: "login", chave: normalizarEmail(parsed.data.email) },
+  );
+  if (barrado !== null) return barrado;
 
   const authUserId = await autenticar(parsed.data.email, parsed.data.senha);
   if (authUserId === null) {

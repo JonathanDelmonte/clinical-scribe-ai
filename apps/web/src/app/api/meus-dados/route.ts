@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { asCurrentProfessional } from "@/lib/auth";
 import { auditarExportacao, exportarDados } from "@/lib/lgpd";
+import { limitarPorProfissional } from "@/lib/limites";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,9 @@ export const dynamic = "force-dynamic";
  * não pudesse ler pela interface.
  */
 export async function GET() {
+  const barrado = await limitarPorProfissional("exportacaoTotal");
+  if (barrado !== null) return barrado;
+
   const resultado = await asCurrentProfessional(async (tx, me) => {
     const dados = await exportarDados(tx, me);
     await auditarExportacao(tx, dados);
