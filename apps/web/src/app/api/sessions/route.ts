@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { CONSENT_METHODS, textoDoConsentimento } from "@/lib/consent";
 import { quotaDoMes } from "@/lib/quota";
@@ -89,6 +90,21 @@ export async function POST(request: Request) {
         consentText: textoDoConsentimento(parsed.data.consentMethod),
       })
       .returning();
+
+    if (session !== undefined) {
+      await auditar(tx, {
+        acao: ACOES.sessaoCriada,
+        entidade: "sessions",
+        entidadeId: session.id,
+        // O método do consentimento é rótulo, não conteúdo — e é o que se
+        // quer poder auditar depois.
+        metadados: {
+          paciente: patient.id,
+          consentimento: parsed.data.consentMethod,
+          motor: decision.engine,
+        },
+      });
+    }
 
     return { session, decision, quota } as const;
   });

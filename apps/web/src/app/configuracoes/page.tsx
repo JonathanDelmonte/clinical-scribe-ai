@@ -53,9 +53,12 @@ export default async function Configuracoes() {
             </span>
           </dd>
         </dl>
-        <p className="mt-4">
+        <p className="mt-4 flex flex-wrap gap-4">
           <Link href="/bem-vindo" className="text-sm text-accent hover:underline">
             editar perfil e assinatura →
+          </Link>
+          <Link href="/auditoria" className="text-sm text-accent hover:underline">
+            trilha de auditoria →
           </Link>
         </p>
         {me.role === "developer" && (

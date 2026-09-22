@@ -3,6 +3,7 @@ import { jobs, sessions } from "@scribe/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { ACOES, auditar } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { verificarQuota } from "@/lib/quota";
 
@@ -90,6 +91,13 @@ export async function POST(
       professionalId: me.id,
       sessionId: session.id,
       kind: "transcribe",
+    });
+
+    await auditar(tx, {
+      acao: ACOES.reprocessada,
+      entidade: "sessions",
+      entidadeId: session.id,
+      metadados: { statusAnterior: session.status },
     });
 
     return { ok: true, quota: quota.quota } as const;

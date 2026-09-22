@@ -3,6 +3,7 @@ import { extensionOf, sessionAudioKey } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { ACOES, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { storage } from "@/lib/storage";
 import {
@@ -174,7 +175,23 @@ export async function GET(
       .from(sessions)
       .where(eq(sessions.id, id))
       .limit(1);
-    return session?.audioPath ?? null;
+
+    if (session?.audioPath == null) return null;
+
+    /**
+     * O áudio da consulta é o dado mais sensível do sistema, e esta rota é a
+     * única que o entrega inteiro. Cada entrega fica registrada — inclusive as
+     * parciais, porque o navegador pede o arquivo em faixas ao buscar um
+     * trecho, e a trilha precisa refletir o acesso real.
+     */
+    await auditarLeitura(tx, {
+      acao: ACOES.audioBaixado,
+      entidade: "sessions",
+      entidadeId: id,
+      metadados: { faixa: request.headers.get("range") !== null },
+    });
+
+    return session.audioPath;
   });
 
   if (found === null || found === undefined) {

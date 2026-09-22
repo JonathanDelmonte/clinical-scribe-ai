@@ -2,6 +2,7 @@ import { documents, patients, sessions, transcriptSegments } from "@scribe/db";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { ACOES, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { gerarPdf } from "@/lib/export/pdf";
 import {
@@ -90,6 +91,23 @@ export async function GET(
       .from(transcriptSegments)
       .where(eq(transcriptSegments.sessionId, session.id))
       .orderBy(asc(transcriptSegments.startMs));
+
+    /**
+     * Exportar é o momento em que o documento sai do sistema — vai para o
+     * prontuário de terceiro, para um e-mail, para o paciente. É o evento
+     * mais importante desta trilha, porque é onde o controle acaba.
+     */
+    await auditarLeitura(tx, {
+      acao: ACOES.documentoExportado,
+      entidade: "documents",
+      entidadeId: doc.id,
+      metadados: {
+        sessao: session.id,
+        tipo: doc.type,
+        formato,
+        aprovado: doc.approvedAt !== null,
+      },
+    });
 
     return { session, patient: patient ?? null, doc, trechos, me } as const;
   });
