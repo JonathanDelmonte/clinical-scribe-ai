@@ -100,6 +100,46 @@ export const professionals = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     /** FK lógica para auth.users do Supabase. */
     authUserId: uuid("auth_user_id").notNull(),
+
+    /**
+     * Como a pessoa se identifica no login.
+     *
+     * `auth_user_id` é um UUID: serve de chave, não serve de credencial — não
+     * existe tela em que alguém digite um. O e-mail é a única coisa que o
+     * profissional sabe de cor sobre a própria conta.
+     *
+     * Guardado sempre em minúsculas, normalizado na aplicação, com índice
+     * único simples. A alternativa — índice sobre `lower(email)` — resolveria
+     * o mesmo problema deixando passar duas grafias diferentes na tabela, e
+     * "qual das duas é a de verdade" é uma pergunta que ninguém quer responder
+     * durante um incidente de login.
+     *
+     * Nulo é permitido porque as contas criadas antes do login existirem não
+     * têm e-mail, e uma migração que exigisse um valor inventado gravaria
+     * mentira no lugar de ausência.
+     */
+    email: text("email"),
+
+    /**
+     * Hash da senha — scrypt, com sal por usuário, formato em
+     * `apps/web/src/lib/auth/password.ts`.
+     *
+     * Nulo quando a identidade NÃO vive aqui: com `AUTH_PROVIDER=supabase`
+     * quem guarda e confere a senha é o Auth do Supabase, e esta coluna
+     * permanece vazia de propósito. Ver ADR-0004.
+     */
+    passwordHash: text("password_hash"),
+
+    /**
+     * Quando o perfil foi preenchido — distingue "conta criada" de "pronta
+     * para atender".
+     *
+     * Uma coluna em vez de derivar de `specialty is not null`: a especialidade
+     * é um campo do formulário e pode virar opcional amanhã; "a pessoa passou
+     * pelo onboarding" é um fato sobre a conta, e fato sobre a conta é coluna.
+     */
+    onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+
     name: text("name").notNull(),
     /** "nutrição", "psicologia", "clínica médica"… define o template da nota. */
     specialty: text("specialty"),
@@ -142,7 +182,10 @@ export const professionals = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("professionals_auth_user_idx").on(t.authUserId)],
+  (t) => [
+    uniqueIndex("professionals_auth_user_idx").on(t.authUserId),
+    uniqueIndex("professionals_email_idx").on(t.email),
+  ],
 );
 
 // -----------------------------------------------------------------------------
@@ -219,6 +262,17 @@ export const sessions = pgTable(
      */
     consentRecordedAt: timestamp("consent_recorded_at", { withTimezone: true }),
     consentMethod: text("consent_method"),
+
+    /**
+     * O TEXTO que o profissional confirmou ter comunicado ao paciente.
+     *
+     * Sem ele o registro guarda "alguém marcou uma caixa às 14h03" — que não
+     * responde à única pergunta que importa depois: **com o que exatamente a
+     * pessoa concordou?** O texto da tela muda com o tempo; o que foi aceito
+     * naquela consulta, não. Por isso a cópia fica na sessão, e não só uma
+     * referência à versão vigente.
+     */
+    consentText: text("consent_text"),
 
     /**
      * Quanto de silêncio o DISPOSITIVO removeu antes de enviar, e onde estava

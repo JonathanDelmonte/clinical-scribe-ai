@@ -74,6 +74,7 @@ do $$
 declare
   n bigint;
   txt text;
+  registro uuid;
 begin
   -- Sanidade: a resolução de identidade funciona?
   if auth.professional_id() <> '11111111-1111-1111-1111-111111111111' then
@@ -147,7 +148,11 @@ begin
     raise exception 'FALHA GRAVE: Ana apagou % pacientes do Bruno', n;
   end if;
 
-  -- AUDITORIA É SOMENTE LEITURA ------------------------------------------------
+  -- AUDITORIA: ESCRITA DIRETA É NEGADA ------------------------------------------
+  -- A aplicação registra a trilha através de `audit_append()`, que preenche
+  -- dono, ator e carimbo a partir da sessão autenticada. Escrever direto na
+  -- tabela permitiria escolher esses três — que é metade do estrago de uma
+  -- auditoria forjada.
   begin
     insert into audit_log (professional_id, action, entity)
     values ('11111111-1111-1111-1111-111111111111', 'forjado', 'sessions');
@@ -155,6 +160,39 @@ begin
   exception
     when insufficient_privilege then null;  -- esperado
   end;
+
+  -- AUDITORIA: A FUNÇÃO ESCREVE, E ATRIBUI A QUEM CHAMOU ------------------------
+  registro := audit_append('view', 'sessions',
+                           'a2a2a2a2-0000-0000-0000-000000000001',
+                           '{"segments":3}'::jsonb, '203.0.113.7', 'teste');
+  if registro is null then
+    raise exception 'FALHA: audit_append não registrou nada';
+  end if;
+
+  select count(*) into n from audit_log
+   where id = registro
+     and professional_id = '11111111-1111-1111-1111-111111111111'
+     and actor_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+     and action = 'view';
+  if n <> 1 then
+    raise exception 'FALHA: audit_append não atribuiu o registro à Ana';
+  end if;
+
+  -- AUDITORIA É IMUTÁVEL --------------------------------------------------------
+  -- Sem política de UPDATE e sem política de DELETE, a linha existe, é lida
+  -- pela dona, e não pode ser reescrita nem apagada por ela. É esta ausência
+  -- que transforma um log num registro de auditoria.
+  update audit_log set action = 'reescrito' where id = registro;
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'FALHA GRAVE: Ana reescreveu % registros da própria auditoria', n;
+  end if;
+
+  delete from audit_log where id = registro;
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'FALHA GRAVE: Ana apagou % registros da própria auditoria', n;
+  end if;
 
   -- FILA ------------------------------------------------------------------------
   -- Esta seção existe porque a falta dela deixou passar um bug real: a tabela
@@ -197,7 +235,7 @@ begin
     raise exception 'FALHA: Ana vê % jobs do Bruno', n;
   end if;
 
-  raise notice 'OK — isolamento multi-tenant verificado (17 asserções)';
+  raise notice 'OK — isolamento multi-tenant verificado (21 asserções)';
 end
 $$;
 
