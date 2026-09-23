@@ -74,6 +74,20 @@ export async function asCurrentProfessional<T>(
 }
 
 /**
+ * Para onde vai quem chegou aqui sem conta — e por que não é `/entrar`.
+ *
+ * O proxy já barrou quem não tem cookie. Então, quando uma página não acha a
+ * conta, quase sempre é porque o cookie é válido e a conta sumiu. Mandar para
+ * `/entrar` nesse estado cria um laço sem fim: o proxy vê o cookie bem
+ * assinado, conclui que a pessoa já entrou, e devolve para cá.
+ *
+ * A rota de sessão órfã confere de novo — distinguindo "a conta não existe"
+ * de "o banco não respondeu" — e só apaga o cookie no primeiro caso. Ver
+ * `app/api/auth/sessao-orfa/route.ts`.
+ */
+const SEM_CONTA = "/api/auth/sessao-orfa";
+
+/**
  * Para páginas: exige sessão e perfil preenchido, ou manda para onde falta.
  *
  * Três estados, três destinos. O do meio é o que costuma ser esquecido: uma
@@ -82,7 +96,7 @@ export async function asCurrentProfessional<T>(
  */
 export async function exigirProfissional(): Promise<Professional> {
   const me = await currentProfessional().catch(() => null);
-  if (me === null) redirect("/entrar");
+  if (me === null) redirect(SEM_CONTA);
   if (me.onboardedAt === null) redirect("/bem-vindo");
   return me;
 }
@@ -90,6 +104,6 @@ export async function exigirProfissional(): Promise<Professional> {
 /** Como `exigirProfissional`, mas aceita o perfil ainda incompleto. */
 export async function exigirSessao(): Promise<Professional> {
   const me = await currentProfessional().catch(() => null);
-  if (me === null) redirect("/entrar");
+  if (me === null) redirect(SEM_CONTA);
   return me;
 }
