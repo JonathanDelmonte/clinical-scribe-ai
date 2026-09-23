@@ -50,10 +50,11 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
    corrigiu um erro e, em troca, apagou frases verdadeiras, inventou um remédio
    e fabricou um sintoma. Ver ADR-0002. As listas continuam úteis como
    **dicionário de correção depois da transcrição**, que não tem como alucinar.
-4. **Limpeza de áudio só para o caminho das vozes** — limpar antes do Whisper
-   frequentemente PIORA a transcrição (ele foi treinado em áudio sujo), mas o
-   pyannote é o oposto. Bifurcar: áudio cru para o Whisper, limpo para a
-   diarização e a impressão vocal.
+4. ~~**Limpeza de áudio só para o caminho das vozes**~~ — **medida e
+   descartada.** A limpeza neural fundiu médico e paciente num falante só; a
+   branda não mudou nenhuma decisão de voz e fragmentou a diarização. A melhora
+   de 20% que ela aparentou sumiu com o controle. Ver ADR-0002. O que resta
+   para a separação em áudio ruim: **dois microfones**.
 5. **Verificador de suporte** — segunda passada que confere se o trecho citado
    sustenta a afirmação. **Adiado de propósito:** medir a frequência do problema
    antes de gastar uma chamada por nota.

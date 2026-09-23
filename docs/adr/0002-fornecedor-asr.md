@@ -325,3 +325,78 @@ a linha mostrou o dano.
   como alucinar. Não implementado.
 - Para o erro que motivou tudo ("a azar"), a ferramenta certa já existe: a
   correção do trecho pelo profissional, que guarda o par (errado → certo).
+
+## Limpeza de áudio para o caminho das vozes — medida e descartada
+
+> 23/09/2026 · mesma consulta real de 11:24 · pyannote 3.1 +
+> wespeaker-resnet34 · scripts em [`spikes/medicoes/`](../../spikes/medicoes/)
+
+A hipótese vinha de um contraste real: limpar ruído costuma **piorar** o Whisper
+(ele foi treinado em áudio sujo), mas diarização e impressão vocal medem timbre,
+e ruído é timbre estranho misturado. O desenho seria bifurcar — Whisper no áudio
+cru, vozes no limpo — e atacar os 0,17 de separação da consulta com máscara.
+
+Dois limpadores:
+
+- **Neural — DeepFilterNet 3.** Rede treinada para devolver fala limpa.
+- **Branda — subtração espectral** (`noisereduce`, estacionária, 80%). Tira o
+  ruído constante e mexe o mínimo possível na voz.
+
+### Antes da qualidade, o alinhamento
+
+Se a limpeza atrasasse o áudio, as marcações do pyannote ficariam deslocadas das
+palavras do Whisper, e a primeira palavra de cada fala iria para quem falou
+antes — sem erro nenhum. Correlação cruzada num trecho de 20 s: **0 amostras de
+atraso** nas duas (`pad=True` no DeepFilterNet compensa o filtro). Esse risco
+estava coberto.
+
+### Diarização refeita sobre o áudio limpo
+
+| | Cru | Neural | Branda |
+|---|---|---|---|
+| Fala por falante | 51% / 49% | **100% / 0%** | 51% / 49% |
+| Turnos | 147 | 295 | 195 |
+| Turnos < 0,7 s | 49 | 111 | 70 |
+| Margem entre as vozes | 0,146 | — | 0,175 |
+
+A neural **fundiu as duas pessoas numa só**: todos os 194 trechos foram para o
+mesmo falante. A trava "apenas um falante detectado" recusaria gerar nota — o
+defeito apareceria alto, não em silêncio — mas o recurso ficaria inútil.
+
+A branda preservou as duas vozes, fragmentou mais a diarização, e *pareceu*
+melhorar a margem em 20%.
+
+### O controle que desfez a melhora
+
+As margens acima foram medidas sobre agrupamentos diferentes — cada condição com
+a sua diarização. A subida podia ser impressão vocal mais nítida **ou** falas
+reagrupadas de outro jeito. Fixando a divisão do áudio cru e trocando só o áudio
+de onde sai a impressão vocal:
+
+| Mesma divisão, áudio da impressão vocal | Margem | Fala mais perto do próprio falante |
+|---|---|---|
+| cru | 0,145 | 132/138 (96%) |
+| branda | 0,154 | 132/138 (96%) |
+| neural | **−0,137** | 129/138 (93%) |
+
+A branda não muda **nenhuma** decisão fala a fala. Os 20% eram do reagrupamento.
+A neural tem margem negativa: os dois falantes ficaram mais parecidos entre si
+(0,758) do que cada fala com o próprio falante (0,621).
+
+### Por quê
+
+Um limpador neural não só subtrai ruído: ele reconstrói a voz em direção à "fala
+limpa" que aprendeu. O que distingue duas pessoas inclui textura e imperfeição de
+cada voz — exatamente o que a reconstrução uniformiza. Com máscara e microfone de
+celular as duas vozes já eram parecidas; limpas, ficaram iguais.
+
+### Decisão
+
+- **Nenhuma das duas entra no serviço.** Sem dependência nova, sem código de
+  produção: a neural destrói a separação, a branda não ajuda a impressão vocal e
+  piora a diarização.
+- Os scripts ficam em `spikes/medicoes/`, com as três armadilhas do
+  DeepFilterNet documentadas, para repetir com versões novas dos modelos.
+- O problema que motivou isto — separação de 0,17 em consulta com máscara —
+  continua aberto. A alavanca que resta sem custo é **dois microfones**: o canal
+  de cada pessoa é o gabarito de quem falou quando, e dispensa diarização.
