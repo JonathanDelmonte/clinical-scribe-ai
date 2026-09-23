@@ -34,9 +34,22 @@ export function padraoDeBusca(termo: string): string | null {
 export function idadeEmAnos(nascimento: Date, hoje: Date = new Date()): number | null {
   if (Number.isNaN(nascimento.getTime())) return null;
 
-  let anos = hoje.getFullYear() - nascimento.getFullYear();
-  const mes = hoje.getMonth() - nascimento.getMonth();
-  if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getDate())) {
+  // O NASCIMENTO é lido em UTC; o HOJE, em local. Os dois lados são datas de
+  // calendário, mas chegam aqui em referenciais diferentes.
+  //
+  // A coluna é `date`, sem fuso, e o driver entrega meia-noite UTC. Ler esse
+  // valor com métodos locais devolve o dia ANTERIOR em todo fuso a oeste de
+  // Greenwich — o Brasil inteiro. `new Date("1985-09-23").getDate()` é 22 em
+  // São Paulo, e a comparação de aniversário passa a errar por um dia.
+  //
+  // Já `hoje` é um instante real, e o aniversário acontece no calendário de
+  // quem está olhando a tela. Esse lado é local de propósito.
+  //
+  // Em UTC os dois referenciais coincidem, então esta diferença é invisível no
+  // CI e aparece só em produção.
+  let anos = hoje.getFullYear() - nascimento.getUTCFullYear();
+  const mes = hoje.getMonth() - nascimento.getUTCMonth();
+  if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getUTCDate())) {
     anos -= 1;
   }
 

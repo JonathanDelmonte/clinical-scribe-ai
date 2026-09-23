@@ -86,3 +86,31 @@ describe("datas na interface", () => {
     expect(dataParaFormulario(new Date("nada"))).toBe("");
   });
 });
+
+describe("idade e fuso horário", () => {
+  /**
+   * Regressão. A implementação anterior lia a data de nascimento com métodos
+   * locais. A coluna é `date` e o driver entrega meia-noite UTC, então em
+   * qualquer fuso a oeste de Greenwich — o Brasil inteiro — o dia escorregava
+   * para trás e a idade saía um ano errada perto do aniversário.
+   *
+   * O detalhe que fez isso passar despercebido: em UTC os dois referenciais
+   * coincidem. A suíte ficava verde no CI e o defeito só existia em produção.
+   */
+  it("a véspera do aniversário não conta o ano, no fuso do Brasil", () => {
+    const vespera = new Date("2026-09-22T12:00:00-03:00");
+    expect(idadeEmAnos(new Date("1985-09-23"), vespera)).toBe(40);
+  });
+
+  it("o dia do aniversário conta o ano, no fuso do Brasil", () => {
+    const aniversario = new Date("2026-09-23T12:00:00-03:00");
+    expect(idadeEmAnos(new Date("1985-09-23"), aniversario)).toBe(41);
+  });
+
+  it("primeiro de janeiro de madrugada em São Paulo ainda é o ano novo", () => {
+    // 01/01 às 00:30 em São Paulo é 03:30 UTC do mesmo dia — mas quem nasceu
+    // em 01/01 faz aniversário AGORA, no calendário de quem olha a tela.
+    const madrugada = new Date("2026-01-01T00:30:00-03:00");
+    expect(idadeEmAnos(new Date("2000-01-01"), madrugada)).toBe(26);
+  });
+});
