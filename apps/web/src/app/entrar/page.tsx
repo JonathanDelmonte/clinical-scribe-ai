@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AuthForm } from "@/components/AuthForm";
+import { EntrarComoTeste } from "@/components/EntrarComoTeste";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ export default async function Entrar({
           Criar uma
         </Link>
       </p>
+
+      <EntrarComoTeste destino={destino} />
     </main>
   );
 }
