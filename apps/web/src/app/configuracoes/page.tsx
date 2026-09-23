@@ -1,16 +1,20 @@
 import { PLAN_DEFAULT_ENGINE, resolveEngine, type Account } from "@scribe/core";
+import { cofreDisponivel } from "@scribe/auth";
 import { sessions } from "@scribe/db";
 import { and, isNotNull, isNull } from "drizzle-orm";
 import Link from "next/link";
 
+import { ChaveDeIA } from "@/components/ChaveDeIA";
 import { RetencaoDeAudio } from "@/components/RetencaoDeAudio";
 import { VoiceEnrollment } from "@/components/VoiceEnrollment";
 import { asCurrentProfessional, exigirProfissional } from "@/lib/auth";
+import { FORNECEDORES } from "@/lib/ia/fornecedores";
 
 export const dynamic = "force-dynamic";
 
 /** Espelha AUDIO_RETENTION_DAYS do worker. Só para exibir qual é o padrão. */
 const RETENCAO_PADRAO = Number(process.env["AUDIO_RETENTION_DAYS"] ?? 30);
+const MODELO_DO_SISTEMA = process.env["LLM_MODEL"] ?? "gemini-3.8-flash";
 
 export default async function Configuracoes() {
   const me = await exigirProfissional();
@@ -59,6 +63,29 @@ export default async function Configuracoes() {
       <h1 className="mb-8 text-2xl font-semibold tracking-tight">Configurações</h1>
 
       <VoiceEnrollment enrolledAt={me.voiceEnrolledAt?.toISOString() ?? null} />
+
+      {/*
+       * Só o que a tela precisa. A chave cifrada não atravessa esta fronteira
+       * nem por descuido: o componente recebe a dica, nunca o segredo.
+       */}
+      <ChaveDeIA
+        fornecedores={FORNECEDORES.map((f) => ({
+          id: f.id,
+          nome: f.nome,
+          ondeConseguir: f.ondeConseguir,
+          exemploModelo: f.exemploModelo,
+          aceitaBaseUrl: f.aceitaBaseUrl,
+        }))}
+        atual={{
+          provider: me.llmProvider,
+          model: me.llmModel,
+          hint: me.llmKeyHint,
+          baseUrl: me.llmBaseUrl,
+          dataPolicy: me.llmDataPolicy,
+        }}
+        cofreDisponivel={cofreDisponivel()}
+        modeloDoSistema={MODELO_DO_SISTEMA}
+      />
 
       <RetencaoDeAudio
         atual={me.audioRetentionDays}

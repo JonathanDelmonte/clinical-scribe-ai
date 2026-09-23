@@ -194,6 +194,34 @@ export const professionals = pgTable(
      */
     audioRetentionDays: integer("audio_retention_days"),
 
+    /**
+     * A chave de IA que ESTE profissional trouxe. Ver ADR-0003.
+     *
+     * `llmKeyCipher` guarda texto CIFRADO — nunca a chave. A chave que abre
+     * esse texto vive em `SEGREDO_MESTRE`, fora do banco, para que um dump do
+     * Postgres não entregue credencial de ninguém.
+     *
+     * `llmKeyHint` existe para a tela: os últimos quatro caracteres, o
+     * suficiente para a pessoa reconhecer qual chave está ali e insuficiente
+     * para qualquer outra coisa. A chave inteira nunca volta ao navegador.
+     *
+     * `llmBaseUrl` faz mais trabalho do que parece: com ela, um único
+     * adaptador compatível com OpenAI atende OpenAI, Groq, Together,
+     * OpenRouter e vLLM auto-hospedado. É a diferença entre suportar três
+     * fornecedores e suportar o formato que o mercado adotou.
+     *
+     * `llmDataPolicy` é DECLARADA pelo profissional: não há como perguntar a
+     * um fornecedor, por API, se ele treina com os prompts. Quem declara é
+     * quem assinou o contrato com ele.
+     */
+    llmProvider: text("llm_provider"),
+    llmModel: text("llm_model"),
+    llmKeyCipher: text("llm_key_cipher"),
+    llmKeyHint: text("llm_key_hint"),
+    llmBaseUrl: text("llm_base_url"),
+    llmDataPolicy: text("llm_data_policy"),
+    llmVerifiedAt: timestamp("llm_verified_at", { withTimezone: true }),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },

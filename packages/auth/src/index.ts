@@ -23,3 +23,12 @@ export {
 
 export type { SessionClaims } from "./token";
 export { shouldRenew, signSessionToken, verifySessionToken } from "./token";
+
+export { SegredoIndisponivel } from "./segredos";
+export {
+  cifrar,
+  cofreDisponivel,
+  decifrar,
+  dicaDaChave,
+  mesmoSegredo,
+} from "./segredos";

@@ -64,6 +64,13 @@
       "when": 1790153080250,
       "tag": "0008_faulty_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790153847031,
+      "tag": "0009_yielding_thunderbolts",
+      "breakpoints": true
     }
   ]
 }
