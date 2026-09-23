@@ -16,11 +16,15 @@ export default async function BemVindo() {
       </h1>
       <p className="mt-1 mb-8 text-sm text-muted">
         {me.onboardedAt === null
-          ? "Três campos e a gente começa. Dá para mudar tudo depois em configurações."
+          ? "Passo 1 de 2. Três campos e a gente começa — dá para mudar tudo depois."
           : "Altere o que precisar. As mudanças valem para os próximos documentos."}
       </p>
 
-      <OnboardingForm nomeInicial={me.name} especialidadeInicial={me.specialty} />
+      <OnboardingForm
+        nomeInicial={me.name}
+        especialidadeInicial={me.specialty}
+        primeiraVez={me.onboardedAt === null}
+      />
     </main>
   );
 }

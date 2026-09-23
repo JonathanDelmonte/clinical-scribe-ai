@@ -29,9 +29,12 @@ const CONSELHOS = ["CRM", "CRN", "CRP", "CREFITO", "CRFa", "CRO", "outro"];
 export function OnboardingForm({
   nomeInicial,
   especialidadeInicial,
+  primeiraVez,
 }: {
   nomeInicial: string;
   especialidadeInicial: string | null;
+  /** Chegando agora, ou voltando para corrigir o perfil? */
+  primeiraVez: boolean;
 }) {
   const router = useRouter();
   const [nome, setNome] = useState(nomeInicial);
@@ -74,7 +77,16 @@ export function OnboardingForm({
         return;
       }
 
-      router.replace("/");
+      /**
+       * Primeira vez vai para o passo da voz; edição de perfil, direto para a
+       * aplicação.
+       *
+       * A mesma tela serve aos dois casos — chegar e corrigir o registro
+       * profissional depois — e mandar quem só trocou o nome para uma tela de
+       * cadastro de voz seria oferecer algo que ela não pediu, no meio de uma
+       * tarefa que já terminou.
+       */
+      router.replace(primeiraVez ? "/bem-vindo/voz" : "/");
       router.refresh();
     } catch {
       setErro("Sem conexão com o servidor.");

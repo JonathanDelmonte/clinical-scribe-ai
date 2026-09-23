@@ -23,7 +23,22 @@ const ROTEIRO = [
  * contém os sons que vão aparecer na consulta. Ler frases de consulta gera uma
  * referência mais próxima do uso real do que ler qualquer texto.
  */
-export function VoiceEnrollment({ enrolledAt }: { enrolledAt: string | null }) {
+export function VoiceEnrollment({
+  enrolledAt,
+  aoConcluir,
+}: {
+  enrolledAt: string | null;
+  /**
+   * Chamado depois de cadastrar com sucesso.
+   *
+   * Existe porque o mesmo componente serve a dois contextos com desfechos
+   * diferentes: em configurações, cadastrar é o fim — a tela recarrega e
+   * mostra "cadastrada". Na chegada, cadastrar é o meio — falta ir para a
+   * aplicação. Sem isso, a pessoa gravaria a voz e ficaria parada na mesma
+   * tela, sem saber se deu certo nem para onde ir.
+   */
+  aoConcluir?: () => void;
+}) {
   const router = useRouter();
   const [gravando, setGravando] = useState(false);
   const [segundos, setSegundos] = useState(0);
@@ -56,7 +71,8 @@ export function VoiceEnrollment({ enrolledAt }: { enrolledAt: string | null }) {
       setErro(corpo?.error ?? "não foi possível cadastrar");
       return;
     }
-    router.refresh();
+    if (aoConcluir !== undefined) aoConcluir();
+    else router.refresh();
   }
 
   async function iniciar() {
