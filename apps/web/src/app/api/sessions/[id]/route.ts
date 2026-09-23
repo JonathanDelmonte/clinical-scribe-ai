@@ -2,8 +2,9 @@ import { documents, jobs, patients, sessions, transcriptSegments } from "@scribe
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { ACOES, auditar, auditarLeitura } from "@/lib/audit";
+import { ACOES, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
+import { apagarSessao } from "@/lib/sessoes";
 
 export const dynamic = "force-dynamic";
 
@@ -116,47 +117,38 @@ export async function GET(
 }
 
 /**
- * Apaga uma sessão que nunca chegou a ter áudio.
+ * Apaga uma consulta.
  *
- * Existe por causa de uma consequência do novo fluxo de gravação: a sessão
- * passa a ser criada QUANDO A GRAVAÇÃO COMEÇA, e não quando ela termina. Essa
- * troca é necessária — o registro de ciência precisa carimbar o instante em
- * que o paciente foi informado, que é antes da consulta, não depois — e tem o
- * efeito colateral de deixar uma sessão vazia toda vez que alguém começa a
- * gravar e desiste.
+ * ## Dois pedidos diferentes, na mesma rota
  *
- * O limite é rígido e deliberado: **só apaga o que não tem áudio.** Uma sessão
- * com gravação é registro clínico, e a exclusão de registro clínico é outra
- * coisa, com outra tela e outra confirmação (LGPD Art. 18). Aqui, uma sessão
- * com `audio_path` preenchido é recusada, não importa o status.
+ * **Sem `?confirmar=1`** apaga apenas o que nunca teve áudio. É o descarte de
+ * rascunho: a sessão passa a existir QUANDO A GRAVAÇÃO COMEÇA — o registro de
+ * ciência precisa carimbar o instante em que o paciente foi informado, que é
+ * antes da consulta — e isso deixa uma sessão vazia toda vez que alguém
+ * começa a gravar e desiste. É o que a tela de gravação chama sozinha, e a
+ * recusa quando existe áudio é a rede de segurança dela.
+ *
+ * **Com `?confirmar=1`** apaga a consulta inteira: gravação, transcrição,
+ * nota, pedaços de upload. É o pedido explícito do profissional, vindo de um
+ * botão que perguntou antes.
+ *
+ * A distinção existe porque as duas chamadas têm a mesma forma e consequências
+ * opostas. Um parâmetro que precisa ser escrito de propósito é o que impede
+ * que um descarte de rascunho, chamado de um lugar que não conhece esta
+ * regra, leve uma consulta gravada junto.
+ *
+ * O consumo do mês **não** vai junto: `usage_events.session_id` é
+ * `on delete set null`. Os minutos foram gastos; apagar a consulta não os
+ * devolve, e se devolvesse, apagar consultas seria o jeito de zerar a quota.
  */
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
-  const resultado = await asCurrentProfessional(async (tx) => {
-    const [session] = await tx
-      .select({ id: sessions.id, audioPath: sessions.audioPath })
-      .from(sessions)
-      .where(eq(sessions.id, id))
-      .limit(1);
-
-    if (session === undefined) return { error: "sessão não encontrada" } as const;
-    if (session.audioPath !== null) {
-      return { error: "esta sessão tem gravação e não pode ser descartada" } as const;
-    }
-
-    await auditar(tx, {
-      acao: ACOES.sessaoDescartada,
-      entidade: "sessions",
-      entidadeId: session.id,
-    });
-
-    await tx.delete(sessions).where(eq(sessions.id, session.id));
-    return { ok: true } as const;
-  });
+  const confirmado = new URL(request.url).searchParams.get("confirmar") === "1";
+  const resultado = await apagarSessao(id, confirmado);
 
   if (resultado === null) {
     return NextResponse.json({ error: "não autenticado" }, { status: 401 });

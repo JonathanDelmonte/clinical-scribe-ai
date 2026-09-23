@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AcoesDaSessao } from "@/components/AcoesDaSessao";
 import { PatientDetails } from "@/components/PatientDetails";
 import { SessionRecorder } from "@/components/SessionRecorder";
 import { asCurrentUser, exigirProfissional } from "@/lib/auth";
@@ -150,6 +151,19 @@ export default async function PatientPage({
                     exportar
                   </Link>
                 )}
+
+                {/*
+                 * Parar e apagar aqui também, e não só na página da consulta:
+                 * quem quer se livrar de um upload errado está olhando para a
+                 * lista, e obrigá-lo a abrir a consulta para desfazê-la é
+                 * obrigá-lo a carregar a tela que ele não quer ver.
+                 */}
+                <AcoesDaSessao
+                  sessionId={s.id}
+                  patientId={patient.id}
+                  status={s.status}
+                  compacto
+                />
               </li>
             ))}
           </ul>

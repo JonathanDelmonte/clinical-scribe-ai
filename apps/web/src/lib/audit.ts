@@ -51,6 +51,8 @@ export const ACOES = {
   sessaoCriada: "sessao.criada",
   sessaoAberta: "sessao.aberta",
   sessaoDescartada: "sessao.descartada",
+  sessaoCancelada: "sessao.cancelada",
+  sessaoApagada: "sessao.apagada",
   audioEnviado: "sessao.audio_enviado",
   audioBaixado: "sessao.audio_baixado",
   audioApagado: "sessao.audio_apagado",

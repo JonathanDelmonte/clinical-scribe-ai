@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AcoesDaSessao } from "@/components/AcoesDaSessao";
 import { SessionView } from "@/components/SessionView";
 import { asCurrentProfessional } from "@/lib/auth";
 
@@ -53,6 +54,21 @@ export default async function SessionPage({
       </h1>
 
       <SessionView sessionId={header.session.id} />
+
+      {/*
+       * As saídas ficam no fim, depois do conteúdo.
+       *
+       * Quem abre esta página vem ver a consulta, não desfazê-la. Pôr
+       * "apagar" no topo colocaria a ação irreversível no caminho do olhar de
+       * quem só queria ler a nota.
+       */}
+      <div className="mt-10 border-t border-line pt-6">
+        <AcoesDaSessao
+          sessionId={header.session.id}
+          patientId={header.session.patientId}
+          status={header.session.status}
+        />
+      </div>
     </main>
   );
 }

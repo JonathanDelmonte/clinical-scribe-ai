@@ -35,6 +35,7 @@ aquele que ninguém percebe porque tudo continua funcionando.
 | Toda tabela com dado clínico tem política RLS de dono | `packages/db/sql/rls.sql` |
 | As políticas são testadas contra tentativa ativa de leitura, escrita e alteração alheia | `pnpm db:test-rls` — 21 asserções, roda no CI a cada PR |
 | A aplicação nunca filtra por `professional_id` na mão | as consultas não têm `where` de dono; quem filtra é o banco |
+| Os três caminhos com `service_role` na web resolvem a identidade ANTES de elevar | login (procura por e-mail), exclusão de conta, cancelamento de processamento — nenhum recebe identificador de dono pela requisição, e o cancelamento confirma a posse sob RLS antes de tocar em `jobs` |
 | `force row level security` está ligado | senão o dono da tabela — que muitas vezes é a conexão da aplicação — ignoraria tudo |
 
 **O ponto que sustenta o resto:** o isolamento não depende de nenhuma linha de
@@ -92,6 +93,7 @@ dado, porque não é a tela que decide.
 |---|---|
 | Áudio apagado automaticamente após a retenção | varredura no worker, autocorretiva |
 | Exclusão de conta apaga arquivos e registros | verificada ponta a ponta, incluindo pedaços de upload e assinatura |
+| Apagar uma consulta apaga a gravação, a transcrição e os pedaços | e **não** apaga o consumo: `usage_events.session_id` é `on delete set null`, senão apagar consultas seria o jeito de zerar a quota do mês |
 | Trilha de auditoria sobrevive à exclusão, anonimizada | IP e navegador anulados no mesmo instante |
 | Buffer de gravação no aparelho tem validade | sete dias; aparelho de consultório não acumula consulta |
 
