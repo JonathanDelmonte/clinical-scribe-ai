@@ -21,14 +21,23 @@
  * tokens. Então o que vem primeiro sobrevive: termos do próprio profissional,
  * depois os da especialidade, e os comuns por último.
  *
- * ## O risco que esta lista carrega
+ * ## ⚠ Medido, e desligado: como PROMPT, esta lista faz mal
  *
- * Inclinar o modelo para um termo aumenta a chance de ele aparecer ONDE NÃO
- * FOI DITO — num trecho de ruído, numa palavra parecida. Para um nome de
- * remédio, isso é um medicamento fabricado no prontuário. Por isso a lista é
- * feita de termos que costumam ser ditos e mal escritos, não de tudo que
- * "poderia" aparecer — e por isso ela foi medida antes de ser ligada. Ver o
- * ADR-0002.
+ * Na consulta real, a transcrição sem vocabulário é perfeitamente
+ * determinística (duas rodadas, zero diferenças). Com vocabulário, um quarto a
+ * um terço dela muda — e não para melhor: frases verdadeiras somem, um remédio
+ * aparece onde se falou "churrasco", um sintoma depressivo é inventado. O
+ * vocabulário não fabrica os termos DA LISTA; ele empurra o modelo para o
+ * domínio, e o modelo inventa palavras vizinhas. Por isso um detector que
+ * procura só os termos exatos responde "zero" e engana.
+ *
+ * ## O uso que sobra, e que não tem esse risco
+ *
+ * Como DICIONÁRIO depois da transcrição, e não como prompt antes dela: trocar
+ * "lozartana" por "losartana" quando a distância de edição é pequena. Isso só
+ * mexe em palavras que já estão lá e quase certas — não insere palavra, não
+ * muda a divisão em trechos, não tem como alucinar. As listas daqui servem
+ * para isso sem mudança.
  */
 
 /**

@@ -601,6 +601,7 @@ async def transcribe(
     diarize_speakers: bool = Query(default=True, alias="diarize"),
     job: str | None = Query(default=None),
     professional_embedding: str = Form(default=""),
+    vocabulary: str = Form(default=""),
 ) -> dict[str, Any]:
     """
     Recebe o áudio e devolve os trechos.
@@ -643,7 +644,13 @@ async def transcribe(
             log.warning("impressão vocal ilegível, seguindo sem ela: %s", exc)
 
     return await asyncio.to_thread(
-        _processar, path, language, diarize_speakers, job, referencia
+        _processar,
+        path,
+        language,
+        diarize_speakers,
+        job,
+        referencia,
+        vocabulary.strip() or None,
     )
 
 
@@ -653,6 +660,7 @@ def _processar(
     diarize_speakers: bool,
     job: str | None,
     referencia: Sequence[float] | None,
+    vocabulario: str | None = None,
 ) -> dict[str, Any]:
     started = time.time()
     try:
@@ -681,6 +689,33 @@ def _processar(
         }
         if BATCH_SIZE > 0:
             options["batch_size"] = BATCH_SIZE
+
+        # Vocabulário do domínio: `hotwords`, e não `initial_prompt`.
+        #
+        # Com `condition_on_previous_text` desligado — e ele está desligado
+        # porque truncava o fim das consultas — o faster-whisper zera o
+        # contexto depois de cada janela de 30 s, levando o `initial_prompt`
+        # junto. `hotwords` é reinserido no prompt de TODA janela.
+        vocabulario_tokens = 0
+        vocabulario_cortado = False
+        if vocabulario is not None:
+            options["hotwords"] = vocabulario
+            # A biblioteca corta pelo fim, em silêncio, acima de metade do
+            # contexto. Contar aqui é o único jeito de saber se a lista que o
+            # worker mandou chegou inteira ao modelo.
+            limite = get_transcriber().max_length // 2 - 1
+            vocabulario_tokens = len(
+                get_transcriber().hf_tokenizer.encode(
+                    " " + vocabulario, add_special_tokens=False
+                ).ids
+            )
+            vocabulario_cortado = vocabulario_tokens > limite
+            if vocabulario_cortado:
+                log.warning(
+                    "vocabulário com %d tokens, acima do limite de %d: o fim foi cortado",
+                    vocabulario_tokens,
+                    limite,
+                )
 
         raw, info = get_transcriber().transcribe(audio, **options)
 
@@ -786,6 +821,8 @@ def _processar(
             "truncated": truncated,
             "uncovered_ms": int(uncovered_s * 1000),
             "voice_matching_applied": referencia is not None,
+            "vocabulary_tokens": vocabulario_tokens,
+            "vocabulary_truncated": vocabulario_cortado,
             "diarization_applied": turns is not None,
             "diarization_error": None if turns is not None else _diarizer_error,
             "speakers": sorted({s["speaker_label"] for s in segments}),

@@ -13,6 +13,7 @@
 import {
   canProcess,
   identifyRolesByContent,
+  montarVocabulario,
   refineRolesByVoice,
   resolveEngine,
   roleByLabel,
@@ -29,6 +30,7 @@ import type { AudioStorage } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 
 import type { Logger } from "pino";
+import { config } from "../config.js";
 import { getAvailableProvider } from "../providers/index.js";
 import type { ClaimedJob } from "../queue.js";
 
@@ -143,6 +145,14 @@ export function makeTranscribeHandler(
       }
     })();
 
+    // Termos da especialidade de quem atende, para a grafia sair certa.
+    // Desligável por configuração: é uma camada que inclina o modelo, e uma
+    // inclinação que se prove prejudicial precisa poder ser removida sem
+    // mexer em código — ver ASR_VOCABULARY em config.ts.
+    const vocabulario = config.ASR_VOCABULARY
+      ? montarVocabulario({ especialidade: owner.specialty })
+      : null;
+
     let result;
     try {
       result = await provider.transcribe({
@@ -154,6 +164,7 @@ export function makeTranscribeHandler(
         // que o conteúdo não alcança. Sem cadastro, segue sem ela — é adição,
         // não dependência.
         professionalEmbedding: owner.voiceEmbedding,
+        vocabulary: vocabulario?.texto ?? null,
       });
     } finally {
       // Encerra o laço ANTES de qualquer outra escrita na sessão: um

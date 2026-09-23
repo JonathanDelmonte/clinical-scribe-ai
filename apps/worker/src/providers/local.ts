@@ -24,6 +24,8 @@ interface LocalResponse {
   truncated: boolean;
   uncovered_ms: number;
   voice_matching_applied: boolean;
+  vocabulary_tokens?: number;
+  vocabulary_truncated?: boolean;
   speakers: string[];
   segments: {
     start_ms: number;
@@ -136,6 +138,9 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
         JSON.stringify(input.professionalEmbedding),
       );
     }
+    if (input.vocabulary != null && input.vocabulary !== "") {
+      form.append("vocabulary", input.vocabulary);
+    }
 
     const params = new URLSearchParams({
       language: input.language ?? "pt",
@@ -166,6 +171,8 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
       diarizationApplied: body.diarization_applied,
       diarizationError: body.diarization_error,
       voiceMatchingApplied: body.voice_matching_applied ?? false,
+      vocabularyTokens: body.vocabulary_tokens ?? 0,
+      vocabularyTruncated: body.vocabulary_truncated ?? false,
       truncated: body.truncated ?? false,
       uncoveredMs: body.uncovered_ms ?? 0,
       speakers: body.speakers,

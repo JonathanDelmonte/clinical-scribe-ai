@@ -77,6 +77,29 @@ const schema = z.object({
    */
   LLM_DATA_POLICY: z.enum(["training", "contractual"]).default("contractual"),
 
+  /**
+   * Manda o vocabulário da especialidade para o Whisper. DESLIGADO — medido.
+   *
+   * Transcrevendo a mesma consulta real, sem vocabulário, duas vezes: 1.000 de
+   * semelhança, zero diferenças. Com vocabulário: 0.674 (25 termos) e 0.716
+   * (3 termos). Corrigiu um erro conhecido e, em troca, apagou "churrasco" e
+   * "Sou médico", inventou "xarope", entrou em laço repetindo "emagrecimento"
+   * e fabricou "me sinto inútil" — nada disso foi dito. Com três termos, perdeu
+   * "eletrocardiograma", que saía certo SEM ajuda.
+   *
+   * O motivo é o mecanismo, não o tamanho da lista: `hotwords` ocupa o espaço
+   * de "texto anterior" em cada janela, o que equivale a um
+   * `condition_on_previous_text` com contexto falso — exatamente o que foi
+   * desligado por truncar e alucinar. Ver ADR-0002.
+   *
+   * Fica como chave, e não apagado, para que alguém possa repetir a medição
+   * com uma versão nova do modelo sem mexer em código.
+   */
+  ASR_VOCABULARY: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+
   /** Opcional aqui; obrigatório no worker — ver `requireDatabaseUrl()`. */
   DATABASE_URL: z.string().optional(),
 });

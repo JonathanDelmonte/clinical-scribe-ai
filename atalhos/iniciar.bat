@@ -197,10 +197,10 @@ REM  Repetir aqui e a diferenca entre "abriu e funciona" e "abriu numa tela de
 REM  login e agora?".
 REM ===========================================================================
 echo     ENTRAR COM:
-echo       ana@consultaviva.local   (profissional, plano free)
-echo       dev@consultaviva.local   (developer, escolhe o motor)
+echo       e-mail:  ana@consultaviva.local
+echo       senha:   consulta-viva-dev
 echo.
-echo       senha das duas:  consulta-viva-dev
+echo       ou clique em "Entrar como Ana (teste)" na tela de login.
 echo.
 echo     Duas janelas foram abertas (APLICACAO e WORKER).
 echo     Fechar qualquer uma delas derruba aquela parte.

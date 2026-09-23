@@ -243,3 +243,85 @@ nenhuma métrica agregada como WER separa "de pirona" de um erro inofensivo.
   investigação vieram de major que subiu sozinha (`huggingface-hub` 1.x) ou de
   dependência não declarada (`matplotlib`). O ecossistema de ML é jovem e
   quebra compatibilidade com frequência.
+- **Um detector que procura só o termo exato não mede alucinação.** Ver a
+  medição do vocabulário abaixo: ele respondeu "zero" enquanto o modelo
+  inventava palavras vizinhas às da lista.
+
+## Vocabulário do domínio (`hotwords`) — medido e desligado
+
+> 23/09/2026 · consulta real de 11:24 · `large-v3`, `float16`, CUDA · sem
+> diarização (ela não altera o texto)
+
+A hipótese era de que passar ao Whisper os termos da especialidade corrigiria a
+grafia de palavras raras — "a azar" por "arder", "lozartana" por "losartana" —
+a custo zero. `hotwords` e não `initial_prompt` porque, com
+`condition_on_previous_text` desligado, o `initial_prompt` só vale para a
+primeira janela de 30 s (conferido no código do faster-whisper 1.1.1, linhas
+38–84 e 269–280 de `generate_segments`).
+
+### O controle que torna o resto interpretável
+
+Sem ele, qualquer diferença poderia ser ruído: quando a busca normal falha, o
+Whisper recorre a amostragem aleatória. A mesma consulta, sem vocabulário, duas
+vezes:
+
+| | Semelhança | Diferenças |
+|---|---|---|
+| sem vocabulário × sem vocabulário | **1.000** | **0** |
+
+Transcrição determinística. Toda mudança abaixo é do vocabulário.
+
+### O resultado
+
+| Vocabulário | Tokens | Trechos | Semelhança com a base |
+|---|---|---|---|
+| nenhum | 0 | 194 | 1.000 |
+| 3 termos, batendo com a consulta | 16 | 125 | 0.716 |
+| 25 termos, clínica médica (bate) | 152 | 161 | 0.674 |
+| 25 termos, nutrição (não bate) | 150 | 159 | 0.669 |
+
+| Palavra | Sem | Clínica | Nutrição | 3 termos | |
+|---|---|---|---|---|---|
+| "churrasco" | 1 | **0** | **0** | **0** | verdadeira, apagada |
+| "Sou médico" | 1 | **0** | **0** | 1 | verdadeira, apagada |
+| "eletrocardiograma" | 1 | — | — | **0** | verdadeira, **estava na lista** |
+| "xarope" | 0 | **1** | 0 | — | inventada |
+| "emagrecimento" | 0 | 0 | **4** | — | inventada, em laço |
+| "me sinto inútil" | 0 | 0 | **1** | — | sintoma inventado |
+| "a azar" | 1 | 0 | 0 | 0 | o erro — corrigido |
+
+Corrigiu um erro conhecido. Em troca apagou conteúdo verdadeiro, inventou um
+nome de remédio, entrou em laço de repetição, e fabricou um sintoma depressivo.
+Com três termos, **perdeu "eletrocardiograma"** — que saía certo sem ajuda e
+estava na própria lista.
+
+### Por quê
+
+`hotwords` é inserido no espaço `sot_prev` — o "texto anterior" — de cada
+janela. O modelo transcreve cada 30 s como se tivesse acabado de ouvir aquela
+lista. É um `condition_on_previous_text` com contexto falso fixo, e o
+condicionamento foi desligado neste mesmo ADR por truncar e alucinar. Os
+sintomas (frases que somem, laço de repetição) são os mesmos. Que três termos
+desestabilizem quase tanto quanto vinte e cinco confirma que é o mecanismo, não
+a quantidade.
+
+### A métrica que enganou
+
+O primeiro detector de dano procurava, na saída, os termos exatos da lista, e
+respondeu **zero** nas duas rodadas. O vocabulário não fabrica os termos da
+lista: ele empurra o modelo para o domínio, e o modelo inventa palavras
+vizinhas — "emagrecimento" não está na lista de nutrição. Só a comparação linha
+a linha mostrou o dano.
+
+### Decisão
+
+- `ASR_VOCABULARY=false` por padrão. A chave continua existindo para repetir a
+  medição com uma versão nova do modelo sem mexer em código.
+- O serviço passou a contar os tokens do vocabulário e dizer se cortou — o corte
+  da biblioteca é silencioso. As listas usaram 150–152 de 223; nada cortado.
+- **O uso que sobra:** as listas como *dicionário* depois da transcrição,
+  corrigindo palavras a pequena distância de edição ("lozartana" → "losartana").
+  Isso só toca palavras que já estão lá; não insere, não reorganiza, não tem
+  como alucinar. Não implementado.
+- Para o erro que motivou tudo ("a azar"), a ferramenta certa já existe: a
+  correção do trecho pelo profissional, que guarda o par (errado → certo).

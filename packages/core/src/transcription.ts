@@ -66,6 +66,16 @@ export interface TranscriptionResult {
    */
   /** Havia voz cadastrada e ela foi comparada com os trechos? */
   readonly voiceMatchingApplied: boolean;
+  /**
+   * Quantos tokens o vocabulário ocupou, e se a biblioteca cortou o fim.
+   *
+   * Existe porque o corte é SILENCIOSO: a biblioteca descarta o excesso sem
+   * avisar ninguém. Sem este número no resultado, uma lista grande demais
+   * funcionaria pela metade para sempre, e a metade perdida seria sempre a
+   * mesma — a do fim.
+   */
+  readonly vocabularyTokens?: number;
+  readonly vocabularyTruncated?: boolean;
   readonly truncated: boolean;
   /** Quantos milissegundos de áudio ficaram sem transcrição no fim. */
   readonly uncoveredMs: number;
@@ -117,6 +127,13 @@ export interface TranscriptionInput {
   readonly diarize?: boolean;
   /** Impressão vocal do profissional, quando cadastrada. 256 números. */
   readonly professionalEmbedding?: readonly number[] | null;
+  /**
+   * Termos do domínio para inclinar a grafia — ver `vocabulary.ts`.
+   *
+   * Opcional porque nem todo motor aceita, e porque a ausência é um estado
+   * legítimo: sem vocabulário, a transcrição é a mesma de antes.
+   */
+  readonly vocabulary?: string | null;
 }
 
 export interface TranscriptionProvider {

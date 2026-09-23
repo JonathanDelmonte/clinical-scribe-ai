@@ -45,9 +45,11 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
    par (errado → certo) é dado rotulado, gerado pelo uso, que nenhum
    concorrente tem sem ter usuários antes. Exige migration.
 2. **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
-3. **Vocabulário do domínio no Whisper** — `initial_prompt` com nomes de
-   medicamentos e jargão da especialidade. É a melhoria de qualidade mais barata
-   que existe: uma linha, custo zero, ataca a classe de erro "azar/arder".
+3. ~~**Vocabulário do domínio no Whisper**~~ — **medido e descartado como
+   prompt.** Previsto como "a melhoria mais barata que existe"; na consulta real
+   corrigiu um erro e, em troca, apagou frases verdadeiras, inventou um remédio
+   e fabricou um sintoma. Ver ADR-0002. As listas continuam úteis como
+   **dicionário de correção depois da transcrição**, que não tem como alucinar.
 4. **Limpeza de áudio só para o caminho das vozes** — limpar antes do Whisper
    frequentemente PIORA a transcrição (ele foi treinado em áudio sujo), mas o
    pyannote é o oposto. Bifurcar: áudio cru para o Whisper, limpo para a
