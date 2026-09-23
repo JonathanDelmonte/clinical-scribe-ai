@@ -1,6 +1,6 @@
 import type { AudioStorage } from "@scribe/storage";
 import { auditLog, jobs, sessions, type Database } from "@scribe/db";
-import { and, eq, inArray, isNotNull, isNull, lt, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 
 import type { Logger } from "pino";
 
@@ -55,7 +55,27 @@ export async function sweepRetention(
 ): Promise<number> {
   if (dias < 0) return 0;
 
-  const corte = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+  /**
+   * O corte de CADA profissional, quando ele escolheu um.
+   *
+   * Feito em SQL e não em JavaScript de propósito: trazer todas as sessões
+   * para filtrar na aplicação cresce com o número de consultas guardadas, e
+   * esta varredura roda a cada ciclo ocioso do worker. O banco já sabe fazer
+   * a conta por linha.
+   *
+   * `coalesce` resolve a precedência numa expressão: escolha do profissional
+   * primeiro, padrão do servidor depois.
+   */
+  const dentroDaRetencao = sql`
+    ${sessions.endedAt} < now() - make_interval(
+      days => coalesce(
+        (select p.audio_retention_days
+           from professionals p
+          where p.id = ${sessions.professionalId}),
+        ${dias}
+      )
+    )
+  `;
 
   const candidatas = await db
     .select({ id: sessions.id, professionalId: sessions.professionalId })
@@ -67,7 +87,7 @@ export async function sweepRetention(
         inArray(sessions.status, [...TERMINAIS]),
         // `ended_at` e não `created_at`: o relógio da retenção começa quando a
         // consulta acabou, não quando alguém abriu a tela para gravá-la.
-        lt(sessions.endedAt, corte),
+        dentroDaRetencao,
         // Sem duplicar o que já está na fila. Um segundo job encontraria o
         // arquivo ausente, falharia três vezes e sujaria o log com um erro
         // que não é erro.

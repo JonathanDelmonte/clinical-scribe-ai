@@ -179,6 +179,21 @@ export const professionals = pgTable(
     voiceEmbedding: vector("voice_embedding", { dimensions: 256 }),
     voiceEnrolledAt: timestamp("voice_enrolled_at", { withTimezone: true }),
 
+    /**
+     * Por quantos dias o áudio da consulta fica guardado, para ESTE
+     * profissional. Nulo = usa o padrão do servidor.
+     *
+     * É escolha de quem responde pelo dado, não do servidor. A LGPD (Art. 6º,
+     * III) pede que o tratamento seja limitado ao necessário, e quem sabe o
+     * que é necessário é quem atende: um psicólogo que revisa a nota semanas
+     * depois precisa de mais tempo que um pronto-atendimento que aprova no
+     * mesmo dia.
+     *
+     * Zero é válido e significa apagar na primeira varredura depois da
+     * consulta terminar — a retenção mínima possível sem desligar a gravação.
+     */
+    audioRetentionDays: integer("audio_retention_days"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },

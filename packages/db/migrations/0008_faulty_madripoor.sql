@@ -1,0 +1,1 @@
+ALTER TABLE "professionals" ADD COLUMN "audio_retention_days" integer;

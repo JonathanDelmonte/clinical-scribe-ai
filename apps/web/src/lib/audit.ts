@@ -42,6 +42,7 @@ export const ACOES = {
   sair: "auth.sair",
   cadastrar: "auth.cadastrar",
   perfilAtualizado: "perfil.atualizado",
+  retencaoAlterada: "perfil.retencao_alterada",
 
   pacienteCriado: "paciente.criado",
   pacienteAberto: "paciente.aberto",

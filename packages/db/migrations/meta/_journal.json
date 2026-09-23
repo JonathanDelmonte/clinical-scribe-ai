@@ -57,6 +57,13 @@
       "when": 1790152790378,
       "tag": "0007_serious_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790153080250,
+      "tag": "0008_faulty_madripoor",
+      "breakpoints": true
     }
   ]
 }
