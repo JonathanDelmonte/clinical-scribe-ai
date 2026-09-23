@@ -358,6 +358,29 @@ export const transcriptSegments = pgTable(
     text: text("text").notNull(),
     confidence: real("confidence"),
 
+    /**
+     * O que a MÁQUINA produziu, preservado quando o humano corrige.
+     *
+     * Nulo enquanto ninguém corrigiu o trecho. No primeiro conserto, o valor
+     * original é copiado para cá e `text`/`role` passam a carregar a versão
+     * humana. A partir daí, corrigir de novo não mexe mais nestas colunas.
+     *
+     * Duas razões, e a segunda é a que importa a longo prazo:
+     *
+     * 1. **Não existe como perder o original.** A pessoa pode editar, digitar
+     *    errado, editar de novo — o que a máquina ouviu continua aqui. Sem
+     *    isso, a segunda edição sobrescreveria a primeira e o par original vs.
+     *    corrigido se perderia para sempre.
+     * 2. **O par (errado → certo) é dado rotulado**, produzido pelo uso, de
+     *    graça. É com ele que se mede a acurácia real do reconhecimento e da
+     *    separação de vozes, e depois se ajusta o vocabulário e os limiares.
+     *    Nenhum concorrente tem isso sem ter usuários antes.
+     */
+    textOriginal: text("text_original"),
+    roleOriginal: speakerRoleEnum("role_original"),
+    correctedAt: timestamp("corrected_at", { withTimezone: true }),
+    correctedBy: uuid("corrected_by"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
     // embedding: vector("embedding", { dimensions: 1536 })

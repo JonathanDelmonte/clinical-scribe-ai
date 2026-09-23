@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ClinicalNote, type NoteDoc } from "./ClinicalNote";
 import { SessionObjectives, type ObjectiveDoc } from "./SessionObjectives";
 import { SessionProgress } from "./SessionProgress";
-import { ROLE_LABEL, SpeakerRoles, type Assignment } from "./SpeakerRoles";
+import { TrechoEditavel } from "./TrechoEditavel";
+import { SpeakerRoles, type Assignment } from "./SpeakerRoles";
 
 interface Segment {
   id: string;
@@ -15,6 +16,9 @@ interface Segment {
   endMs: number;
   text: string;
   confidence: number | null;
+  textOriginal?: string | null;
+  roleOriginal?: string | null;
+  correctedAt?: string | null;
 }
 
 interface SessionData {
@@ -66,6 +70,21 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   const [recarga, setRecarga] = useState(0);
   const [gerando, setGerando] = useState(false);
   const [erroNota, setErroNota] = useState<string | null>(null);
+
+  /**
+   * O agradecimento depois de uma correção.
+   *
+   * Some sozinho: ele existe para o instante seguinte ao clique. Um aviso de
+   * sucesso que fica para sempre vira parte do cenário e deixa de ser lido
+   * justamente na próxima vez, que é quando precisaria ser.
+   */
+  const [avisoCorrecao, setAvisoCorrecao] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (avisoCorrecao === null) return;
+    const id = setTimeout(() => setAvisoCorrecao(null), 5000);
+    return () => clearTimeout(id);
+  }, [avisoCorrecao]);
 
   /** Trechos que sustentam a afirmação clicada agora. */
   const [fontesAtivas, setFontesAtivas] = useState<Set<string>>(new Set());
@@ -186,6 +205,25 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-6">
+      {/*
+       * O agradecimento fica FIXO no rodapé, e não ao lado do trecho.
+       *
+       * Quem corrige está lendo a transcrição, que é longa: o trecho
+       * consertado pode estar em qualquer altura da página, e um aviso ali
+       * pode nascer fora do campo de visão. No rodapé ele aparece sempre.
+       */}
+      {avisoCorrecao !== null && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-lg bg-accent px-4 py-3 text-sm text-surface shadow-lg sm:inset-x-auto sm:right-6 sm:left-auto"
+        >
+          <strong>✓ {avisoCorrecao}</strong>
+          <span className="mt-0.5 block text-xs opacity-90">
+            Guardamos o que a máquina tinha entendido junto com a sua correção. É assim
+            que o reconhecimento e a separação de vozes melhoram.
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
         <span
           className={`inline-flex items-center gap-2 rounded px-2.5 py-1 ${
@@ -356,44 +394,20 @@ export function SessionView({ sessionId }: { sessionId: string }) {
           )}
 
           <ol className="space-y-1.5">
-            {segments.map((s) => {
-              const citado = fontesAtivas.has(s.id);
-              return (
-                <li
-                  key={s.id}
-                  id={`trecho-${s.id}`}
-                  className={`flex gap-3 rounded-md text-sm transition-colors ${
-                    citado ? "-mx-2 bg-accent/15 px-2 py-1" : ""
-                  }`}
-                >
-                  <button
-                    onClick={() => ouvir([s.id])}
-                    title="ouvir este trecho"
-                    className="w-12 shrink-0 cursor-pointer text-left font-mono text-xs text-muted tabular-nums hover:text-accent"
-                  >
-                    {timestamp(s.startMs)}
-                  </button>
-                  {/*
-                   * O PAPEL, não o rótulo acústico. "SPEAKER_01" não diz nada a
-                   * um profissional lendo a própria consulta; "Paciente" diz
-                   * tudo. O rótulo cru fica como título, para diagnóstico.
-                   */}
-                  <span
-                    title={s.speakerLabel}
-                    className={`w-24 shrink-0 text-xs ${
-                      s.role === "professional"
-                        ? "font-medium text-accent"
-                        : s.role === "unknown"
-                          ? "text-muted/60 italic"
-                          : "text-muted"
-                    }`}
-                  >
-                    {ROLE_LABEL[s.role] ?? s.speakerLabel}
-                  </span>
-                  <span className="min-w-0">{s.text}</span>
-                </li>
-              );
-            })}
+            {segments.map((s) => (
+              <TrechoEditavel
+                key={s.id}
+                sessionId={sessionId}
+                trecho={s}
+                destacado={fontesAtivas.has(s.id)}
+                timestamp={timestamp(s.startMs)}
+                onOuvir={() => ouvir([s.id])}
+                onCorrigido={(msg) => {
+                  setAvisoCorrecao(msg);
+                  setRecarga((n) => n + 1);
+                }}
+              />
+            ))}
           </ol>
         </section>
       )}

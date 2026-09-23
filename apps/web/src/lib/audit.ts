@@ -57,6 +57,7 @@ export const ACOES = {
   audioBaixado: "sessao.audio_baixado",
   audioApagado: "sessao.audio_apagado",
   reprocessada: "sessao.reprocessada",
+  trechoCorrigido: "transcricao.trecho_corrigido",
 
   notaAprovada: "documento.nota_aprovada",
   documentoExportado: "documento.exportado",
