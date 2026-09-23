@@ -29,27 +29,16 @@ export type ResultadoDoAudio =
   | { readonly ok: true; readonly quota: Quota }
   | { readonly quotaExcedida: true; readonly motivo: string; readonly quota: Quota };
 
-/** ~200 MB. Uma consulta de uma hora em webm/opus fica bem abaixo disso. */
-export const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
-
 /**
- * Extensões aceitas.
+ * O tamanho máximo e a lista de formatos moram em `lib/audio.ts`, e são
+ * reexportados aqui para quem já os importava daqui.
  *
- * Lista fechada em vez de confiar no content-type: o tipo declarado vem do
- * cliente e não custa nada mentir. A extensão só decide o nome do arquivo em
- * disco — quem realmente decodifica é o ffmpeg dentro do serviço de ASR, que
- * olha o conteúdo.
+ * A mudança de lugar tem um motivo só: a tela precisa das mesmas duas
+ * respostas, e este módulo é `server-only` — um `import` dele a partir de um
+ * componente de cliente nem compila. Duas cópias da lista de formatos seria
+ * ter uma tela que aceita o que o servidor recusa.
  */
-export const EXTENSOES_ACEITAS = new Set([
-  "webm",
-  "wav",
-  "mp3",
-  "m4a",
-  "ogg",
-  "opus",
-  "flac",
-  "mp4",
-]);
+export { EXTENSOES_ACEITAS, MAX_AUDIO_BYTES } from "./audio";
 
 /**
  * Marca o áudio na sessão, confere a quota e enfileira — nesta ordem.

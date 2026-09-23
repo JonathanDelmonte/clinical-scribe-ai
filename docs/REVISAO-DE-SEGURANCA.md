@@ -62,6 +62,7 @@ dado, porque não é a tela que decide.
 | Formato de áudio validado por lista fechada | `EXTENSOES_ACEITAS` |
 | Tamanho máximo de arquivo e de pedaço | 200 MB e 8 MB |
 | Montagem do áudio exige todos os pedaços | um buraco produziria arquivo válido com pedaço de consulta faltando, **sem erro nenhum** |
+| Corpo cortado pelo buffer do proxy é recusado, não aceito pela metade | `content-length` conferido contra o que chegou — ver a correção 3 |
 | SQL sempre parametrizado | regra do ESLint que recusa interpolação em `WHERE` |
 | Conteúdo de documento lido defensivamente na exportação | é `jsonb` produzido por LLM, possivelmente por versão antiga do prompt |
 
@@ -108,6 +109,31 @@ dado, porque não é a tela que decide.
    que dá para apertar sem nonce), e `Strict-Transport-Security` apenas em
    produção — em `localhost` ele gruda no navegador por meses e quebra outros
    projetos na mesma porta.
+
+3. **Corpo de requisição cortado em silêncio** *(23/09/2026)*. Porque existe
+   um `proxy.ts`, o Next clona e bufferiza o corpo de toda requisição, e ao
+   passar de 10 MB ele **entrega o corpo cortado sem erro nenhum** — a
+   documentação do `proxyClientMaxBodySize` é explícita: *"the request will
+   not fail or return an error to the client"*.
+
+   O sintoma foi o envio de arquivo pela tela recusando todo áudio com mais
+   de cinco minutos (`formData()` lançava por falta da fronteira final do
+   `multipart`). O risco maior era outro, e silencioso: num corpo cru, um
+   corte não lança nada — grava menos bytes. Um pedaço de áudio cortado vira
+   uma consulta remontada com um buraco no meio, transcrita sem reclamação,
+   com um trecho da conversa ausente da nota.
+
+   Três correções, e a terceira é a que sustenta as outras duas:
+
+   - A tela passou a enviar **todo** áudio em pedaços de 512 KB, inclusive o
+     arquivo escolhido no seletor — o mesmo caminho da gravação, com
+     progresso e retomada.
+   - As rotas que recebem corpo conferem `content-length` **antes** de
+     confiar no que chegou, e recusam com uma mensagem que diz o que fazer.
+   - O teto saiu do padrão invisível do framework e virou uma constante
+     (`apps/web/src/lib/audio.ts`) que o `next.config.ts` usa para configurar
+     o Next e as rotas usam para conferir. Um teste falha se o tamanho do
+     pedaço chegar perto dela.
 
 ---
 

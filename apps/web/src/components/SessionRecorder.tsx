@@ -6,6 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LiveDraft } from "./LiveDraft";
 import {
+  ACCEPT_DE_AUDIO,
+  EXTENSOES_ACEITAS,
+  extensaoDoNome,
+  MAX_AUDIO_BYTES,
+} from "@/lib/audio";
+import {
   CONSENT_METHOD_LABEL,
   CONSENT_METHODS,
   textoParaExibicao,
@@ -466,11 +472,74 @@ export function SessionRecorder({
     }
   }
 
-  /** Envia um arquivo escolhido na tela, pelo caminho direto. */
+  /**
+   * Envia um arquivo que a pessoa escolheu no aparelho.
+   *
+   * **Em pedaços, pelo mesmo caminho da gravação**, e não num POST de uma
+   * viagem só. O envio único parecia o caminho simples para um arquivo que já
+   * está em disco, e era — até 10 MB. Acima disso o corpo chega cortado ao
+   * servidor, sem erro nenhum, porque o `proxy.ts` faz o Next bufferizar todo
+   * corpo de requisição (ver `lib/audio.ts`). Como o WAV preparado ocupa
+   * 1,9 MB por minuto, isso é toda consulta com mais de cinco minutos — ou
+   * seja, praticamente todas.
+   *
+   * Em pedaços de 512 KB nenhum corpo chega perto do teto, e vem de brinde o
+   * que a gravação já tinha: progresso visível e retomada quando a rede cai.
+   */
   async function enviarArquivo(file: File) {
     setError(null);
-    setStatus("criando sessão…");
+    setAviso(null);
 
+    // ---- a metade do navegador, ANTES de criar qualquer coisa -----------
+    //
+    // A ordem importa: preparar primeiro é o que permite conferir o formato
+    // do que vai realmente subir, e recusar um arquivo impossível sem ter
+    // deixado uma sessão vazia na pasta do paciente.
+    setStatus("preparando o áudio no seu dispositivo…");
+
+    let envio: Blob = file;
+    let extensao = extensaoDoNome(file.name);
+    let mapa: { regions: unknown; removedMs: number; durationMs: number } | null = null;
+
+    try {
+      const pronto = await prepareForUpload(file);
+      envio = pronto.file;
+      extensao = "wav";
+      mapa = {
+        regions: pronto.regions,
+        removedMs: pronto.removedMs,
+        durationMs: pronto.trimmedMs,
+      };
+    } catch {
+      // Codec que o navegador não decodifica, memória insuficiente, contexto
+      // de áudio bloqueado. Sobe o original: mais lento, nunca perdido.
+    }
+
+    if (!EXTENSOES_ACEITAS.has(extensao)) {
+      setStatus(null);
+      setError(
+        extensao === ""
+          ? "não dá para saber o formato deste arquivo — ele precisa ter extensão."
+          : `arquivos .${extensao} não são aceitos. ` +
+              `Formatos aceitos: ${[...EXTENSOES_ACEITAS].join(", ")}.`,
+      );
+      return;
+    }
+    if (envio.size === 0) {
+      setStatus(null);
+      setError("este arquivo está vazio.");
+      return;
+    }
+    if (envio.size > MAX_AUDIO_BYTES) {
+      setStatus(null);
+      setError(
+        `áudio grande demais (máximo ` +
+          `${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)} MB).`,
+      );
+      return;
+    }
+
+    setStatus("criando sessão…");
     const criada = await fetch("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -490,47 +559,54 @@ export function SessionRecorder({
 
     const { session } = (await criada.json()) as { session: { id: string } };
 
-    setStatus("preparando o áudio no seu dispositivo…");
-    let envio: Blob = file;
-    let nome = file.name;
-    let mapa: { regions: unknown; removedMs: number; durationMs: number } | null = null;
-
     try {
-      const pronto = await prepareForUpload(file);
-      envio = pronto.file;
-      nome = pronto.file.name;
-      mapa = {
-        regions: pronto.regions,
-        removedMs: pronto.removedMs,
-        durationMs: pronto.trimmedMs,
-      };
-    } catch {
-      // segue com o original
-    }
+      const bytes = envio.size;
+      const total = await enviarEmPartes({
+        sessionId: session.id,
+        arquivo: envio,
+        onProgresso: (p) =>
+          setStatus(
+            `enviando ${p.enviadas} de ${p.total} · ` +
+              `${(bytes / 1024 / 1024).toFixed(1)} MB`,
+          ),
+      });
 
-    setStatus(`enviando ${(envio.size / 1024 / 1024).toFixed(1)} MB…`);
+      setStatus("concluindo…");
+      const fim = await finalizarEnvio(session.id, {
+        total,
+        extensao,
+        durationMs: mapa?.durationMs ?? null,
+        removedMs: mapa?.removedMs ?? null,
+        regions: mapa?.regions ?? null,
+      });
 
-    const form = new FormData();
-    form.append("file", new File([envio], nome, { type: envio.type }));
-    if (mapa !== null) form.append("audioMap", JSON.stringify(mapa));
+      // 402 é quota estourada, e não falha: o áudio está guardado e a sessão
+      // existe com o motivo escrito nela. Ver `concluir()`.
+      if (!fim.ok && fim.status !== 402) {
+        throw new Error(fim.erro ?? "falha ao concluir o envio");
+      }
 
-    const enviado = await fetch(`/api/sessions/${session.id}/audio`, {
-      method: "POST",
-      body: form,
-    });
-
-    if (!enviado.ok && enviado.status !== 402) {
-      const corpo: unknown = await enviado.json().catch(() => null);
+      router.push(`/sessoes/${session.id}`);
+    } catch (erro) {
+      /**
+       * A sessão recém-criada some junto.
+       *
+       * Ela nunca chegou a ter áudio, e uma sessão vazia na pasta do paciente
+       * é pior que nenhuma: parece uma consulta que existiu. O custo é
+       * abandonar os pedaços que já subiram — aceitável aqui, e só aqui,
+       * porque o arquivo continua inteiro no aparelho da pessoa. É
+       * exatamente a diferença entre este caminho e o da gravação, onde a
+       * consulta só existe no buffer e a sessão fica de pé para ser retomada.
+       */
+      await fetch(`/api/sessions/${session.id}`, { method: "DELETE" }).catch(
+        () => undefined,
+      );
       setStatus(null);
       setError(
-        typeof corpo === "object" && corpo !== null && "error" in corpo
-          ? String((corpo as { error: unknown }).error)
-          : "falha no envio",
+        `${erro instanceof Error ? erro.message : "falha no envio"}. O arquivo ` +
+          `continua no seu aparelho — pode tentar de novo.`,
       );
-      return;
     }
-
-    router.push(`/sessoes/${session.id}`);
   }
 
   async function reenviarPendente(g: GravacaoPendente) {
@@ -752,11 +828,19 @@ export function SessionRecorder({
           Enviar arquivo
           <input
             type="file"
-            accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"
+            accept={ACCEPT_DE_AUDIO}
             className="hidden"
             disabled={!ready}
             onChange={(e) => {
               const file = e.target.files?.[0];
+              /**
+               * Limpar o campo é o que permite escolher o MESMO arquivo de
+               * novo. Sem isto, depois de um envio que falhou, reabrir o
+               * seletor e clicar no mesmo arquivo não dispara `change` — e a
+               * tela fica sem reagir, que é o jeito mais frustrante possível
+               * de um botão estar quebrado.
+               */
+              e.target.value = "";
               if (file) void enviarArquivo(file);
             }}
           />

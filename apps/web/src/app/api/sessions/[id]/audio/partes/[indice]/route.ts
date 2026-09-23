@@ -3,6 +3,7 @@ import { sessionPartKey } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+import { MAX_CORPO_BUFFERIZADO_BYTES } from "@/lib/audio";
 import { asCurrentProfessional } from "@/lib/auth";
 import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
@@ -19,8 +20,17 @@ export const dynamic = "force-dynamic";
  */
 const MAX_PARTES = 2000;
 
-/** Um pedaço não pode ser maior que o arquivo inteiro que aceitamos. */
-const MAX_PARTE_BYTES = 8 * 1024 * 1024;
+/**
+ * Um pedaço não pode ser maior que o arquivo inteiro que aceitamos — nem que
+ * o corpo que o Next consegue bufferizar por causa do `proxy.ts`.
+ *
+ * O `Math.min` não é zelo excessivo: acima do teto do buffer, este corpo
+ * chegaria **cortado e sem erro nenhum** (ver `lib/audio.ts`), e um pedaço
+ * cortado vira um áudio de consulta remontado com um buraco no meio —
+ * arquivo válido, transcrição plausível, um trecho da conversa simplesmente
+ * ausente. Derivar o limite garante que subir um não passa por cima do outro.
+ */
+const MAX_PARTE_BYTES = Math.min(8 * 1024 * 1024, MAX_CORPO_BUFFERIZADO_BYTES);
 
 /**
  * Recebe um pedaço do áudio.
@@ -45,6 +55,28 @@ export async function PUT(
   }
 
   const bytes = new Uint8Array(await request.arrayBuffer());
+
+  /**
+   * Chegou tudo o que o cliente disse que ia mandar?
+   *
+   * A rede não é a única coisa capaz de encurtar um corpo: o buffer do proxy
+   * também encurta, e em silêncio. Aqui o corpo é cru, então um corte não
+   * lança nem estraga nada visivelmente — só entrega menos bytes. Comparar
+   * com o `content-length` é a única conferência barata que separa "o pedaço
+   * inteiro" de "o começo do pedaço", e é a diferença entre reenviar e gravar
+   * uma consulta furada.
+   *
+   * Sem `content-length` (corpo em `chunked`) não há o que comparar, e aí a
+   * montagem em `finalizar` é quem confere — ela exige todos os índices.
+   */
+  const declarado = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declarado) && declarado !== bytes.byteLength) {
+    return NextResponse.json(
+      { error: "o pedaço chegou incompleto — envie de novo" },
+      { status: 400 },
+    );
+  }
+
   if (bytes.byteLength === 0) {
     return NextResponse.json({ error: "pedaço vazio" }, { status: 400 });
   }

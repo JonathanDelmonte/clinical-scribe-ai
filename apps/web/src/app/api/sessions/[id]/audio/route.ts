@@ -7,6 +7,7 @@ import { ACOES, auditarLeitura } from "@/lib/audit";
 import { asCurrentProfessional } from "@/lib/auth";
 import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
+import { MAX_CORPO_BUFFERIZADO_BYTES } from "@/lib/audio";
 import {
   EXTENSOES_ACEITAS,
   MAX_AUDIO_BYTES,
@@ -17,16 +18,19 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Envio direto, de uma vez só — o caminho do arquivo escolhido na tela.
+ * Envio direto, de uma vez só — um áudio pequeno, numa viagem.
  *
- * A gravação feita no navegador usa `audio/partes`, que sobe em pedaços e
- * retoma quando a rede cai. Este caminho continua existindo porque um arquivo
- * que já está no disco da pessoa não corre o risco que a retomada protege: se
- * falhar, ele ainda está lá para tentar de novo.
+ * **O produto não passa mais por aqui.** A tela envia todo áudio em pedaços
+ * (`audio/partes`), inclusive o arquivo escolhido no seletor, porque um corpo
+ * de uma viagem só não pode crescer além de `MAX_CORPO_BUFFERIZADO_BYTES` — e
+ * áudio de consulta cresce: o WAV de 16 kHz que o dispositivo prepara ocupa
+ * 1,9 MB por minuto, então cinco minutos de conversa já não cabem.
  *
- * Os dois terminam em `registrarAudio()`. A regra de quota mora lá, uma vez
- * só — duplicá-la seria criar um caminho em que ela é esquecida, e esse
- * caminho custa dinheiro toda vez que alguém passa por ele.
+ * A rota fica por ser o caminho óbvio para quem integra por fora, e porque o
+ * teto dela é honesto e conferido. Os dois caminhos terminam em
+ * `registrarAudio()`: a regra de quota mora lá, uma vez só — duplicá-la seria
+ * criar um caminho em que ela é esquecida, e esse caminho custa dinheiro toda
+ * vez que alguém passa por ele.
  */
 export async function POST(
   request: Request,
@@ -36,6 +40,29 @@ export async function POST(
 
   const barrado = await limitarPorProfissional("upload");
   if (barrado !== null) return barrado;
+
+  /**
+   * Recusa o corpo grande ANTES de tentar lê-lo.
+   *
+   * Passado o teto do buffer do proxy, o Next entrega o corpo **cortado**, sem
+   * erro nenhum (ver `lib/audio.ts`). Num `multipart` o corte leva a fronteira
+   * final junto e `formData()` lança — e o 400 que saía daqui dizia "envie um
+   * arquivo no campo 'file'" para uma requisição que trazia o arquivo
+   * direitinho. Conferir o `content-length` troca essa mentira por um 413 que
+   * diz o que fazer.
+   */
+  const declarado = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declarado) && declarado > MAX_CORPO_BUFFERIZADO_BYTES) {
+    return NextResponse.json(
+      {
+        error:
+          `áudio grande demais para um envio só (máximo ` +
+          `${Math.round(MAX_CORPO_BUFFERIZADO_BYTES / 1024 / 1024)} MB). ` +
+          `Use o envio em pedaços.`,
+      },
+      { status: 413 },
+    );
+  }
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");

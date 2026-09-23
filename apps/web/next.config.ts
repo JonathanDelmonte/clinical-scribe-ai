@@ -2,6 +2,8 @@ import { join } from "node:path";
 
 import type { NextConfig } from "next";
 
+import { MAX_CORPO_BUFFERIZADO_BYTES } from "./src/lib/audio";
+
 /**
  * Carrega o `.env` da RAIZ do monorepo.
  *
@@ -24,6 +26,23 @@ const config: NextConfig = {
   // Os pacotes internos exportam TypeScript direto de `src/`, sem passo de
   // build. Um dev solo não precisa compilar pacotes internos para consumi-los.
   transpilePackages: ["@scribe/auth", "@scribe/core", "@scribe/db", "@scribe/storage"],
+
+  experimental: {
+    /**
+     * Quanto do corpo de uma requisição o Next guarda em memória.
+     *
+     * Este projeto tem um `proxy.ts`, e por causa dele o Next clona e
+     * bufferiza o corpo de **toda** requisição — o proxy e a rota precisam
+     * ler o mesmo stream. Passou do teto, o corpo é **cortado em silêncio**,
+     * sem erro para o cliente.
+     *
+     * O valor aqui é o mesmo padrão do framework. Declará-lo mesmo assim é o
+     * ponto: enquanto ele foi um padrão invisível, as rotas não tinham como
+     * conferir nada contra ele, e todo áudio acima de 10 MB chegava cortado.
+     * Agora é uma constante que o servidor importa — ver `src/lib/audio.ts`.
+     */
+    proxyClientMaxBodySize: MAX_CORPO_BUFFERIZADO_BYTES,
+  },
 
   // Vamos lidar com áudio de consulta — vale apertar os cabeçalhos desde já,
   // antes que alguma dependência comece a chamar endpoint inesperado.
