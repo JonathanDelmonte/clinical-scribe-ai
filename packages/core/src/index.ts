@@ -94,3 +94,12 @@ export {
   PROMPT_VERSION_OBJETIVO,
   validateObjective,
 } from "./objective";
+
+export type { VocabularioMontado } from "./vocabulary";
+export {
+  LIMITE_CARACTERES,
+  montarVocabulario,
+  normalizarEspecialidade,
+  VOCABULARIO_COMUM,
+  VOCABULARIO_POR_ESPECIALIDADE,
+} from "./vocabulary";

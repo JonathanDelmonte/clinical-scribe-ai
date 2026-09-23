@@ -247,7 +247,7 @@ function nomeDoArquivo(titulo: string, paciente: string, data: Date): string {
   const limpar = (s: string) =>
     s
       .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
+      .replace(/\p{M}/gu, "")
       .replace(/[^a-zA-Z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .toLowerCase()

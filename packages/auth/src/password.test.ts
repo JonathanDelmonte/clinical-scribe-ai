@@ -52,10 +52,15 @@ describe("hash de senha", () => {
   });
 
   it("normaliza acentos compostos, para que o teclado não decida o login", async () => {
-    // "josé" com É composto (e + acento) contra É pré-composto. São bytes
-    // diferentes e a mesma senha para quem digitou.
-    const composto = "josé da silva 1";
-    const precomposto = "josé da silva 1";
+    // "josé" com o acento separado da letra (NFD) contra o acento junto (NFC).
+    // São bytes diferentes e a mesma senha para quem digitou.
+    //
+    // As duas formas são CONSTRUÍDAS aqui, e não coladas no arquivo. Coladas,
+    // um editor que normalizasse Unicode ao salvar deixaria as duas idênticas —
+    // e o teste continuaria passando sem testar mais nada.
+    const composto = "josé da silva 1".normalize("NFD");
+    const precomposto = "josé da silva 1".normalize("NFC");
+    expect(composto).not.toBe(precomposto);
     const hash = await hashPassword(composto);
     await expect(verifyPassword(precomposto, hash)).resolves.toBe(true);
   });
