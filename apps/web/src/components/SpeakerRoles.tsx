@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { nomeDaVoz } from "@/lib/vozes";
 
 export interface Evidence {
   signal: string;
@@ -50,6 +52,21 @@ export function SpeakerRoles({
 }) {
   const [busy, setBusy] = useState(false);
   const [aberto, setAberto] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [trocado, setTrocado] = useState(false);
+
+  /**
+   * A confirmação some sozinha.
+   *
+   * Ela existe para o instante seguinte ao clique, e um aviso de sucesso que
+   * fica para sempre vira parte do cenário — deixa de ser lido no clique
+   * seguinte, que é justamente quando precisa ser.
+   */
+  useEffect(() => {
+    if (!trocado) return;
+    const id = setTimeout(() => setTrocado(false), 6000);
+    return () => clearTimeout(id);
+  }, [trocado]);
 
   const profissional = assignment.find((a) => a.role === "professional");
   const indefinido = assignment.every((a) => a.role === "unknown");
@@ -58,9 +75,38 @@ export function SpeakerRoles({
 
   async function inverter() {
     setBusy(true);
+    setErro(null);
+    setTrocado(false);
+
     try {
-      await fetch(`/api/sessions/${sessionId}/roles`, { method: "POST" });
+      const resposta = await fetch(`/api/sessions/${sessionId}/roles`, {
+        method: "POST",
+      });
+
+      /**
+       * A resposta é conferida, e não descartada.
+       *
+       * Antes esta função chamava a rota, ignorava o que voltava e recarregava
+       * de qualquer jeito. Uma falha — sessão sem papéis, sessão de outra
+       * pessoa, sessão que expirou — produzia exatamente a mesma tela que um
+       * acerto: nenhuma mudança e nenhuma explicação. "Cliquei e não aconteceu
+       * nada" era literal, e não havia como a pessoa saber de que lado estava
+       * o problema.
+       */
+      if (!resposta.ok) {
+        const corpo: unknown = await resposta.json().catch(() => null);
+        setErro(
+          typeof corpo === "object" && corpo !== null && "error" in corpo
+            ? String((corpo as { error: unknown }).error)
+            : "não foi possível trocar os papéis",
+        );
+        return;
+      }
+
+      setTrocado(true);
       onChanged();
+    } catch {
+      setErro("sem resposta do servidor — confira a conexão e tente de novo");
     } finally {
       setBusy(false);
     }
@@ -82,8 +128,15 @@ export function SpeakerRoles({
             <span className="text-sm">
               {assignment
                 .filter((a) => a.role !== "unknown")
-                .map((a) => `${a.speakerLabel} = ${ROLE_LABEL[a.role] ?? a.role}`)
-                .join(" · ")}
+                .map((a, i) => (
+                  <span key={a.speakerLabel} title={a.speakerLabel}>
+                    {i > 0 && <span className="text-muted"> · </span>}
+                    {nomeDaVoz(a.speakerLabel)} ={" "}
+                    <strong className="font-medium">
+                      {ROLE_LABEL[a.role] ?? a.role}
+                    </strong>
+                  </span>
+                ))}
             </span>
             <span
               className={`rounded px-2 py-0.5 text-xs ${
@@ -121,15 +174,52 @@ export function SpeakerRoles({
         </p>
       )}
 
+      {/*
+       * A confirmação diz ONDE a mudança aconteceu.
+       *
+       * O efeito real da troca é a transcrição inteira sendo reetiquetada, e
+       * ela fica vários rolares abaixo daqui — depois da nota clínica. Sem
+       * esta linha, tudo o que o clique produzia no campo de visão era duas
+       * palavras trocando de lugar, e quem clicava concluía, com razão, que
+       * não tinha acontecido nada.
+       */}
+      {trocado && (
+        <p className="mt-2 text-xs text-accent">
+          Pronto — os papéis foram trocados, e a transcrição inteira foi reetiquetada.
+        </p>
+      )}
+
+      {erro !== null && (
+        <p role="alert" className="mt-2 text-xs text-red-500">
+          {erro}
+        </p>
+      )}
+
       {aberto && profissional !== undefined && (
-        <ul className="mt-3 space-y-1.5 border-t border-line pt-3">
-          {(profissional.evidence ?? []).map((e, i) => (
-            <li key={i} className="text-xs">
-              <span className="text-accent">{e.signal}</span>
-              <span className="text-muted"> — “{e.excerpt}”</span>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 border-t border-line pt-3">
+          {/*
+           * "O que a identificação automática encontrou" — e não "por que a
+           * atribuição atual está certa".
+           *
+           * A distinção importa depois de uma troca manual: as evidências
+           * continuam grudadas na voz, não no papel, então o painel passaria a
+           * argumentar a favor do contrário do que está gravado. Descrevendo o
+           * que ele de fato é — a leitura do classificador —, ele continua
+           * verdadeiro com ou sem correção humana por cima.
+           */}
+          <p className="mb-2 text-xs text-muted">
+            O que a identificação automática encontrou na fala de{" "}
+            {nomeDaVoz(profissional.speakerLabel)}:
+          </p>
+          <ul className="space-y-1.5">
+            {(profissional.evidence ?? []).map((e, i) => (
+              <li key={i} className="text-xs">
+                <span className="text-accent">{e.signal}</span>
+                <span className="text-muted"> — “{e.excerpt}”</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
