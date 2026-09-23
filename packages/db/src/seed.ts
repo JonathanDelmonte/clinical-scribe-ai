@@ -57,19 +57,28 @@ export const DEV_USERS = [
     name: "Dra. Ana Ribeiro",
     specialty: "nutrição",
     registry: "CRN-3 12345",
-    role: "professional",
-    plan: "free",
-  },
-  {
-    authUserId: "dddddddd-0000-4000-8000-000000000002",
-    email: "dev@consultaviva.local",
-    name: "Dev Local",
-    specialty: "desenvolvimento",
-    registry: null,
     role: "developer",
     plan: "free",
   },
 ] as const;
+
+/**
+ * Uma conta só, e `developer`.
+ *
+ * Antes eram duas: a Ana como `professional` e uma `Dev Local` como
+ * `developer`, para que a diferença entre os cargos ficasse VISÍVEL trocando
+ * de usuário. Isso fazia sentido enquanto havia um seletor de usuário no topo
+ * da tela; com login de verdade, trocar de cargo virou sair e entrar de novo,
+ * e a segunda conta passou a ser só mais uma senha para lembrar.
+ *
+ * O cargo `developer` foi para a Ana junto: é ele que libera a escolha do
+ * motor em cada sessão, e perder isso ao apagar a segunda conta seria perder
+ * um recurso sem ter pedido.
+ *
+ * O que se perde: não dá mais para ver, lado a lado, o motor sendo decidido
+ * pelo plano em vez de pela escolha. Quem precisar disso muda o cargo da Ana
+ * para `professional` aqui e roda o seed de novo.
+ */
 
 const db = createServiceClient(url);
 

@@ -9,17 +9,21 @@ Dois cliques, sem terminal.
 
 ## Entrar na aplicação
 
-O navegador abre em `/entrar`, porque a aplicação pede login desde o Marco 5. O
-`pnpm db:seed` cria duas contas de desenvolvimento:
+O navegador abre em `/entrar`, porque a aplicação pede login desde o Marco 5.
 
-| E-mail | Cargo | O que muda |
-|---|---|---|
-| `ana@consultaviva.local` | `professional` | O caso comum: plano grátis, motor `local`, quota de 300 min |
-| `dev@consultaviva.local` | `developer` | Escolhe o motor em cada sessão e não tem quota |
+## Entrar
 
-**Senha das duas: `consulta-viva-dev`.** É pública de propósito — estas contas
-só existem em banco local, e `.local` não resolve em lugar nenhum. Ver
-[ADR-0004](../docs/adr/0004-autenticacao.md).
+| | |
+|---|---|
+| **E-mail** | `ana@consultaviva.local` |
+| **Senha** | `consulta-viva-dev` |
+
+É uma conta só, e ela tem cargo `developer` — escolhe o motor de transcrição em
+cada sessão e não tem quota. `pnpm db:seed` a recria sempre que roda, então ela
+não se perde.
+
+A senha é pública de propósito: esta conta só existe em banco local, e `.local`
+não resolve em lugar nenhum. Ver [ADR-0004](../docs/adr/0004-autenticacao.md).
 
 ## O que o `iniciar.bat` faz, em ordem
 
