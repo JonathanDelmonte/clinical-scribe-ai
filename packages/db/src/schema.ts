@@ -10,7 +10,7 @@
  * escrever errado, e cada política errada é vazamento de dado de saúde. Com a
  * coluna direta, toda política vira a mesma linha:
  *
- *     using (professional_id = auth.professional_id())
+ *     using (professional_id = app.professional_id())
  *
  * A redundância de uma coluna é um preço baixo por isso. Ver sql/rls.sql.
  */

@@ -24,7 +24,7 @@ export function createServiceClient(connectionString: string) {
 /**
  * Conexão da APLICAÇÃO — sujeita a RLS.
  *
- * Sozinha ela não basta: sem um `auth.uid()` definido, `auth.professional_id()`
+ * Sozinha ela não basta: sem um `auth.uid()` definido, `app.professional_id()`
  * devolve NULL e toda política nega tudo. Use sempre via `withProfessional`.
  */
 export function createAppClient(connectionString: string) {

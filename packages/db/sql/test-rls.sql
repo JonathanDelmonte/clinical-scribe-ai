@@ -77,9 +77,9 @@ declare
   registro uuid;
 begin
   -- Sanidade: a resolução de identidade funciona?
-  if auth.professional_id() <> '11111111-1111-1111-1111-111111111111' then
-    raise exception 'FALHA: auth.professional_id() devolveu %, esperado o da Ana',
-      auth.professional_id();
+  if app.professional_id() <> '11111111-1111-1111-1111-111111111111' then
+    raise exception 'FALHA: app.professional_id() devolveu %, esperado o da Ana',
+      app.professional_id();
   end if;
 
   -- LEITURA -------------------------------------------------------------------
@@ -215,14 +215,14 @@ begin
 
   -- Alterar job é do worker. Se o cliente pudesse, marcaria como concluído
   -- sem nada ter sido processado.
-  update jobs set status = 'done' where professional_id = auth.professional_id();
+  update jobs set status = 'done' where professional_id = app.professional_id();
   get diagnostics n = row_count;
   if n <> 0 then
     raise exception 'FALHA: Ana alterou % jobs — mudar status é só do worker', n;
   end if;
 
   -- Apagar job da fila seria sabotar o próprio processamento.
-  delete from jobs where professional_id = auth.professional_id();
+  delete from jobs where professional_id = app.professional_id();
   get diagnostics n = row_count;
   if n <> 0 then
     raise exception 'FALHA: Ana apagou % jobs da fila', n;

@@ -52,7 +52,7 @@ export function emailInvalido(email: string): string | null {
  *
  * Existe por um motivo só: encontrar uma conta pelo e-mail, o que acontece
  * necessariamente ANTES de haver identidade para filtrar. É o ovo e a galinha
- * do login — `auth.professional_id()` resolve a partir de quem já entrou.
+ * do login — `app.professional_id()` resolve a partir de quem já entrou.
  *
  * A alternativa seria uma função `SECURITY DEFINER` que devolvesse o hash a
  * qualquer usuário autenticado, o que é pior: exporia o hash de todo mundo a

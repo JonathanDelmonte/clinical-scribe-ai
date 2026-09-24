@@ -423,7 +423,7 @@ audit_log       id, ator_id, acao, entidade, entidade_id, ip, criado_em
 
 ```sql
 create policy tenant_isolation on transcript_segments
-  for all using (professional_id = auth.professional_id());
+  for all using (professional_id = app.professional_id());
 ```
 
 **Prepare o terreno do `pgvector` agora, use depois.** Habilite a extensão no Marco 0 e mantenha `transcript_segments` limpo e bem tipado. O assistente RAG da Fase 4 (§6.3-A da doc) vira uma coluna e um índice — não uma migração de dados históricos.

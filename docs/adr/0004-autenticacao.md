@@ -102,7 +102,7 @@ Nada disso toca em rota de API, página de paciente, consulta ou política RLS.
 ## A consulta que ignora o isolamento
 
 Encontrar uma conta pelo e-mail acontece **antes** de existir identidade para
-filtrar — `auth.professional_id()` resolve a partir de quem já entrou. É o ovo
+filtrar — `app.professional_id()` resolve a partir de quem já entrou. É o ovo
 e a galinha do login, e não tem saída elegante.
 
 A saída adotada: `lib/auth/accounts.ts` abre uma transação com

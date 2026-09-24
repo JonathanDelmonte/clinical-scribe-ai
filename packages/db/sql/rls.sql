@@ -20,8 +20,16 @@
 -- SECURITY DEFINER porque precisa ler `professionals` ignorando a própria RLS
 -- daquela tabela — senão a política se referenciaria em recursão infinita.
 -- `search_path` fixo impede sequestro da função por schema malicioso.
+--
+-- Mora no schema `app`, e não em `auth`. No Supabase gerenciado o schema
+-- `auth` é do próprio Supabase, e o usuário `postgres` não pode criar nada lá:
+-- `create function auth.professional_id()` falha com "permission denied for
+-- schema auth" — e com ela, todas as políticas abaixo. Um schema nosso
+-- funciona igual no banco local e no de produção.
 -- -----------------------------------------------------------------------------
-create or replace function auth.professional_id() returns uuid
+create schema if not exists app;
+
+create or replace function app.professional_id() returns uuid
   language sql
   stable
   security definer
@@ -54,8 +62,8 @@ begin
   execute format('drop policy if exists %I on %s', policy_name, target);
   execute format(
     'create policy %I on %s for all to authenticated
-       using (professional_id = auth.professional_id())
-       with check (professional_id = auth.professional_id())',
+       using (professional_id = app.professional_id())
+       with check (professional_id = app.professional_id())',
     policy_name, target
   );
 end;
@@ -94,13 +102,13 @@ alter table public.objective_templates force row level security;
 drop policy if exists templates_read on public.objective_templates;
 create policy templates_read on public.objective_templates
   for select to authenticated
-  using (professional_id is null or professional_id = auth.professional_id());
+  using (professional_id is null or professional_id = app.professional_id());
 
 drop policy if exists templates_write on public.objective_templates;
 create policy templates_write on public.objective_templates
   for all to authenticated
-  using (professional_id = auth.professional_id())
-  with check (professional_id = auth.professional_id());
+  using (professional_id = app.professional_id())
+  with check (professional_id = app.professional_id());
 
 -- -----------------------------------------------------------------------------
 -- Tabelas somente-leitura para o cliente
@@ -116,7 +124,7 @@ alter table public.usage_events force row level security;
 drop policy if exists usage_read_own on public.usage_events;
 create policy usage_read_own on public.usage_events
   for select to authenticated
-  using (professional_id = auth.professional_id());
+  using (professional_id = app.professional_id());
 
 alter table public.audit_log enable row level security;
 alter table public.audit_log force row level security;
@@ -124,7 +132,7 @@ alter table public.audit_log force row level security;
 drop policy if exists audit_read_own on public.audit_log;
 create policy audit_read_own on public.audit_log
   for select to authenticated
-  using (professional_id = auth.professional_id());
+  using (professional_id = app.professional_id());
 
 -- -----------------------------------------------------------------------------
 -- Como a trilha de auditoria é ESCRITA — e por que não por uma política
@@ -166,7 +174,7 @@ create or replace function public.audit_append(
   set search_path = public, auth, pg_temp
 as $$
 declare
-  dono uuid := auth.professional_id();
+  dono uuid := app.professional_id();
   novo uuid;
 begin
   -- Falha fechada: sem profissional resolvido não existe a quem atribuir o
@@ -207,12 +215,12 @@ alter table public.jobs force row level security;
 drop policy if exists jobs_read_own on public.jobs;
 create policy jobs_read_own on public.jobs
   for select to authenticated
-  using (professional_id = auth.professional_id());
+  using (professional_id = app.professional_id());
 
 drop policy if exists jobs_enqueue_own on public.jobs;
 create policy jobs_enqueue_own on public.jobs
   for insert to authenticated
-  with check (professional_id = auth.professional_id());
+  with check (professional_id = app.professional_id());
 
 -- -----------------------------------------------------------------------------
 -- Permissões de base
@@ -223,16 +231,25 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage on all sequences in schema public to authenticated;
 
--- A política chama `auth.professional_id()`, e a expressão da política é
--- avaliada com as permissões de quem consulta. Sem USAGE no schema `auth`,
--- TODA consulta falha com "permission denied for schema auth" — falha fechada,
--- portanto segura, mas a aplicação inteira para.
---
--- No Supabase gerenciado essas concessões já existem; em qualquer outro
--- Postgres, não. Por isso ficam explícitas aqui.
-grant usage on schema auth to authenticated;
-grant execute on function auth.uid() to authenticated;
-grant execute on function auth.professional_id() to authenticated;
+-- A política chama `app.professional_id()`, que chama `auth.uid()`, e a
+-- expressão da política é avaliada com as permissões de quem consulta. Sem
+-- USAGE nos dois schemas, TODA consulta falha com "permission denied" — falha
+-- fechada, portanto segura, mas a aplicação inteira para.
+grant usage on schema app to authenticated;
+grant execute on function app.professional_id() to authenticated;
+
+-- O schema `auth` é do Supabase: lá essas concessões já existem, e o usuário
+-- `postgres` nem sempre pode repeti-las. No banco local — onde `auth` é a
+-- nossa emulação — elas são necessárias. Por isso a tentativa, e a recusa do
+-- Supabase não derruba a migração.
+do $$
+begin
+  grant usage on schema auth to authenticated;
+  grant execute on function auth.uid() to authenticated;
+exception when insufficient_privilege then
+  raise notice 'concessões em auth mantidas pelo próprio Supabase';
+end
+$$;
 
 -- -----------------------------------------------------------------------------
 -- service_role — a identidade que IGNORA as políticas
@@ -255,9 +272,28 @@ grant execute on function auth.professional_id() to authenticated;
 grant usage on schema public to service_role;
 grant select, insert, update, delete on all tables in schema public to service_role;
 grant usage on all sequences in schema public to service_role;
-grant usage on schema auth to service_role;
-grant execute on function auth.uid() to service_role;
-grant execute on function auth.professional_id() to service_role;
+grant usage on schema app to service_role;
+grant execute on function app.professional_id() to service_role;
+do $$
+begin
+  grant usage on schema auth to service_role;
+  grant execute on function auth.uid() to service_role;
+exception when insufficient_privilege then
+  raise notice 'concessões em auth mantidas pelo próprio Supabase';
+end
+$$;
+
+-- A função antiga, `auth.professional_id()`, só chegou a existir no banco
+-- local — no Supabase ela nunca pôde ser criada. Sai agora que todas as
+-- políticas acima já apontam para a nova; se alguma política esquecida ainda
+-- dependesse dela, a remoção é recusada e a migração segue avisando.
+do $$
+begin
+  drop function if exists auth.professional_id();
+exception when insufficient_privilege or dependent_objects_still_exist then
+  raise notice 'auth.professional_id() mantida: %', sqlerrm;
+end
+$$;
 
 -- =============================================================================
 -- LEMBRETE: o Marco 6 exige uma suíte automatizada que tente ler dados de
