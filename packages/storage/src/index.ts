@@ -97,6 +97,50 @@ export function secondChannelKey(professionalId: string, sessionId: string): str
 }
 
 /**
+ * O arquivo do segundo microfone como veio do celular, esperando o worker.
+ *
+ * Só existe no caminho de reserva: quando o navegador não consegue ler o
+ * formato (AMR, WMA, ALAC...), ele não tem como medir o volume, e o arquivo
+ * sobe para o motor medir. Vive segundos — o worker mede, grava a medida em
+ * `secondChannelKey` e apaga este. Enquanto vive, é `second_channel_path`, e
+ * por isso `arquivosDaGravacao` o apaga junto com a sessão.
+ */
+export function secondChannelOriginalKey(
+  professionalId: string,
+  sessionId: string,
+  extension: string,
+): string {
+  const ext = extension.replace(/^\./, "").toLowerCase();
+  return `${professionalId}/${sessionId}-segundo-microfone-original.${ext}`;
+}
+
+/**
+ * Os pedaços de um envio do segundo microfone pelo caminho de reserva.
+ *
+ * Numa SUBPASTA dos pedaços da sessão, e não ao lado: a listagem é por
+ * pasta, e quem apaga a sessão apaga `sessionPartsPrefix` inteiro — um envio
+ * abandonado no meio vai junto, sem que ninguém precise lembrar dele.
+ *
+ * Nunca convive com os pedaços do áudio principal: aqueles só existem
+ * enquanto a sessão NÃO tem áudio, e o segundo microfone só é aceito quando
+ * ela TEM.
+ */
+export function secondChannelPartsPrefix(
+  professionalId: string,
+  sessionId: string,
+): string {
+  return `${sessionPartsPrefix(professionalId, sessionId)}/segundo-microfone`;
+}
+
+export function secondChannelPartKey(
+  professionalId: string,
+  sessionId: string,
+  index: number,
+): string {
+  return `${secondChannelPartsPrefix(professionalId, sessionId)}/${String(index).padStart(5, "0")}`;
+}
+
+/**
  * TODOS os arquivos da gravação de uma sessão — o que apagar quando ela sai.
  *
  * Existe para que apagar seja uma pergunta com uma resposta só. Três rotinas

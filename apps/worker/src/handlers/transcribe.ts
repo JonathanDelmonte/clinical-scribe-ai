@@ -26,12 +26,13 @@ import {
   usageEvents,
   type Database,
 } from "@scribe/db";
-import type { AudioStorage } from "@scribe/storage";
+import { sessionAudioKey, type AudioStorage } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 
 import type { Logger } from "pino";
 import { config } from "../config.js";
 import { getAvailableProvider } from "../providers/index.js";
+import { converterParaWav, type Convertido } from "../providers/local.js";
 import type { ClaimedJob } from "../queue.js";
 
 export function makeTranscribeHandler(
@@ -47,18 +48,20 @@ export function makeTranscribeHandler(
 
     const log = logger.child({ sessionId, jobId: job.id });
 
-    const [session] = await db
+    const [encontrada] = await db
       .select()
       .from(sessions)
       .where(eq(sessions.id, sessionId))
       .limit(1);
 
-    if (session === undefined) {
+    if (encontrada === undefined) {
       throw new Error(`sessão ${sessionId} não encontrada`);
     }
-    if (session.audioPath === null) {
+    if (encontrada.audioPath === null) {
       throw new Error("sessão sem áudio");
     }
+    // `let`: a normalização abaixo pode trocar o arquivo da sessão.
+    let session = { ...encontrada, audioPath: encontrada.audioPath };
 
     const [owner] = await db
       .select()
@@ -68,6 +71,87 @@ export function makeTranscribeHandler(
 
     if (owner === undefined) {
       throw new Error(`profissional ${session.professionalId} não encontrado`);
+    }
+
+    // ---- normalização -----------------------------------------------------
+    //
+    // O navegador prepara (16 kHz, mono, WAV, sem o silêncio) tudo o que ele
+    // consegue decodificar, e deixa o mapa de regiões como marca. Sem mapa, o
+    // arquivo chegou como veio: AMR de gravador antigo de Android, WMA, ALAC
+    // do iPhone, WAV de ditafone em ADPCM. O motor transcreveria assim mesmo —
+    // mas a tela não conseguiria TOCAR o trecho, e cada citação da nota
+    // depende de ouvir o trecho que a sustenta. Aqui ele vira o mesmo WAV que
+    // o navegador teria feito.
+    //
+    // Depois disso o mapa passa a existir, com uma região só: nada foi
+    // cortado. É verdade, e é o que evita converter de novo a cada
+    // reprocessamento.
+    if (session.speechRegions === null) {
+      let convertido: Convertido | null = null;
+      try {
+        convertido = await converterParaWav(
+          config.ASR_LOCAL_URL,
+          await storage.get(session.audioPath),
+          session.audioPath,
+        );
+      } catch (erro) {
+        // Motor fora do ar, ou implantação só com motor de nuvem: o original
+        // ainda pode ser transcrito. O que se perde é tocar o trecho na tela.
+        log.warn(
+          { err: erro },
+          "conversão para WAV indisponível — seguindo com o original",
+        );
+      }
+
+      if (convertido !== null && !convertido.ok) {
+        await db
+          .update(sessions)
+          .set({
+            status: "failed",
+            failureReason:
+              `O arquivo enviado não pôde ser lido como áudio (${convertido.motivo}). ` +
+              `Confira se é mesmo a gravação da consulta.`,
+          })
+          .where(eq(sessions.id, sessionId));
+        log.warn({ motivo: convertido.motivo }, "arquivo enviado não é áudio legível");
+        return;
+      }
+
+      if (convertido !== null) {
+        const chave = sessionAudioKey(session.professionalId, session.id, "wav");
+        const regioes = [{ startMs: 0, endMs: convertido.duracaoMs }];
+        await storage.put(chave, convertido.bytes);
+        await db
+          .update(sessions)
+          .set({
+            audioPath: chave,
+            durationMs: convertido.duracaoMs,
+            silenceRemovedMs: 0,
+            speechRegions: regioes,
+          })
+          .where(eq(sessions.id, sessionId));
+        // O original só sai depois de o WAV estar gravado e apontado. Com a
+        // mesma chave (um .wav em ADPCM), o put já o substituiu.
+        if (chave !== session.audioPath) {
+          await storage.remove(session.audioPath).catch((erro: unknown) => {
+            log.error({ err: erro }, "original não apagado depois da conversão");
+          });
+        }
+        log.info(
+          {
+            de: session.audioPath.slice(session.audioPath.lastIndexOf(".")),
+            minutos: Math.round(convertido.duracaoMs / 6000) / 10,
+          },
+          "áudio convertido para WAV",
+        );
+        session = {
+          ...session,
+          audioPath: chave,
+          durationMs: convertido.duracaoMs,
+          silenceRemovedMs: 0,
+          speechRegions: regioes,
+        };
+      }
     }
 
     const account: Account = {

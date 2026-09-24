@@ -22,12 +22,12 @@ import {
   type EstadoDoSegundoMicrofone,
 } from "@scribe/core";
 import { auditLog, sessions, transcriptSegments, type Database } from "@scribe/db";
-import type { AudioStorage } from "@scribe/storage";
+import { secondChannelKey, type AudioStorage } from "@scribe/storage";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 
 import { config } from "../config.js";
-import { diarizarPorCanais } from "../providers/local.js";
+import { diarizarPorCanais, medirSegundoMicrofoneNoMotor } from "../providers/local.js";
 import type { ClaimedJob } from "../queue.js";
 
 export function makeChannelsHandler(
@@ -60,12 +60,23 @@ export function makeChannelsHandler(
       );
     }
 
+    // O pedido pode ganhar a duração medida no caminho de reserva, abaixo, e o
+    // arquivo pode trocar de original para medida; a recusa precisa enxergar a
+    // versão mais recente dos dois.
+    let pedidoAtual = pedido;
+    let arquivoDoSegundo = sessao.secondChannelPath;
+
     const recusar = async (motivo: string): Promise<void> => {
+      // Um original que não chegou a virar medida não fica para trás: é a
+      // gravação do lado do paciente, e só estava aqui para ser medida.
+      const descartar = !arquivoDoSegundo.endsWith(".cve");
+      if (descartar) await storage.remove(arquivoDoSegundo);
       await db
         .update(sessions)
         .set({
+          ...(descartar ? { secondChannelPath: null } : {}),
           channelDiarization: {
-            ...pedido,
+            ...pedidoAtual,
             estado: "recusado",
             motivo,
             processadoEm: new Date().toISOString(),
@@ -89,10 +100,43 @@ export function makeChannelsHandler(
       return;
     }
 
-    const [principal, envelope] = await Promise.all([
-      storage.get(sessao.audioPath),
-      storage.get(sessao.secondChannelPath),
-    ]);
+    // ---- o caminho de reserva ---------------------------------------------
+    //
+    // Normalmente o navegador já mandou a medida (`.cve`). Quando ele não
+    // conseguiu ler o formato do celular — AMR, WMA, ALAC —, mandou o arquivo
+    // como veio, e é aqui que ele vira medida. O original sai logo depois de a
+    // medida estar gravada e apontada: é a gravação do lado do paciente, e
+    // guardá-la era justamente o que o desenho evitava.
+    let envelope: Uint8Array<ArrayBuffer>;
+    if (sessao.secondChannelPath.endsWith(".cve")) {
+      envelope = await storage.get(sessao.secondChannelPath);
+    } else {
+      const original = sessao.secondChannelPath;
+      const medida = await medirSegundoMicrofoneNoMotor(
+        config.ASR_LOCAL_URL,
+        await storage.get(original),
+        original,
+      );
+      if (!medida.ok) {
+        await recusar(
+          `o arquivo do segundo celular não pôde ser lido (${medida.motivo})`,
+        );
+        return;
+      }
+      const destino = secondChannelKey(sessao.professionalId, sessao.id);
+      pedidoAtual = { ...pedido, duracaoS: Math.round(medida.duracaoMs / 1000) };
+      await storage.put(destino, medida.bytes);
+      await db
+        .update(sessions)
+        .set({ secondChannelPath: destino, channelDiarization: pedidoAtual })
+        .where(eq(sessions.id, sessionId));
+      arquivoDoSegundo = destino;
+      await storage.remove(original);
+      envelope = medida.bytes;
+      log.info("segundo microfone medido no motor; original apagado");
+    }
+
+    const principal = await storage.get(sessao.audioPath);
 
     // O áudio da sessão pode ter chegado sem o silêncio (o navegador corta). A
     // duração original é a enxuta mais o que foi removido.
@@ -122,7 +166,7 @@ export function makeChannelsHandler(
         .update(sessions)
         .set({
           channelDiarization: {
-            ...pedido,
+            ...pedidoAtual,
             ...medido,
             estado: "recusado",
             motivo: resultado.motivo,
@@ -151,7 +195,7 @@ export function makeChannelsHandler(
     const novos = reatribuirPorCanais(
       linhas,
       resultado.turnos.map(([inicioS, fimS, falante]) => ({ inicioS, fimS, falante })),
-      pedido.segundoPerto,
+      pedidoAtual.segundoPerto,
     );
 
     // O conteúdo confere a posição declarada — só nos trechos que os canais
@@ -164,7 +208,7 @@ export function makeChannelsHandler(
         .map((n) => ({ speakerLabel: n.speakerLabel, text: texto.get(n.id) ?? "" })),
     );
     const { atribuicao, conteudoDiscorda } = atribuicaoDosCanais(
-      pedido.segundoPerto,
+      pedidoAtual.segundoPerto,
       porConteudo,
     );
 
@@ -207,7 +251,7 @@ export function makeChannelsHandler(
         .set({
           roleAssignment: atribuicao,
           channelDiarization: {
-            ...pedido,
+            ...pedidoAtual,
             ...medido,
             ...contagem,
             estado: "aplicado",
@@ -236,7 +280,12 @@ export function makeChannelsHandler(
     });
 
     log.info(
-      { ...medido, ...contagem, conteudoDiscorda, segundoPerto: pedido.segundoPerto },
+      {
+        ...medido,
+        ...contagem,
+        conteudoDiscorda,
+        segundoPerto: pedidoAtual.segundoPerto,
+      },
       "quem falou refeito pelos dois microfones",
     );
   };

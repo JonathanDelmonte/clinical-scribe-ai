@@ -253,3 +253,78 @@ export async function diarizarPorCanais(
   }
   return (await res.json()) as ResultadoCanais;
 }
+
+/** Resultado de uma conversão: o arquivo convertido, ou por que ele não é áudio. */
+export type Convertido =
+  | {
+      readonly ok: true;
+      readonly bytes: Uint8Array<ArrayBuffer>;
+      readonly duracaoMs: number;
+    }
+  | { readonly ok: false; readonly motivo: string };
+
+/**
+ * Manda um arquivo ao conversor do motor — o ffmpeg dele lê AMR, WMA, ALAC,
+ * AIFF, CAF, DSS de ditafone, WAV em ADPCM, e o resto que o navegador recusa.
+ *
+ * `ok: false` é a resposta 415 do motor: o arquivo não é áudio legível. Não é
+ * falha de infraestrutura — tentar de novo daria o mesmo resultado, então quem
+ * chama registra o motivo e para, em vez de deixar a fila repetir.
+ */
+async function converter(
+  baseUrl: string,
+  rota: "convert" | "envelope",
+  arquivo: Uint8Array<ArrayBuffer>,
+  nome: string,
+): Promise<Convertido> {
+  const form = new FormData();
+  form.append("file", new Blob([arquivo]), nome);
+  const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/${rota}`, {
+    method: "POST",
+    body: form,
+    // Decodificar uma consulta longa leva segundos. Dez minutos é folga.
+    signal: AbortSignal.timeout(10 * 60 * 1000),
+  });
+  if (res.status === 415 || res.status === 413) {
+    const corpo = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+    return {
+      ok: false,
+      motivo:
+        typeof corpo?.detail === "string"
+          ? corpo.detail
+          : "o arquivo não é um áudio que o sistema consiga ler",
+    };
+  }
+  if (!res.ok) {
+    const corpo = await res.text().catch(() => "");
+    throw new Error(
+      `motor respondeu ${res.status} na conversão: ${corpo.slice(0, 300)}`,
+    );
+  }
+  return {
+    ok: true,
+    bytes: new Uint8Array(await res.arrayBuffer()),
+    duracaoMs: Number(res.headers.get("x-duracao-ms") ?? "0"),
+  };
+}
+
+/** Qualquer áudio → WAV 16 kHz mono, o mesmo que o navegador prepara. */
+export function converterParaWav(
+  baseUrl: string,
+  arquivo: Uint8Array<ArrayBuffer>,
+  nome: string,
+): Promise<Convertido> {
+  return converter(baseUrl, "convert", arquivo, nome);
+}
+
+/**
+ * Qualquer áudio → a medida do segundo microfone (formato CVE1), para quando o
+ * navegador não conseguiu medir. O motor não guarda o arquivo.
+ */
+export function medirSegundoMicrofoneNoMotor(
+  baseUrl: string,
+  arquivo: Uint8Array<ArrayBuffer>,
+  nome: string,
+): Promise<Convertido> {
+  return converter(baseUrl, "envelope", arquivo, nome);
+}

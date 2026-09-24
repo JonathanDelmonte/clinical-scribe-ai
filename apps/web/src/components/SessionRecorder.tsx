@@ -520,8 +520,8 @@ export function SessionRecorder({
       setError(
         extensao === ""
           ? "não dá para saber o formato deste arquivo — ele precisa ter extensão."
-          : `arquivos .${extensao} não são aceitos. ` +
-              `Formatos aceitos: ${[...EXTENSOES_ACEITAS].join(", ")}.`,
+          : `arquivos .${extensao} não são de áudio. Envie a gravação da consulta — ` +
+              `MP3, M4A, WAV, AMR, WMA, vídeo do celular e quase qualquer outro formato servem.`,
       );
       return;
     }

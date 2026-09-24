@@ -15,13 +15,15 @@ import json
 import logging
 import os
 import re
+import shutil
+import struct
 import tempfile
 import threading
 import time
 from typing import Any, Sequence
 
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from faster_whisper import BatchedInferencePipeline, WhisperModel
 from faster_whisper.audio import decode_audio
 
@@ -669,6 +671,112 @@ def _diarizar_canais(
         resultado["confiavel"],
     )
     return {**resultado, "segundos": round(time.time() - inicio, 1)}
+
+
+# ---------------------------------------------------------------------------
+# Conversão — o que o navegador não lê
+
+
+def _decodificar_ou_415(caminho: str) -> np.ndarray:
+    """Decodifica para 16 kHz mono, ou recusa com 415.
+
+    Quem chega aqui é o arquivo que o NAVEGADOR não conseguiu ler: AMR de
+    gravador antigo de Android, WMA, ALAC do iPhone, AIFF, DSS de ditafone,
+    WAV em ADPCM. O ffmpeg lê quase tudo; o que nem ele lê não é áudio, e a
+    resposta certa é dizer isso — não um 500, que o worker tentaria de novo
+    três vezes à toa.
+    """
+    try:
+        audio = decode_audio(caminho, sampling_rate=SAMPLE_RATE)
+    except MemoryError:
+        raise
+    except Exception as erro:  # o arquivo vem de fora: qualquer falha é "ilegível"
+        raise HTTPException(
+            status_code=415,
+            detail=f"o arquivo não é um áudio que o sistema consiga ler ({type(erro).__name__})",
+        ) from erro
+    if len(audio) < SAMPLE_RATE // 10:
+        raise HTTPException(status_code=415, detail="o arquivo não tem áudio")
+    return audio.astype(np.float32)
+
+
+async def _guardar_temporario(arquivo: UploadFile) -> str:
+    """O upload em disco, copiado em blocos — um arquivo de 200 MB não passa pela memória."""
+    sufixo = os.path.splitext(arquivo.filename or "")[1] or ".bin"
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as tmp:
+        await asyncio.to_thread(shutil.copyfileobj, arquivo.file, tmp, 1024 * 1024)
+        return tmp.name
+
+
+def _apagar(caminho: str) -> None:
+    try:
+        os.unlink(caminho)
+    except OSError:
+        pass
+
+
+def _wav_pcm16(audio: np.ndarray) -> bytes:
+    """WAV PCM 16 bits mono — o mesmo que `paraWav`, em prepare.ts, produz no navegador."""
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
+    cabecalho = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36 + pcm.nbytes, b"WAVE",
+        b"fmt ", 16, 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16,
+        b"data", pcm.nbytes,
+    )
+    return cabecalho + pcm.tobytes()
+
+
+@app.post("/convert")
+async def convert(file: UploadFile = File(...)) -> Response:
+    """
+    Qualquer áudio (ou vídeo) que o ffmpeg leia → WAV 16 kHz, mono, 16 bits.
+
+    O conversor universal do produto. O navegador prepara sozinho tudo o que
+    ele decodifica; o resto chega aqui pelo worker e sai no mesmo WAV que o
+    navegador teria feito: tocável na tela da consulta — as citações da nota
+    dependem de ouvir o trecho — e igual para todo o resto do caminho.
+    """
+    caminho = await _guardar_temporario(file)
+    try:
+        audio = await asyncio.to_thread(_decodificar_ou_415, caminho)
+    finally:
+        _apagar(caminho)
+    wav = await asyncio.to_thread(_wav_pcm16, audio)
+    duracao_ms = round(len(audio) * 1000 / SAMPLE_RATE)
+    log.info("convertido para WAV: %s, %.1f min", sufixo_de(file), duracao_ms / 60000)
+    return Response(content=wav, media_type="audio/wav", headers={"x-duracao-ms": str(duracao_ms)})
+
+
+@app.post("/envelope")
+async def envelope(file: UploadFile = File(...)) -> Response:
+    """
+    Qualquer áudio que o ffmpeg leia → só a energia a cada 5 ms (formato CVE1).
+
+    O segundo microfone quando o navegador não lê o arquivo. A gravação não é
+    guardada aqui nem em lugar nenhum: vira medida, e o temporário é apagado
+    antes da resposta — o mesmo resultado que o navegador teria mandado.
+    """
+    caminho = await _guardar_temporario(file)
+    try:
+        audio = await asyncio.to_thread(_decodificar_ou_415, caminho)
+    finally:
+        _apagar(caminho)
+    energia = canais.energia_por_passo(audio)
+    if len(energia) > canais.MAX_PASSOS:
+        raise HTTPException(status_code=413, detail="gravação longa demais: o segundo microfone aceita até 4 horas")
+    duracao_ms = round(len(audio) * 1000 / SAMPLE_RATE)
+    log.info("segundo microfone medido no servidor: %s, %.1f min", sufixo_de(file), duracao_ms / 60000)
+    return Response(
+        content=canais.codificar_envelope(energia),
+        media_type="application/octet-stream",
+        headers={"x-duracao-ms": str(duracao_ms)},
+    )
+
+
+def sufixo_de(arquivo: UploadFile) -> str:
+    """Só a extensão vai para o log — o nome do arquivo pode ter o nome do paciente."""
+    return os.path.splitext(arquivo.filename or "")[1].lower() or "(sem extensão)"
 
 
 @app.post("/transcribe")

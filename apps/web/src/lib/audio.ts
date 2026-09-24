@@ -53,8 +53,19 @@ export const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
  * cliente e não custa nada mentir. A extensão só decide o nome do arquivo em
  * disco — quem realmente decodifica é o ffmpeg dentro do serviço de ASR, que
  * olha o conteúdo.
+ *
+ * Larga de propósito. O navegador prepara sozinho o que ele lê; o resto sobe
+ * como veio e o worker converte (ver `normalização` no handler de
+ * transcrição). Medido no Chrome: dos formatos abaixo, ele NÃO lê AMR, 3GP,
+ * WMA, ALAC, AIFF, CAF, MP2, AC3 nem WAV em ADPCM — e são exatamente os que
+ * gravadores de celular antigos, ditafones e o Windows produzem. Recusar
+ * esses na porta era dizer "grave de novo" a quem já gravou a consulta.
+ *
+ * Fechada ainda assim: só formatos de mídia. Um `.html` nunca vira arquivo
+ * servido pela rota de áudio.
  */
 export const EXTENSOES_ACEITAS: ReadonlySet<string> = new Set([
+  // o que o navegador grava, e os formatos de sempre
   "webm",
   "wav",
   "mp3",
@@ -63,11 +74,52 @@ export const EXTENSOES_ACEITAS: ReadonlySet<string> = new Set([
   "opus",
   "flac",
   "mp4",
+  "aac",
+  // celulares: gravadores de Android (AMR, 3GP), iPhone (CAF, M4A sem perdas)
+  "amr",
+  "awb",
+  "3gp",
+  "3ga",
+  "3g2",
+  "caf",
+  "m4b",
+  // computadores, gravadores digitais e ditafones
+  "wma",
+  "asf",
+  "aif",
+  "aiff",
+  "aifc",
+  "dss",
+  "mp2",
+  "mpga",
+  "ac3",
+  "oga",
+  "spx",
+  "gsm",
+  "au",
+  "snd",
+  "w64",
+  "voc",
+  // compactadores sem perda
+  "ape",
+  "wv",
+  "tta",
+  "mpc",
+  // vídeo: o áudio é extraído
+  "mov",
+  "mkv",
+  "mka",
+  "avi",
+  "wmv",
+  "m4v",
+  "mpg",
+  "mpeg",
 ]);
 
 /** O que o seletor de arquivos oferece — a mesma lista, do jeito que o `accept` pede. */
 export const ACCEPT_DE_AUDIO = [
   "audio/*",
+  "video/*",
   ...[...EXTENSOES_ACEITAS].map((e) => `.${e}`),
 ].join(",");
 

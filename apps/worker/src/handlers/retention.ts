@@ -1,4 +1,8 @@
-import { arquivosDaGravacao, type AudioStorage } from "@scribe/storage";
+import {
+  arquivosDaGravacao,
+  sessionPartsPrefix,
+  type AudioStorage,
+} from "@scribe/storage";
 import { auditLog, jobs, sessions, type Database } from "@scribe/db";
 import { and, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 
@@ -173,6 +177,15 @@ export function makeDeleteAudioHandler(
     // ficaria no disco além do prazo que o profissional escolheu, e nada
     // avisaria.
     for (const chave of arquivosDaGravacao(session)) {
+      await storage.remove(chave);
+    }
+    // E os pedaços de envios que nunca terminaram — do áudio principal ou do
+    // segundo microfone. Um envio abandonado no meio é gravação de consulta
+    // em fatias, e o prazo vale para ela também.
+    const pedacos = await storage.list(
+      sessionPartsPrefix(session.professionalId, session.id),
+    );
+    for (const chave of pedacos) {
       await storage.remove(chave);
     }
 

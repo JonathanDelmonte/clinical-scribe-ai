@@ -36,6 +36,11 @@ export interface OpcoesDeEnvio {
   readonly aleatorio?: () => number;
   /** Aborta o envio inteiro; o que já subiu permanece no servidor. */
   readonly signal?: AbortSignal;
+  /**
+   * Para onde vão os pedaços. O padrão é o áudio da sessão; o segundo
+   * microfone, quando o navegador não lê o formato, usa a rota dele.
+   */
+  readonly rota?: string;
 }
 
 export class EnvioInterrompido extends Error {
@@ -70,12 +75,13 @@ export async function enviarEmPartes(opcoes: OpcoesDeEnvio): Promise<number> {
     dormir = dormirPadrao,
     aleatorio = Math.random,
     signal,
+    rota,
   } = opcoes;
 
   const plano = planejarPartes(arquivo.size, tamanhoDaParte);
   if (plano.length === 0) throw new Error("arquivo vazio");
 
-  const base = `/api/sessions/${sessionId}/audio/partes`;
+  const base = rota ?? `/api/sessions/${sessionId}/audio/partes`;
 
   /**
    * Pergunta o que já chegou ANTES de começar.

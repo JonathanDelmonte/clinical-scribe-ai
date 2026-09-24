@@ -501,3 +501,63 @@ Uma consulta real gravada com dois celulares. Tudo acima é sintético, com
 defeitos escolhidos por quem escreveu o teste — o vazamento real de uma sala, o
 ganho automático de um celular e a distância real entre as pessoas podem mudar
 a separação medida.
+
+## Formatos de arquivo — o conversor universal
+
+O navegador prepara o áudio antes de enviar (16 kHz, mono, sem o silêncio) —
+mas só o que ele consegue decodificar. Medido no Chrome 152, com o mesmo trecho
+de fala em cada formato:
+
+| Formato | De onde vem | O Chrome lê? |
+|---|---|---|
+| AMR, 3GP | gravadores antigos de Android | não |
+| WMA | gravador do Windows, gravadores digitais | não |
+| M4A em ALAC | iPhone em qualidade "sem perdas" | não |
+| AIFF, CAF | Mac, iPhone | não |
+| WAV em ADPCM | ditafones | não |
+| MP2, AC3 | rádio, vídeo | não |
+| WAV em μ-law | telefonia | sim |
+
+Antes, sete desses eram recusados na porta ("arquivos .amr não são aceitos"), e
+os outros dois (ALAC, ADPCM) entravam, eram transcritos — e a tela não
+conseguia tocar o trecho das citações, porque o `<audio>` usa os mesmos
+decodificadores do navegador.
+
+### A decisão
+
+**O navegador tenta primeiro; o que ele não lê, o ffmpeg do motor converte.**
+O motor já decodificava tudo (é o que o Whisper usa), incluindo DSS de
+ditafone, GSM, Speex, APE e WavPack. Faltava ligar isso aos dois caminhos:
+
+- **Gravação principal**: o original sobe como veio, e o worker, antes de
+  transcrever, o converte (`/convert`) para o mesmo WAV que o navegador teria
+  feito. O original é apagado; a duração passa a ser conhecida antes da
+  checagem de quota; a tela toca o trecho das citações.
+- **Segundo microfone**: sem decodificar, o navegador não mede o volume. O
+  arquivo sobe em pedaços, o motor mede (`/envelope`), e o worker apaga o
+  original assim que a medida está gravada. A tela avisa que, nesse formato, o
+  arquivo passa pelo servidor.
+
+**Por que não converter no navegador** (ffmpeg compilado para WebAssembly): o
+pacote pronto (`@ffmpeg/core` 0.12) tem cerca de 30 MB de WebAssembly para
+baixar, é lento em celular, e é GPL-2.0 — servi-lo ao navegador é distribuí-lo,
+com as obrigações da GPL. No servidor o mesmo ffmpeg já está instalado e não é
+distribuído a ninguém.
+
+### Medido de ponta a ponta
+
+A conversa sintética de gabarito conhecido, com a gravação principal em **AMR**
+(8 kHz) e o segundo celular em **WMA** estéreo — os dois ilegíveis para o
+Chrome:
+
+- a gravação principal virou WAV, com duração conhecida e tocável na tela; o
+  `.amr` saiu do disco;
+- o segundo celular subiu em pedaços, virou medida no motor e foi apagado — no
+  disco, só a medida e o áudio principal;
+- o deslocamento medido foi 3,75 s: os 3,7 s reais mais os 45 ms de atraso do
+  codificador WMA, que o alinhamento absorve;
+- agrupamento e papel certos em 75,2%, com teto de 77,4% dado pelos trechos
+  desta transcrição (o Whisper segmenta um áudio de 8 kHz de outro jeito); nos
+  33 trechos de uma pessoa só, 99,8%.
+
+O caminho de reserva chega tão perto do teto quanto o normal.

@@ -37,6 +37,25 @@ describe("extensão do nome do arquivo", () => {
   );
 });
 
+describe("os formatos que o navegador não lê", () => {
+  /**
+   * Medidos no Chrome: nenhum destes passa por `decodeAudioData`. O navegador
+   * sobe o original e o worker converte — mas só se a porta deixar entrar.
+   * Recusá-los aqui era pedir para regravar uma consulta que já aconteceu.
+   */
+  it.each(["amr", "3gp", "wma", "aiff", "caf", "mp2", "ac3", "dss", "m4a", "wav"])(
+    ".%s é aceito",
+    (extensao) => {
+      expect(EXTENSOES_ACEITAS.has(extensao)).toBe(true);
+    },
+  );
+
+  // Aceitar "qualquer coisa" abriria a rota de áudio para servir um .html.
+  it.each(["html", "svg", "js", "exe", "pdf"])(".%s continua recusado", (extensao) => {
+    expect(EXTENSOES_ACEITAS.has(extensao)).toBe(false);
+  });
+});
+
 describe("o que o seletor de arquivos oferece", () => {
   /**
    * O `accept` do input e a lista que valida o envio precisam ser a mesma

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { arquivosDaGravacao, secondChannelKey, sessionAudioKey } from "./index";
+import {
+  arquivosDaGravacao,
+  secondChannelKey,
+  secondChannelOriginalKey,
+  secondChannelPartKey,
+  sessionAudioKey,
+  sessionPartKey,
+  sessionPartsPrefix,
+} from "./index";
 
 describe("arquivosDaGravacao", () => {
   it("lista o áudio principal e o segundo microfone", () => {
@@ -44,5 +52,33 @@ describe("secondChannelKey", () => {
   // segundo microfone não pode morar embaixo dele.
   it("não cai na pasta de pedaços de upload", () => {
     expect(secondChannelKey("dono", "sessao")).not.toContain("/partes/");
+  });
+});
+
+describe("o caminho de reserva do segundo microfone", () => {
+  // Quem apaga a sessão apaga `sessionPartsPrefix` inteiro, e a listagem é por
+  // pasta: os pedaços do segundo microfone precisam estar DENTRO dela.
+  it("os pedaços ficam dentro da pasta de pedaços da sessão", () => {
+    expect(
+      secondChannelPartKey("dono", "sessao", 3).startsWith(
+        `${sessionPartsPrefix("dono", "sessao")}/`,
+      ),
+    ).toBe(true);
+    expect(secondChannelPartKey("dono", "sessao", 3)).toBe(
+      "dono/partes/sessao/segundo-microfone/00003",
+    );
+  });
+
+  it("não colide com os pedaços do áudio principal", () => {
+    expect(secondChannelPartKey("dono", "sessao", 0)).not.toBe(
+      sessionPartKey("dono", "sessao", 0),
+    );
+  });
+
+  it("o original fica sob o dono, fora da pasta de pedaços", () => {
+    const original = secondChannelOriginalKey("dono", "sessao", ".WMA");
+    expect(original).toBe("dono/sessao-segundo-microfone-original.wma");
+    expect(original).not.toContain("/partes/");
+    expect(original).not.toBe(secondChannelKey("dono", "sessao"));
   });
 });

@@ -1,6 +1,9 @@
 "use client";
 
-import { medirSegundoMicrofone } from "@scribe/audio-browser";
+import {
+  medirSegundoMicrofone,
+  type MedidaDoSegundoMicrofone,
+} from "@scribe/audio-browser";
 import {
   lerEstadoDoSegundoMicrofone,
   type EstadoDoSegundoMicrofone,
@@ -8,10 +11,20 @@ import {
 } from "@scribe/core";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  ACCEPT_DE_AUDIO,
+  EXTENSOES_ACEITAS,
+  extensaoDoNome,
+  MAX_AUDIO_BYTES,
+} from "@/lib/audio";
+import { enviarEmPartes } from "@/lib/recording/enviar";
+
 type Fase =
   | { readonly tipo: "parado" }
   | { readonly tipo: "medindo" }
   | { readonly tipo: "enviando" }
+  /** O caminho de reserva: o arquivo sobe para o motor medir. 0 a 1. */
+  | { readonly tipo: "subindo"; readonly progresso: number }
   | { readonly tipo: "processando" }
   | { readonly tipo: "erro"; readonly mensagem: string };
 
@@ -68,7 +81,8 @@ export function SegundoMicrofone({
   const [aberto, setAberto] = useState(false);
   const [lado, setLado] = useState<LadoDoSegundo>("patient");
   const [arquivo, setArquivo] = useState<File | null>(null);
-  const ocupado = fase.tipo === "medindo" || fase.tipo === "enviando";
+  const ocupado =
+    fase.tipo === "medindo" || fase.tipo === "enviando" || fase.tipo === "subindo";
 
   // Referência estável: a função do pai muda a cada render, e o laço de
   // consulta abaixo recomeçaria a cada um.
@@ -135,15 +149,15 @@ export function SegundoMicrofone({
     if (arquivo === null) return;
 
     setFase({ tipo: "medindo" });
-    let medida: Awaited<ReturnType<typeof medirSegundoMicrofone>>;
+    let medida: MedidaDoSegundoMicrofone | null = null;
     try {
       medida = await medirSegundoMicrofone(arquivo);
     } catch {
-      setFase({
-        tipo: "erro",
-        mensagem:
-          "o navegador não conseguiu ler este arquivo. Se ele for .3gp ou .amr (gravadores antigos de Android), exporte do celular como MP3 ou M4A.",
-      });
+      // Formato que o navegador não lê. Não é erro para a pessoa resolver:
+      // o motor lê, e o caminho de reserva abaixo cuida disso sozinho.
+    }
+    if (medida === null) {
+      await medirNoServidor(arquivo);
       return;
     }
     if (medida.duracaoS < DURACAO_MINIMA_S) {
@@ -181,6 +195,75 @@ export function SegundoMicrofone({
       setFase({
         tipo: "erro",
         mensagem: "sem resposta do servidor — confira a conexão e tente de novo",
+      });
+    }
+  }
+
+  /**
+   * O caminho de reserva, para o formato que o navegador não lê — AMR de
+   * gravador antigo de Android, WMA, ALAC do iPhone, AIFF.
+   *
+   * Sem conseguir decodificar, o navegador não tem como medir o volume. Então
+   * a gravação sobe em pedaços, o motor a mede com o ffmpeg, e o worker a
+   * apaga assim que a medida está gravada. O que fica guardado no fim é o
+   * mesmo do caminho normal: só a medida. A tela diz isso enquanto sobe.
+   */
+  async function medirNoServidor(original: File) {
+    const extensao = extensaoDoNome(original.name);
+    if (!EXTENSOES_ACEITAS.has(extensao)) {
+      setFase({
+        tipo: "erro",
+        mensagem:
+          extensao === ""
+            ? "não dá para saber o formato deste arquivo — ele precisa ter extensão"
+            : `arquivos .${extensao} não são de áudio`,
+      });
+      return;
+    }
+    if (original.size > MAX_AUDIO_BYTES) {
+      setFase({
+        tipo: "erro",
+        mensagem: `gravação grande demais (máximo ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)} MB)`,
+      });
+      return;
+    }
+
+    setFase({ tipo: "subindo", progresso: 0 });
+    try {
+      const total = await enviarEmPartes({
+        sessionId,
+        arquivo: original,
+        rota: `/api/sessions/${sessionId}/segundo-microfone/partes`,
+        onProgresso: (p) =>
+          setFase({
+            tipo: "subindo",
+            progresso: p.bytesTotais > 0 ? p.bytesEnviados / p.bytesTotais : 0,
+          }),
+      });
+      const res = await fetch(
+        `/api/sessions/${sessionId}/segundo-microfone/original?perto=${lado === "patient" ? "paciente" : "profissional"}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ total, extensao }),
+        },
+      );
+      const corpo = (await res.json().catch(() => null)) as {
+        estado?: unknown;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        setFase({ tipo: "erro", mensagem: corpo?.error ?? "não foi possível enviar" });
+        return;
+      }
+      setVisto(lerEstadoDoSegundoMicrofone(corpo?.estado));
+      setAberto(false);
+      setArquivo(null);
+      setFase({ tipo: "processando" });
+    } catch (erro) {
+      setFase({
+        tipo: "erro",
+        mensagem: `${erro instanceof Error ? erro.message : "falha no envio"} — o arquivo continua no seu computador; pode tentar de novo`,
       });
     }
   }
@@ -317,7 +400,8 @@ export function SegundoMicrofone({
           <p className="text-xs text-muted">
             A gravação não sai deste computador: o navegador mede só o volume dela a
             cada 5 milésimos de segundo e envia essa medida, que não contém nenhuma
-            palavra.
+            palavra. Se o navegador não conseguir ler o formato do arquivo, ele vai ao
+            servidor só para ser medido, e é apagado em seguida.
           </p>
 
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
@@ -346,7 +430,7 @@ export function SegundoMicrofone({
 
           <input
             type="file"
-            accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.opus,.aac,.webm,.flac"
+            accept={ACCEPT_DE_AUDIO}
             aria-label="Gravação do segundo celular"
             onChange={(e) => setArquivo(e.currentTarget.files?.[0] ?? null)}
             className="block w-full text-xs"
@@ -362,7 +446,9 @@ export function SegundoMicrofone({
                 ? "Medindo o volume…"
                 : fase.tipo === "enviando"
                   ? "Enviando a medida…"
-                  : "Enviar"}
+                  : fase.tipo === "subindo"
+                    ? `Enviando para medir… ${Math.round(fase.progresso * 100)}%`
+                    : "Enviar"}
             </button>
             <button
               onClick={() => {
@@ -376,6 +462,12 @@ export function SegundoMicrofone({
               cancelar
             </button>
           </div>
+          {fase.tipo === "subindo" && (
+            <p className="text-xs text-muted">
+              O navegador não lê este formato, então o arquivo vai ao servidor para ser
+              medido — e é apagado assim que a medida sai. Nada para você fazer.
+            </p>
+          )}
         </div>
       )}
     </section>
