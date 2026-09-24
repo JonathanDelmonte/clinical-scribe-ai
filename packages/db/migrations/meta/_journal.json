@@ -71,6 +71,13 @@
       "when": 1790153847031,
       "tag": "0009_yielding_thunderbolts",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790212499085,
+      "tag": "0010_loose_clint_barton",
+      "breakpoints": true
     }
   ]
 }

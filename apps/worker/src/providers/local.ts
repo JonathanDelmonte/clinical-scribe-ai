@@ -187,3 +187,69 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
     };
   }
 }
+
+export interface ResultadoCanais {
+  readonly confiavel: boolean;
+  readonly motivo: string | null;
+  /** [início s, fim s, falante], no tempo do áudio PRINCIPAL. */
+  readonly turnos: readonly [number, number, string][];
+  readonly alinhamento: {
+    readonly deslocamento_s: number;
+    readonly deriva_ppm: number;
+    readonly qualidade: number;
+    readonly janelas: number;
+  };
+  readonly separacao_db?: number;
+  readonly fracao_canal_a?: number;
+  /** Fração do áudio da sessão que o segundo microfone também gravou. */
+  readonly cobertura?: number;
+  readonly segundos: number;
+}
+
+/**
+ * Pede ao motor a diarização por dois microfones.
+ *
+ * O segundo microfone vai como ENVELOPE — a energia dele a cada 5 ms, medida
+ * no navegador —, nunca como áudio. Ver `canais.py`.
+ *
+ * Função solta, e não método do provedor: é uma capacidade só do motor local
+ * — nenhum fornecedor de nuvem recebe dois canais e devolve quem falou pela
+ * energia de cada um. Pendurá-la na interface comum obrigaria todo motor a
+ * fingir que sabe fazer isto.
+ */
+export async function diarizarPorCanais(
+  baseUrl: string,
+  entrada: {
+    principal: Uint8Array<ArrayBuffer>;
+    nomePrincipal: string;
+    envelope: Uint8Array<ArrayBuffer>;
+    regioes: unknown;
+    duracaoOriginalMs: number | null;
+  },
+): Promise<ResultadoCanais> {
+  const form = new FormData();
+  form.append("principal", new Blob([entrada.principal]), entrada.nomePrincipal);
+  form.append("envelope", new Blob([entrada.envelope]), "segundo-microfone.cve");
+  if (Array.isArray(entrada.regioes) && entrada.regioes.length > 0) {
+    form.append("regioes", JSON.stringify(entrada.regioes));
+  }
+  if (entrada.duracaoOriginalMs !== null) {
+    form.append("duracao_original_ms", String(entrada.duracaoOriginalMs));
+  }
+
+  const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/diarize-channels`, {
+    method: "POST",
+    body: form,
+    // Decodificar o áudio da sessão e correlacionar leva segundos, não
+    // minutos — mas uma consulta longa pode passar de um. Dez minutos é
+    // folga, não expectativa.
+    signal: AbortSignal.timeout(10 * 60 * 1000),
+  });
+  if (!res.ok) {
+    const corpo = await res.text().catch(() => "");
+    throw new Error(
+      `motor respondeu ${res.status} na diarização por canal: ${corpo.slice(0, 300)}`,
+    );
+  }
+  return (await res.json()) as ResultadoCanais;
+}

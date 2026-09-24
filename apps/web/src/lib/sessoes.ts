@@ -1,7 +1,7 @@
 import "server-only";
 
 import { auditLog, jobs, sessions, type Database } from "@scribe/db";
-import { sessionPartsPrefix } from "@scribe/storage";
+import { arquivosDaGravacao, sessionPartsPrefix } from "@scribe/storage";
 import { and, eq, sql } from "drizzle-orm";
 
 import { ACOES, auditar } from "./audit";
@@ -235,6 +235,7 @@ export async function apagarSessao(
         id: sessions.id,
         status: sessions.status,
         audioPath: sessions.audioPath,
+        secondChannelPath: sessions.secondChannelPath,
       })
       .from(sessions)
       .where(eq(sessions.id, sessionId))
@@ -254,12 +255,19 @@ export async function apagarSessao(
 
   const { me, session } = alvo;
 
+  // TODOS os arquivos da gravação, não só o áudio principal: o segundo
+  // microfone é um arquivo à parte, e apagar só o principal o deixaria no
+  // disco. Ver `arquivosDaGravacao`.
+  //
+  // `audioApagado` continua dizendo o que o nome diz — o ÁUDIO saiu —, e não
+  // "algum arquivo saiu": o do segundo microfone não é áudio.
   let audioApagado = false;
-  if (session.audioPath !== null) {
-    audioApagado = await storage
-      .remove(session.audioPath)
+  for (const chave of arquivosDaGravacao(session)) {
+    const apagou = await storage
+      .remove(chave)
       .then(() => true)
       .catch(() => false);
+    if (chave === session.audioPath) audioApagado = apagou;
   }
 
   // Pedaços de um envio que nunca foi montado. Sem isto, cancelar no meio de

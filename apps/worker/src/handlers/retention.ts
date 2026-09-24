@@ -1,4 +1,4 @@
-import type { AudioStorage } from "@scribe/storage";
+import { arquivosDaGravacao, type AudioStorage } from "@scribe/storage";
 import { auditLog, jobs, sessions, type Database } from "@scribe/db";
 import { and, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 
@@ -148,6 +148,7 @@ export function makeDeleteAudioHandler(
         professionalId: sessions.professionalId,
         status: sessions.status,
         audioPath: sessions.audioPath,
+        secondChannelPath: sessions.secondChannelPath,
         audioDeletedAt: sessions.audioDeletedAt,
       })
       .from(sessions)
@@ -167,7 +168,13 @@ export function makeDeleteAudioHandler(
       return;
     }
 
-    await storage.remove(session.audioPath);
+    // Principal e segundo microfone. Esta rotina roda sozinha, sem ninguém
+    // olhando — se esquecesse o segundo arquivo, uma medida da consulta
+    // ficaria no disco além do prazo que o profissional escolheu, e nada
+    // avisaria.
+    for (const chave of arquivosDaGravacao(session)) {
+      await storage.remove(chave);
+    }
 
     await db
       .update(sessions)

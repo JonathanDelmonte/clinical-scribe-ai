@@ -400,3 +400,104 @@ celular as duas vozes já eram parecidas; limpas, ficaram iguais.
 - O problema que motivou isto — separação de 0,17 em consulta com máscara —
   continua aberto. A alavanca que resta sem custo é **dois microfones**: o canal
   de cada pessoa é o gabarito de quem falou quando, e dispensa diarização.
+
+## Dois microfones — diarização por canal
+
+A alavanca que sobrou. Em vez de perguntar "que voz é esta?" — que falha com
+máscara e microfone de celular —, pergunta "qual microfone ouviu mais alto?". O
+profissional grava no app, como sempre; um segundo celular, perto do paciente,
+grava a mesma consulta com o gravador do próprio aparelho; depois ele envia esse
+segundo arquivo na tela da sessão.
+
+### As decisões
+
+1. **O segundo arquivo nunca sai do computador.** O algoritmo só usa a
+   *energia* do segundo microfone, não a onda. Então o navegador mede a energia
+   a cada 5 ms e envia só essa medida (`envelope.ts`, formato `CVE1`: centésimos
+   de dB em 16 bits, com cabeçalho). Uma energia a cada 5 ms não contém
+   palavras. De quebra resolve o tamanho: o arquivo do teste abaixo tinha
+   39,4 MB, e a medida, 94 KB — acima de 10 MB o Next corta o corpo da
+   requisição sem erro, e o segundo microfone ficaria mudo na metade final da
+   consulta, atribuindo tudo ali ao lado do principal.
+2. **Alinhar antes de comparar.** Os dois aparelhos começam em instantes
+   diferentes e os relógios andam em ritmos diferentes. O deslocamento sai da
+   correlação dos envelopes; a deriva, da mesma medida em seis janelas e de uma
+   reta pelos deslocamentos. O áudio da sessão chega sem o silêncio (o navegador
+   corta), e as regiões de fala guardadas na sessão o levam de volta ao relógio
+   real para alinhar — e trazem o segundo canal ao tempo enxuto depois.
+3. **Onde o segundo aparelho não gravou, nada é decidido.** Ausência de medida é
+   `NaN`, não zero: zero diria "silêncio do lado do paciente" e entregaria cada
+   fala dali ao lado do principal.
+4. **O papel é dito, não adivinhado.** Os turnos dizem de que *lado* a fala
+   veio; quem estava de cada lado, quem posicionou os aparelhos sabe — a tela
+   pergunta. O classificador de conteúdo de sempre vira conferência: se ele
+   discorda com segurança, a confiança cai e a tela avisa.
+5. **Os trechos não são recriados.** Mantêm ID (as citações da nota continuam
+   valendo) e texto (as correções de texto sobrevivem). Papel corrigido à mão,
+   trecho a trecho, não é tocado. A inversão de papéis ("trocar") não congela
+   nada — ela corrige a leitura da diarização antiga, não cada fala.
+6. **Recusa honesta.** Menos de 5 dB entre os lados, segundo microfone mudo
+   (menos de 10 dB entre silêncio e fala), arquivo de outra consulta
+   (correlação abaixo de 0,25), cobertura abaixo de metade da consulta, ou
+   quase toda a fala de um lado só: a sessão guarda o motivo e a transcrição
+   fica como estava.
+
+### Medição com resposta conhecida
+
+Não existe gravação de consulta com dois microfones e gabarito. O teste
+(`services/asr-local/teste_canais.py`) fabrica uma: pedaços de duas gravações
+reais de um falante só, intercalados num roteiro conhecido de 236 s, com todos
+os defeitos de um consultório em valores sabidos — vazamento de −12 dB, segundo
+aparelho 6 dB mais baixo, começando 3,7 s depois, relógio 120 ppm adiantado,
+ruído diferente em cada canal, silêncio cortado pelo navegador. O segundo canal
+passa pelo caminho de produção inteiro: medido, codificado, decodificado.
+
+| | Medido | Real |
+|---|---|---|
+| Deslocamento | 3,700 s | 3,7 s |
+| Deriva | −122 ppm | −120 ppm |
+| Precisão (da fala atribuída, quanto está certo) | **100%** | |
+| Alcance (da fala que existe, quanto foi atribuído) | 96,9% | |
+| Mesmo, no tempo enxuto | 100% · 96,8% | |
+| Sem corrigir a deriva | 99,8% | |
+
+Os 3% sem atribuição são os 3,7 s que o segundo aparelho não gravou. Os quatro
+casos que devem ser recusados — microfone mudo, os dois no mesmo lugar, arquivo
+sem relação, segundo aparelho que parou num terço — foram recusados. O formato
+tem um vetor de ouro: o navegador escreve, byte a byte, o que o motor escreve.
+
+**A métrica sem controle enganou de novo** — terceira vez, depois do vocabulário
+e da limpeza. Uma taxa única de acerto dava 99% com zeros no lugar do "não
+gravou", e 97% depois da correção para `NaN`: parecia piora. Separando precisão
+de alcance, a versão com zeros acertava o começo **por sorte** (quem falava ali
+era do lado do principal), e a correta simplesmente não decide o que não mediu.
+
+### De ponta a ponta, pelo produto
+
+A mesma conversa sintética, enviada como consulta de verdade na conta de teste:
+navegador cortando silêncio, Whisper, pyannote, e o segundo arquivo (39,4 MB,
+estéreo a 44,1 kHz, como um celular gravaria) pela tela nova.
+
+| | Agrupamento certo | Papel certo |
+|---|---|---|
+| Separação por voz (hoje) | 60,2% | 0% (todos "não identificado") |
+| Dois microfones | **80,6%** | **80,6%** |
+| Teto com os trechos do Whisper | 80,9% | |
+
+Nos 32 trechos de uma pessoa só, **100%**. A perda inteira está em 11 trechos em
+que o Whisper juntou falas das duas pessoas: um trecho é atribuído inteiro a
+quem mais falou nele. A conversa sintética troca de falante a cada 1,5–5 s, bem
+mais rápido que uma consulta; ainda assim é o próximo limite. Quebrar o trecho
+na troca de lado exigiria o tempo de cada palavra (não é guardado hoje) e
+trocaria IDs citados pela nota — possível só antes de a nota existir.
+
+Processamento: 7 s do envio ao resultado. Reenviar com a posição invertida
+inverteu os papéis e manteve o trecho corrigido à mão; apagar a consulta levou
+os dois arquivos.
+
+### O que falta
+
+Uma consulta real gravada com dois celulares. Tudo acima é sintético, com
+defeitos escolhidos por quem escreveu o teste — o vazamento real de uma sala, o
+ganho automático de um celular e a distância real entre as pessoas podem mudar
+a separação medida.

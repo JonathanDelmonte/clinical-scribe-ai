@@ -59,6 +59,9 @@ export const ACOES = {
   audioBaixado: "sessao.audio_baixado",
   audioApagado: "sessao.audio_apagado",
   reprocessada: "sessao.reprocessada",
+  segundoMicrofoneEnviado: "sessao.segundo_microfone_enviado",
+  /** Escrita pelo worker, com `actor_id` nulo — ver `handlers/channels.ts`. */
+  segundoMicrofoneAplicado: "sessao.segundo_microfone_aplicado",
   trechoCorrigido: "transcricao.trecho_corrigido",
 
   notaAprovada: "documento.nota_aprovada",

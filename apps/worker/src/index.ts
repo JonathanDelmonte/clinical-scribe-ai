@@ -17,6 +17,7 @@ import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
 
 import { config, requireDatabaseUrl } from "./config.js";
 import { logger } from "./logger.js";
+import { makeChannelsHandler } from "./handlers/channels.js";
 import { makeNoteHandler } from "./handlers/note.js";
 import { makeDeleteAudioHandler, sweepRetention } from "./handlers/retention.js";
 import { makeObjectiveHandler } from "./handlers/objective.js";
@@ -64,6 +65,11 @@ const handlers: Record<string, JobHandler> = {
   // Retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS.
   // Quem enfileira é `sweepRetention`, no laço abaixo.
   delete_audio: makeDeleteAudioHandler(db, storage, logger),
+
+  // Segundo microfone: refaz quem falou pela energia de dois canais. Não
+  // depende de LLM — o papel continua sendo decidido pelo conteúdo, que é
+  // determinístico.
+  diarize_channels: makeChannelsHandler(db, storage, logger),
 };
 
 if (llm.blockedReason !== null) {

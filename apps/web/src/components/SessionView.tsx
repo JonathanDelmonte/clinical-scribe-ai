@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ClinicalNote, type NoteDoc } from "./ClinicalNote";
 import { SessionObjectives, type ObjectiveDoc } from "./SessionObjectives";
+import { SegundoMicrofone } from "./SegundoMicrofone";
 import { SessionProgress } from "./SessionProgress";
 import { TrechoEditavel } from "./TrechoEditavel";
 import { SpeakerRoles, type Assignment } from "./SpeakerRoles";
@@ -35,6 +36,8 @@ interface SessionData {
     progressEtaSeconds: number | null;
     progressPreview: string | null;
     roleAssignment: Assignment[] | null;
+    /** O segundo microfone — `jsonb`, lido com conferência no componente. */
+    channelDiarization: unknown;
   };
   patient: { name: string } | null;
   segments: Segment[];
@@ -286,6 +289,24 @@ export function SessionView({ sessionId }: { sessionId: string }) {
           sessionId={session.id}
           assignment={session.roleAssignment}
           onChanged={() => setRecarga((n) => n + 1)}
+        />
+      )}
+
+      {/*
+       * Logo abaixo de "Quem é quem", porque responde à mesma pergunta — e é
+       * para onde o olho vai quando a separação por voz errou.
+       */}
+      {segments.length > 0 && !working && (
+        <SegundoMicrofone
+          sessionId={session.id}
+          estadoGravado={session.channelDiarization}
+          bloqueio={
+            note?.approvedAt != null
+              ? "A nota desta consulta já foi aprovada: quem falou não muda depois da assinatura."
+              : null
+          }
+          notaGeradaEm={note?.createdAt ?? null}
+          onAplicado={() => setRecarga((n) => n + 1)}
         />
       )}
 

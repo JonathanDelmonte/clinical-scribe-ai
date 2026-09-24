@@ -164,7 +164,7 @@ cinco segundos. Por isso a barreira é de propriedade, não de bom senso.
 
 ```
 apps/web/src/app/           exceto sessoes/[id]/
-apps/web/src/components/    exceto os cinco listados abaixo
+apps/web/src/components/    exceto os listados abaixo
 apps/web/src/lib/auth.ts    (a substituição do seletor de dev é sua)
 packages/db/sql/rls.sql     (políticas novas para tabelas novas)
 docs/                       privacidade, termos
@@ -183,6 +183,10 @@ apps/web/src/components/ClinicalNote.tsx
 apps/web/src/components/SpeakerRoles.tsx
 apps/web/src/components/SessionProgress.tsx
 apps/web/src/components/VoiceEnrollment.tsx
+apps/web/src/components/SegundoMicrofone.tsx
+
+apps/web/src/app/api/sessions/[id]/segundo-microfone/   a medida do segundo microfone
+packages/audio-browser/src/envelope.ts                  o formato dela — contrato com o motor
 ```
 
 ### Precisa de uma mudança na Trilha A? O processo

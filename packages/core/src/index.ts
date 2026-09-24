@@ -103,3 +103,21 @@ export {
   VOCABULARIO_COMUM,
   VOCABULARIO_POR_ESPECIALIDADE,
 } from "./vocabulary";
+
+export type {
+  EstadoDoSegundoMicrofone,
+  LadoDoSegundo,
+  Reatribuicao,
+  TrechoParaReatribuir,
+  TurnoDeCanal,
+} from "./channels";
+export {
+  atribuicaoDosCanais,
+  falantePorSobreposicao,
+  lerEstadoDoSegundoMicrofone,
+  papeisDosCanais,
+  papelConferidoAMao,
+  reatribuirPorCanais,
+  ROTULO_PRINCIPAL,
+  ROTULO_SEGUNDO,
+} from "./channels";

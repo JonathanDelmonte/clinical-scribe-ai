@@ -331,6 +331,24 @@ export const sessions = pgTable(
     silenceRemovedMs: integer("silence_removed_ms"),
     speechRegions: jsonb("speech_regions"),
 
+    /**
+     * O SEGUNDO microfone — um celular perto da outra pessoa.
+     *
+     * Com dois microfones, quem falou não se decide mais pela voz — que falha
+     * com máscara e microfone de celular — e sim por qual microfone ouviu mais
+     * alto. `channelDiarization` guarda o pedido (onde o segundo aparelho
+     * ficou) e o que o alinhamento e a separação mediram: deslocamento, deriva
+     * do relógio, e se o resultado foi confiável.
+     *
+     * O arquivo NÃO é áudio: é a energia do segundo microfone a cada 5 ms,
+     * medida no navegador. A gravação do lado do paciente nunca sai do
+     * aparelho. Mesmo assim ele é derivado da consulta e vive e morre com o
+     * áudio dela — ver `arquivosDaGravacao` no pacote de storage, a única
+     * fonte da lista do que apagar.
+     */
+    secondChannelPath: text("second_channel_path"),
+    channelDiarization: jsonb("channel_diarization"),
+
     failureReason: text("failure_reason"),
 
     /**

@@ -33,7 +33,10 @@ RUN pip3 install --no-cache-dir \
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+# Todo módulo que o app.py importa precisa estar listado aqui. Copiar só o
+# app.py funcionaria em qualquer teste feito com o container já de pé — e
+# derrubaria o serviço inteiro na partida, no primeiro build limpo.
+COPY app.py canais.py teste_canais.py ./
 
 ENV HF_HOME=/models \
     WHISPER_MODEL=large-v3 \

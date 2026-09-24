@@ -84,6 +84,41 @@ export function professionalFileKey(professionalId: string, name: string): strin
   return `${professionalId}/perfil/${name}`;
 }
 
+/**
+ * Chave do segundo microfone de uma sessão.
+ *
+ * Extensão fixa porque o conteúdo não varia: não é o arquivo que o celular
+ * gravou — esse nunca sai do aparelho —, e sim a energia dele a cada 5 ms,
+ * medida no navegador, no formato que o motor lê (ver `canais.py`). Ao lado do
+ * áudio principal e sob o mesmo dono, pela mesma regra de `sessionAudioKey`.
+ */
+export function secondChannelKey(professionalId: string, sessionId: string): string {
+  return `${professionalId}/${sessionId}-segundo-microfone.cve`;
+}
+
+/**
+ * TODOS os arquivos da gravação de uma sessão — o que apagar quando ela sai.
+ *
+ * Existe para que apagar seja uma pergunta com uma resposta só. Três rotinas
+ * apagam gravação — exclusão de conta, exclusão de sessão, retenção — e cada
+ * uma listar os arquivos por conta própria funcionaria até o dia em que
+ * surgisse mais um. Aí uma das três esqueceria, e algo derivado da consulta de
+ * um paciente ficaria guardado além do prazo que o profissional escolheu, sem
+ * erro nenhum.
+ *
+ * O segundo microfone entra mesmo não sendo áudio: é medida da consulta, sem
+ * serventia depois que o áudio principal se vai, e guardá-lo além dele seria
+ * reter por reter.
+ */
+export function arquivosDaGravacao(sessao: {
+  audioPath: string | null;
+  secondChannelPath?: string | null;
+}): string[] {
+  return [sessao.audioPath, sessao.secondChannelPath ?? null].filter(
+    (k): k is string => k !== null && k !== "",
+  );
+}
+
 /** Extensão do nome do arquivo, ou `webm` — o formato que o MediaRecorder dá. */
 export function extensionOf(filename: string): string {
   const match = /\.([a-z0-9]{1,8})$/i.exec(filename);

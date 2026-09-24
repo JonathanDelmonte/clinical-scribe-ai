@@ -12,6 +12,7 @@ import {
   usageEvents,
   type Database,
 } from "@scribe/db";
+import { arquivosDaGravacao } from "@scribe/storage";
 import { asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import { ACOES, auditar } from "./audit";
@@ -154,7 +155,10 @@ export async function excluirConta(me: Professional): Promise<ResultadoDaExclusa
    * exatamente o que a exclusão deveria impedir.
    */
   const comAudio = await getDb()
-    .select({ audioPath: sessions.audioPath })
+    .select({
+      audioPath: sessions.audioPath,
+      secondChannelPath: sessions.secondChannelPath,
+    })
     .from(sessions)
     .where(
       sql`${sessions.professionalId} = ${me.id} and ${isNotNull(sessions.audioPath)}`,
@@ -162,13 +166,20 @@ export async function excluirConta(me: Professional): Promise<ResultadoDaExclusa
 
   let audiosApagados = 0;
   for (const s of comAudio) {
-    if (s.audioPath === null) continue;
-    await storage
-      .remove(s.audioPath)
-      .then(() => {
-        audiosApagados += 1;
-      })
-      .catch(() => undefined);
+    // Principal e segundo microfone — ver `arquivosDaGravacao`. A varredura por
+    // prefixo logo abaixo também os pegaria, mas por acaso de layout.
+    //
+    // A contagem é só de ÁUDIO: é o que a pessoa lê no comprovante de
+    // exclusão, e o arquivo do segundo microfone não é áudio (é a energia dele
+    // a cada 5 ms). Contá-lo inflaria o número.
+    for (const chave of arquivosDaGravacao(s)) {
+      await storage
+        .remove(chave)
+        .then(() => {
+          if (chave === s.audioPath) audiosApagados += 1;
+        })
+        .catch(() => undefined);
+    }
   }
 
   // Os pedaços de uploads inacabados e a assinatura moram sob o ID do dono.

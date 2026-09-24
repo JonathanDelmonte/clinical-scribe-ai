@@ -23,7 +23,10 @@ RUN pip install --no-cache-dir \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+# Todo módulo que o app.py importa precisa estar listado aqui. Copiar só o
+# app.py funcionaria em qualquer teste feito com o container já de pé — e
+# derrubaria o serviço inteiro na partida, no primeiro build limpo.
+COPY app.py canais.py teste_canais.py ./
 
 # Os modelos são baixados na primeira execução e ficam num volume. Sem isso,
 # cada `docker compose up` rebaixaria gigabytes.

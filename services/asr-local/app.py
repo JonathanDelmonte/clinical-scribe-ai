@@ -25,6 +25,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from faster_whisper import BatchedInferencePipeline, WhisperModel
 from faster_whisper.audio import decode_audio
 
+import canais
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger("asr-local")
 
@@ -592,6 +594,81 @@ async def create_voice_embedding(file: UploadFile = File(...)) -> dict[str, Any]
         }
     finally:
         os.unlink(path)
+
+
+@app.post("/diarize-channels")
+async def diarize_channels(
+    principal: UploadFile = File(...),
+    envelope: UploadFile = File(...),
+    regioes: str = Form(default=""),
+    duracao_original_ms: float = Form(default=0),
+) -> dict[str, Any]:
+    """
+    Quem falou quando, a partir de DOIS microfones — um perto de cada pessoa.
+
+    `principal` é o áudio da sessão. `envelope` NÃO é áudio: é a energia do
+    segundo microfone a cada 5 ms, medida no navegador — a gravação do lado do
+    paciente nunca sai do aparelho de quem a fez. Ver `canais.py`.
+
+    `regioes` é o mapa de fala do navegador, quando ele cortou o silêncio do
+    principal: sem ele não há como alinhar um arquivo comprimido no tempo com
+    outro que não foi.
+
+    Devolve os turnos no tempo do áudio PRINCIPAL — o mesmo dos trechos já
+    transcritos — e o que foi medido pelo caminho. `confiavel: false` não é
+    erro: é a resposta honesta de que os dois microfones não separaram as
+    pessoas, e quem chamou deve manter a diarização que já tinha.
+    """
+    try:
+        energia_b = canais.decodificar_envelope(await envelope.read())
+    except canais.EnvelopeInvalido as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from erro
+
+    mapa: list[dict] = []
+    if regioes.strip() != "":
+        try:
+            bruto = json.loads(regioes)
+        except (ValueError, TypeError) as erro:
+            # Mapa ilegível: seguir como se o áudio não tivesse sido cortado
+            # daria um alinhamento errado em silêncio. Melhor recusar.
+            raise HTTPException(status_code=400, detail="mapa de regiões ilegível") from erro
+        if isinstance(bruto, list):
+            mapa = [r for r in bruto if isinstance(r, dict) and "startMs" in r and "endMs" in r]
+
+    sufixo = os.path.splitext(principal.filename or "")[1] or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as tmp:
+        tmp.write(await principal.read())
+        caminho = tmp.name
+
+    try:
+        return await asyncio.to_thread(
+            _diarizar_canais, caminho, energia_b, mapa, duracao_original_ms / 1000
+        )
+    finally:
+        try:
+            os.unlink(caminho)
+        except OSError:
+            pass
+
+
+def _diarizar_canais(
+    caminho: str, energia_b: np.ndarray, regioes: list[dict], duracao_original_s: float
+) -> dict[str, Any]:
+    inicio = time.time()
+    a = decode_audio(caminho, sampling_rate=SAMPLE_RATE).astype(np.float32)
+    resultado = canais.diarizar_sessao(a, energia_b, regioes, duracao_original_s)
+    al = resultado["alinhamento"]
+    log.info(
+        "diarização por canal: deslocamento %.3fs, deriva %+.0f ppm, qualidade %.2f, "
+        "separação %s dB, cobertura %s, confiável %s",
+        al["deslocamento_s"],
+        al["deriva_ppm"],
+        al["qualidade"],
+        resultado.get("separacao_db"),
+        resultado.get("cobertura"),
+        resultado["confiavel"],
+    )
+    return {**resultado, "segundos": round(time.time() - inicio, 1)}
 
 
 @app.post("/transcribe")

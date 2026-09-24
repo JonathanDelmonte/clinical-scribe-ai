@@ -32,6 +32,14 @@
 /apps/web/src/components/SpeakerRoles.tsx     @JonathanDelmonte
 /apps/web/src/components/SessionProgress.tsx  @JonathanDelmonte
 /apps/web/src/components/VoiceEnrollment.tsx  @JonathanDelmonte
+/apps/web/src/components/SegundoMicrofone.tsx @JonathanDelmonte
+
+# O segundo microfone: a rota que recebe a medida e o formato dela. O formato é
+# um contrato com o motor (`canais.py`) — mudar um lado sem o outro não quebra
+# teste de tela nenhum, e o motor passaria a ler números errados.
+# (`*` no lugar de `[id]`: o CODEOWNERS não aceita colchetes num caminho.)
+/apps/web/src/app/api/sessions/*/segundo-microfone/  @JonathanDelmonte
+/packages/audio-browser/src/envelope.ts              @JonathanDelmonte
 
 # ----------------------------------------------------------------------------
 # Fronteira compartilhada — as duas trilhas precisam, então as duas revisam.
