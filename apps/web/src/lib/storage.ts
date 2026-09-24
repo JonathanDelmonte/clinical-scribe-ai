@@ -1,15 +1,15 @@
 import "server-only";
 
-import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
+import { createStorageFromEnv } from "@scribe/storage";
 
 /**
- * Armazenamento do áudio.
+ * Armazenamento do áudio — o mesmo que o worker usa.
  *
- * A raiz é resolvida contra a raiz do monorepo, não contra o diretório do
- * Next. É o que garante que a web e o worker apontem para a MESMA pasta —
- * caminhos divergentes produziriam "arquivo não encontrado" num ponto que
- * nenhum dos dois lados testa sozinho.
+ * Em produção, o Supabase Storage pelo protocolo S3 (as variáveis
+ * `STORAGE_S3_*`); em desenvolvimento, uma pasta na raiz do monorepo. Quem
+ * escolhe é `createStorageFromEnv`, num lugar só: a web grava o áudio, o
+ * worker lê, e os dois precisam apontar para o mesmo lugar — caminhos
+ * divergentes produziriam "arquivo não encontrado" num ponto que nenhum dos
+ * dois lados testa sozinho.
  */
-export const storage = createLocalStorage(
-  resolveStorageRoot(process.env["STORAGE_ROOT"] ?? ".storage"),
-);
+export const storage = createStorageFromEnv(process.env);

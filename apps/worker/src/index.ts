@@ -13,7 +13,7 @@
  */
 
 import { createServiceClient } from "@scribe/db";
-import { createLocalStorage, resolveStorageRoot } from "@scribe/storage";
+import { createStorageFromEnv } from "@scribe/storage";
 
 import { config, requireDatabaseUrl } from "./config.js";
 import { logger } from "./logger.js";
@@ -34,7 +34,10 @@ import {
 } from "./queue.js";
 
 const db = createServiceClient(requireDatabaseUrl());
-const storage = createLocalStorage(resolveStorageRoot(config.STORAGE_ROOT));
+const storage = createStorageFromEnv({
+  ...process.env,
+  STORAGE_ROOT: config.STORAGE_ROOT,
+});
 
 type JobHandler = (job: ClaimedJob) => Promise<void>;
 

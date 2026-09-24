@@ -62,6 +62,32 @@ services:
       # declararia o container morto no meio do download.
       start_period: 300s
 
+  # O worker de PRODUÇÃO: lê a fila do site no ar (o banco no Supabase) e usa
+  # o motor DESTE computador para processar as consultas — de qualquer pessoa.
+  #
+  # Com `restart: unless-stopped`, depois da primeira subida basta abrir o
+  # Docker Desktop: o motor e este worker voltam sozinhos, sem terminal.
+  #
+  #     docker compose -f docker-compose.yml -f docker-compose.gpu.yml   #       --profile asr --profile producao up -d --build
+  #
+  # A configuração vem de `.env.producao`, que nunca vai para o GitHub.
+  worker-producao:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    image: scribe-worker
+    container_name: scribe-worker-producao
+    restart: unless-stopped
+    profiles: ["producao"]
+    env_file: .env.producao
+    environment:
+      # Dentro da rede do Docker o motor atende pelo nome do serviço, na porta
+      # do container (8000) — a 8001 é só a porta publicada no Windows.
+      ASR_LOCAL_URL: http://asr-local:8000
+    depends_on:
+      asr-local:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   asr-models:

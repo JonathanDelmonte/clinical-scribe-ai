@@ -8,8 +8,12 @@ WORKDIR /app
 # Manifests primeiro: enquanto as dependências não mudarem, esta camada é
 # reaproveitada e o build não reinstala nada.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# TODO pacote de que o worker depende, direta ou indiretamente (db → auth).
+# Faltando um, o `pnpm install` abaixo não resolve o workspace e o build para.
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
+COPY packages/auth/package.json packages/auth/
+COPY packages/storage/package.json packages/storage/
 COPY apps/worker/package.json apps/worker/
 
 RUN pnpm install --frozen-lockfile --filter @scribe/worker...

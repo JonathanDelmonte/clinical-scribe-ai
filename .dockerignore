@@ -1,0 +1,22 @@
+# O que NUNCA entra numa imagem.
+#
+# Sem este arquivo, `COPY packages packages` levaria junto os node_modules do
+# Windows — binários de outro sistema — e o build copiaria gigabytes à toa.
+# E os .env levariam senhas para dentro de uma imagem que pode ser publicada.
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+.git
+.storage
+.env
+.env.*
+!.env.example
+**/*.wav
+**/*.mp3
+**/*.webm
+**/*.m4a
+spikes
+services
+docs

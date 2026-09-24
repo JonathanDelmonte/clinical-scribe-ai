@@ -170,3 +170,46 @@ export function extensionOf(filename: string): string {
 }
 
 export { createLocalStorage, resolveStorageRoot } from "./local";
+export { createS3Storage, type ConfiguracaoS3 } from "./s3";
+
+import { createLocalStorage, resolveStorageRoot } from "./local";
+import { createS3Storage } from "./s3";
+
+/**
+ * O armazenamento que a configuração pede: S3 quando `STORAGE_S3_ENDPOINT`
+ * existe, disco quando não.
+ *
+ * Um lugar só decide, para a web e o worker nunca divergirem: os dois PRECISAM
+ * ler e gravar no mesmo lugar — a web grava o áudio, o worker lê.
+ *
+ * Configuração pela metade é erro na partida, e não queda para o disco: um
+ * site na nuvem gravando no disco da função perderia cada consulta em
+ * silêncio, porque aquele disco some a cada publicação.
+ */
+export function createStorageFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): AudioStorage {
+  const endpoint = env["STORAGE_S3_ENDPOINT"]?.trim() ?? "";
+  if (endpoint === "") {
+    return createLocalStorage(resolveStorageRoot(env["STORAGE_ROOT"] ?? ".storage"));
+  }
+  const faltando = [
+    "STORAGE_S3_REGION",
+    "STORAGE_S3_ACCESS_KEY_ID",
+    "STORAGE_S3_SECRET_ACCESS_KEY",
+    "STORAGE_S3_BUCKET",
+  ].filter((nome) => (env[nome]?.trim() ?? "") === "");
+  if (faltando.length > 0) {
+    throw new Error(
+      `STORAGE_S3_ENDPOINT definido, mas faltam: ${faltando.join(", ")}. ` +
+        "Configure todas ou nenhuma — sem elas o armazenamento é o disco local.",
+    );
+  }
+  return createS3Storage({
+    endpoint,
+    region: env["STORAGE_S3_REGION"]!.trim(),
+    accessKeyId: env["STORAGE_S3_ACCESS_KEY_ID"]!.trim(),
+    secretAccessKey: env["STORAGE_S3_SECRET_ACCESS_KEY"]!.trim(),
+    bucket: env["STORAGE_S3_BUCKET"]!.trim(),
+  });
+}
