@@ -40,8 +40,9 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 
 ### Depois do Marco 6 — o que entrou até 27/09
 
-- **Correção da transcrição** e **chave de IA do próprio profissional** — os
-  itens 1 e 2 da fila abaixo.
+- **Correção da transcrição** — o item 1 da fila abaixo. A **chave de IA do
+  próprio profissional** (item 2) está pela metade: a tela guarda a chave
+  cifrada, mas o worker ainda gera a nota com a chave da instalação.
 - **Dois microfones**: diarização por canal, com o segundo celular mandando só
   a energia da voz, não o áudio. Ver ADR-0002.
 - **Conversor universal**: o navegador prepara o que lê; o ffmpeg do motor
@@ -58,17 +59,27 @@ Nenhuma tela foi desenhada até aqui, de propósito: o design vem depois de as
 funcionalidades estarem fechadas, para desenhar cada tela uma vez só. Em
 ordem:
 
-1. **Quebrar o trecho onde o falante troca**, pelo tempo de cada palavra.
-   Hoje, quando o Whisper junta falas das duas pessoas num trecho só, o trecho
-   inteiro vai para uma delas — é o item de "O que ainda não funciona bem",
-   abaixo, e melhora todos os caminhos, inclusive o sem configuração nenhuma.
-2. **Testar um modelo mais novo de separação de vozes**, medido contra o
-   atual, com controle.
-3. **"Gravar agora" na tela inicial**, escolhendo o paciente depois.
+1. **Testar um modelo mais novo de separação de vozes** — o
+   `pyannote/speaker-diarization-community-1`, gratuito (CC-BY-4.0), medido
+   contra o 3.1 atual, com controle, na conversa de gabarito e na consulta
+   real. Ataca o item de "O que ainda não funciona bem", abaixo, para todos os
+   caminhos. O modelo é fechado no Hugging Face: a conta do token precisa
+   aceitar os termos antes.
+2. **"Gravar agora" na tela inicial**, escolhendo o paciente depois.
+3. **A chave de IA própria no worker** — a tela e a cifra já existem; falta a
+   nota usar a chave do profissional quando ele tiver uma.
 4. **"Onde processar"**: no meu computador (o padrão) ou na nuvem (Modal).
 5. **O ajudante**: instalador para Windows, sem Docker, com o mesmo motor.
    Fica parado enquanto o motor do Docker responde no mesmo computador, e
    assume quando ele para — dois motores disputariam a mesma placa de vídeo.
+
+**Quebrar o trecho onde o falante troca já existe** no caminho comum: o motor
+reconstrói os trechos palavra por palavra e corta nos turnos do pyannote
+(`build_segments`). O que falta dessa ideia é só no caminho dos **dois
+microfones**, que hoje troca o rótulo de trechos prontos sem quebrá-los nas
+trocas que os canais enxergam — é o "teto" medido no ADR-0002. Exige guardar o
+tempo de cada palavra no banco e cuidar das citações da nota; fica como
+opcional, porque só atende quem usa dois celulares.
 
 Opcionais, a decidir com medição: o verificador de suporte (item 5 da fila) e
 o dicionário de correção depois da transcrição (nota do item 3).
@@ -83,7 +94,7 @@ paciente real, não os testes.
    o que o Whisper ouviu errado, salvar. O texto original nunca é apagado: o
    par (errado → certo) é dado rotulado, gerado pelo uso, que nenhum
    concorrente tem sem ter usuários antes. Exige migration.
-2. ✅ **Feito.** **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
+2. ◐ **Metade feita** (tela e cifra; o worker ainda não usa). **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
 3. ~~**Vocabulário do domínio no Whisper**~~ — **medido e descartado como
    prompt.** Previsto como "a melhoria mais barata que existe"; na consulta real
    corrigiu um erro e, em troca, apagou frases verdadeiras, inventou um remédio
