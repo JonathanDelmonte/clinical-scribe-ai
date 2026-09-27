@@ -17,9 +17,10 @@ export interface Parte {
 /**
  * 512 KB.
  *
- * Grande o bastante para que uma consulta de 30 minutos caiba em menos de dez
- * pedaços, e pequeno o bastante para que perder um numa rede de celular custe
- * meio segundo de reenvio em vez de recomeçar o arquivo inteiro.
+ * Pequeno o bastante para que perder um numa rede de celular custe meio
+ * segundo de reenvio em vez de recomeçar o arquivo inteiro — e para caber com
+ * folga no corpo que o servidor aceita. Uma consulta de 30 minutos preparada
+ * no navegador (WAV, 1,9 MB por minuto) são ~110 pedaços.
  */
 export const TAMANHO_DA_PARTE = 512 * 1024;
 

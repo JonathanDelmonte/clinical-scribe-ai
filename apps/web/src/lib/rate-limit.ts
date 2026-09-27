@@ -155,12 +155,14 @@ export const POLITICAS = {
   upload: { capacidade: 40, recargaMs: HORA },
 
   /**
-   * Pedaços de upload: 600 por hora.
+   * Pedaços de upload: 1500 por hora.
    *
-   * Uma consulta de 30 minutos são ~10 pedaços. 600 cobre um dia inteiro de
-   * agenda com reenvios, e ainda barra um laço.
+   * Um pedaço tem 512 KB. Uma consulta de 30 minutos preparada no navegador
+   * (WAV) são ~110 pedaços; uma gravação de 3 horas, que sobe como veio,
+   * ~330; o maior arquivo aceito (400 MB), 800. 1500 cobre o maior envio
+   * possível com folga para reenvios, e ainda barra um laço.
    */
-  pedaco: { capacidade: 600, recargaMs: HORA },
+  pedaco: { capacidade: 1500, recargaMs: HORA },
 
   /** Geração de nota e objetivo: custa LLM por chamada. */
   geracao: { capacidade: 30, recargaMs: HORA },

@@ -22,6 +22,7 @@ import threading
 import time
 from typing import Any, Sequence
 
+import av
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from faster_whisper import BatchedInferencePipeline, WhisperModel
@@ -727,25 +728,131 @@ def _wav_pcm16(audio: np.ndarray) -> bytes:
     return cabecalho + pcm.tobytes()
 
 
-@app.post("/convert")
-async def convert(file: UploadFile = File(...)) -> Response:
-    """
-    Qualquer áudio (ou vídeo) que o ffmpeg leia → WAV 16 kHz, mono, 16 bits.
+BITRATE_M4A = 32_000
+# Abaixo disto a voz em AAC fica difícil de entender. Melhor recusar com um
+# motivo claro do que guardar um arquivo que ninguém consegue ouvir.
+BITRATE_M4A_MINIMO = 12_000
 
-    O conversor universal do produto. O navegador prepara sozinho tudo o que
-    ele decodifica; o resto chega aqui pelo worker e sai no mesmo WAV que o
-    navegador teria feito: tocável na tela da consulta — as citações da nota
-    dependem de ouvir o trecho — e igual para todo o resto do caminho.
+
+def bitrate_que_cabe(duracao_s: float, max_bytes: int | None) -> int | None:
+    """A taxa do M4A para `duracao_s` caber em `max_bytes` — ou None, se não cabe.
+
+    32 kbps enquanto cabe (três horas nos 45 MB por arquivo); acima disso a
+    taxa desce até o mínimo em que a voz ainda se entende, ~8 horas. A
+    transcrição não depende disto: ela usa o original, em qualidade total.
     """
+    if max_bytes is None or duracao_s <= 0:
+        return BITRATE_M4A
+    # 6% de folga: o índice do contêiner e a variação do codificador em volta
+    # da taxa pedida.
+    cabe = int(max_bytes * 8 * 0.94 / duracao_s)
+    if cabe >= BITRATE_M4A:
+        return BITRATE_M4A
+    return cabe if cabe >= BITRATE_M4A_MINIMO else None
+
+
+def _m4a_aac(audio: np.ndarray, bitrate: int = BITRATE_M4A) -> bytes:
+    """AAC mono em M4A — a cópia que fica guardada para tocar na tela.
+
+    AAC e não Opus porque é o formato que TODO navegador toca, Safari do
+    iPhone incluído. A 32 kbps é voz nítida: uma hora dá ~14 MB, e três horas
+    cabem abaixo dos 50 MB por arquivo do Supabase gratuito. O WAV da mesma
+    hora teria 115 MB.
+
+    `faststart` põe o índice no começo do arquivo: a tela consegue pular para
+    o minuto 40 de uma citação sem baixar os 39 anteriores.
+    """
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+    # Em disco, e não em memória: o `faststart` relê o arquivo PELO NOME para
+    # mover o índice para o começo, e um BytesIO não tem nome.
+    with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tmp:
+        destino = tmp.name
+    try:
+        _gravar_m4a(pcm, destino, bitrate)
+        with open(destino, "rb") as f:
+            return f.read()
+    finally:
+        _apagar(destino)
+
+
+def _gravar_m4a(pcm: np.ndarray, destino: str, bitrate: int) -> None:
+    with av.open(destino, "w", format="mp4", options={"movflags": "+faststart"}) as arquivo:
+        stream = arquivo.add_stream("aac", rate=SAMPLE_RATE)
+        stream.layout = "mono"
+        stream.bit_rate = bitrate
+        reamostrador = av.AudioResampler(format=stream.format, layout="mono", rate=SAMPLE_RATE)
+        for inicio in range(0, len(pcm), SAMPLE_RATE):
+            quadro = av.AudioFrame.from_ndarray(pcm[None, inicio : inicio + SAMPLE_RATE], format="s16", layout="mono")
+            quadro.sample_rate = SAMPLE_RATE
+            for q in reamostrador.resample(quadro):
+                for pacote in stream.encode(q):
+                    arquivo.mux(pacote)
+        for q in reamostrador.resample(None):
+            for pacote in stream.encode(q):
+                arquivo.mux(pacote)
+        for pacote in stream.encode(None):
+            arquivo.mux(pacote)
+
+
+def _m4a_que_cabe(audio: np.ndarray, max_bytes: int | None) -> bytes:
+    """O M4A de `audio` dentro de `max_bytes` — ou 413, se nem no mínimo cabe."""
+    duracao_s = len(audio) / SAMPLE_RATE
+    longa = HTTPException(
+        status_code=413,
+        detail=f"gravação longa demais para guardar ({duracao_s / 3600:.1f} horas)",
+    )
+    bitrate = bitrate_que_cabe(duracao_s, max_bytes)
+    if bitrate is None:
+        raise longa
+    dados = _m4a_aac(audio, bitrate)
+    if max_bytes is not None and len(dados) > max_bytes:
+        # O codificador passou da taxa pedida. Uma tentativa, na proporção.
+        bitrate = int(bitrate * max_bytes / len(dados) * 0.95)
+        if bitrate < BITRATE_M4A_MINIMO:
+            raise longa
+        dados = _m4a_aac(audio, bitrate)
+        if len(dados) > max_bytes:
+            raise longa
+    return dados
+
+
+@app.post("/convert")
+async def convert(
+    file: UploadFile = File(...),
+    formato: str = Form(default="wav"),
+    max_bytes: int | None = Form(default=None),
+) -> Response:
+    """
+    Qualquer áudio (ou vídeo) que o ffmpeg leia → WAV 16 kHz mono, ou M4A.
+
+    O conversor universal do produto. `formato=wav` (o padrão) devolve o mesmo
+    WAV que o navegador prepara. `formato=m4a` devolve a cópia comprimida que
+    fica guardada para tocar na tela — é o que torna possível guardar uma
+    consulta de horas abaixo do limite de 50 MB por arquivo do Supabase
+    gratuito. Em qualquer caso, quem transcreve continua recebendo o original.
+
+    `max_bytes` (só no M4A) é o maior arquivo que o armazenamento aceita: a
+    taxa desce o necessário para caber, e 413 diz que nem assim cabe.
+    """
+    if formato not in ("wav", "m4a"):
+        raise HTTPException(status_code=400, detail="formato deve ser wav ou m4a")
     caminho = await _guardar_temporario(file)
     try:
         audio = await asyncio.to_thread(_decodificar_ou_415, caminho)
     finally:
         _apagar(caminho)
-    wav = await asyncio.to_thread(_wav_pcm16, audio)
     duracao_ms = round(len(audio) * 1000 / SAMPLE_RATE)
-    log.info("convertido para WAV: %s, %.1f min", sufixo_de(file), duracao_ms / 60000)
-    return Response(content=wav, media_type="audio/wav", headers={"x-duracao-ms": str(duracao_ms)})
+    if formato == "m4a":
+        dados = await asyncio.to_thread(_m4a_que_cabe, audio, max_bytes)
+        tipo = "audio/mp4"
+    else:
+        dados = await asyncio.to_thread(_wav_pcm16, audio)
+        tipo = "audio/wav"
+    log.info(
+        "convertido para %s: %s, %.1f min, %.1f MB",
+        formato, sufixo_de(file), duracao_ms / 60000, len(dados) / 1e6,
+    )
+    return Response(content=dados, media_type=tipo, headers={"x-duracao-ms": str(duracao_ms)})
 
 
 @app.post("/envelope")

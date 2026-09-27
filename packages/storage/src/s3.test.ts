@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { armazenamentoPedido, createStorageFromEnv } from "./index";
 import { assinar, createS3Storage } from "./s3";
 
 /**
@@ -200,5 +201,33 @@ describe("armazenamento S3", () => {
     for (const ruim of ["", "/abs", "a/../b", "a//b", "a\\b"]) {
       await expect(s.put(ruim, bytes("x"))).rejects.toThrow(/inválida/);
     }
+  });
+});
+
+describe("qual armazenamento as variáveis pedem", () => {
+  const completo = {
+    STORAGE_S3_ENDPOINT: CFG.endpoint,
+    STORAGE_S3_REGION: CFG.region,
+    STORAGE_S3_ACCESS_KEY_ID: CFG.accessKeyId,
+    STORAGE_S3_SECRET_ACCESS_KEY: CFG.secretAccessKey,
+    STORAGE_S3_BUCKET: CFG.bucket,
+  };
+
+  it("as cinco: S3; nenhuma: disco local", () => {
+    expect(armazenamentoPedido(completo)).toEqual({ tipo: "s3" });
+    expect(createStorageFromEnv(completo).kind).toBe("s3");
+    expect(armazenamentoPedido({})).toEqual({ tipo: "local" });
+  });
+
+  // O health check mostra isto. A falta aparece pelo NOME, nunca pelo valor.
+  it("pela metade é erro, e diz o que falta", () => {
+    const { STORAGE_S3_SECRET_ACCESS_KEY: _segredo, ...semSegredo } = completo;
+    expect(armazenamentoPedido({ ...semSegredo, STORAGE_S3_BUCKET: " " })).toEqual({
+      tipo: "incompleto",
+      faltando: ["STORAGE_S3_SECRET_ACCESS_KEY", "STORAGE_S3_BUCKET"],
+    });
+    expect(() => createStorageFromEnv(semSegredo)).toThrow(
+      /faltam: STORAGE_S3_SECRET_ACCESS_KEY/,
+    );
   });
 });

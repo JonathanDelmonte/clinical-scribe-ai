@@ -134,6 +134,11 @@ export interface TranscriptionInput {
    * legítimo: sem vocabulário, a transcrição é a mesma de antes.
    */
   readonly vocabulary?: string | null;
+  /**
+   * Quanto o áudio dura, quando se sabe. O motor local dimensiona a espera
+   * por ele: três horas de consulta não cabem no mesmo prazo de dez minutos.
+   */
+  readonly durationMs?: number | null;
 }
 
 export interface TranscriptionProvider {

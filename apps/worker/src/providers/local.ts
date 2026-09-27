@@ -12,6 +12,33 @@ import type {
   TranscriptionProvider,
   TranscriptionResult,
 } from "@scribe/core";
+import { Agent } from "undici";
+
+/**
+ * As chamadas ao motor, sem o corte de 300 s do undici.
+ *
+ * O motor só responde quando termina, e uma consulta longa passa de cinco
+ * minutos de processamento. O `fetch` do Node desiste em 300 s sem receber o
+ * cabeçalho da resposta ("fetch failed"), e esse corte vem ANTES do
+ * `AbortSignal.timeout` de cada chamada: o sinal só consegue encurtar a
+ * espera, nunca alongá-la. Toda transcrição de mais de cinco minutos falhava,
+ * em todas as tentativas. Com o corte desligado aqui, quem decide o prazo é o
+ * sinal de cada chamada — e só nas chamadas ao motor.
+ */
+export const semCorteDoUndici = agente({ headersTimeout: 0, bodyTimeout: 0 });
+
+/**
+ * Um `Agent` do pacote `undici` no formato que o `fetch` global aceita.
+ *
+ * O tipo do `fetch` global vem do `undici-types` do @types/node, de outra
+ * versão; em execução, o Node 24 traz o undici 7 — o mesmo major do pacote —,
+ * e o teste confere que o `fetch` do Node obedece a este agente.
+ */
+export function agente(
+  opcoes: ConstructorParameters<typeof Agent>[0],
+): NonNullable<RequestInit["dispatcher"]> {
+  return new Agent(opcoes) as unknown as NonNullable<RequestInit["dispatcher"]>;
+}
 
 interface LocalResponse {
   model: string;
@@ -112,6 +139,7 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
       method: "POST",
       body: form,
       signal: AbortSignal.timeout(5 * 60 * 1000),
+      dispatcher: semCorteDoUndici,
     });
     if (!res.ok) {
       const corpo = (await res.json().catch(() => null)) as {
@@ -148,10 +176,15 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
     });
     if (input.jobId !== undefined) params.set("job", input.jobId);
 
+    // Três vezes a duração, no mínimo o prazo padrão: na GPU disputada com
+    // outros programas o motor chega a ~3,5× o tempo real, e três horas de
+    // consulta passariam dos 45 minutos fixos.
+    const prazoMs = Math.max(this.timeoutMs, 3 * (input.durationMs ?? 0));
     const res = await fetch(`${this.baseUrl}/transcribe?${params}`, {
       method: "POST",
       body: form,
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: AbortSignal.timeout(prazoMs),
+      dispatcher: semCorteDoUndici,
     });
 
     if (!res.ok) {
@@ -244,6 +277,7 @@ export async function diarizarPorCanais(
     // minutos — mas uma consulta longa pode passar de um. Dez minutos é
     // folga, não expectativa.
     signal: AbortSignal.timeout(10 * 60 * 1000),
+    dispatcher: semCorteDoUndici,
   });
   if (!res.ok) {
     const corpo = await res.text().catch(() => "");
@@ -254,41 +288,50 @@ export async function diarizarPorCanais(
   return (await res.json()) as ResultadoCanais;
 }
 
-/** Resultado de uma conversão: o arquivo convertido, ou por que ele não é áudio. */
+/**
+ * Resultado de uma conversão: o arquivo convertido, ou por que não houve.
+ *
+ * 415: o arquivo não é áudio legível. 413: é áudio, mas longo demais para
+ * guardar mesmo na menor taxa aceitável (~8 horas).
+ */
 export type Convertido =
   | {
       readonly ok: true;
       readonly bytes: Uint8Array<ArrayBuffer>;
       readonly duracaoMs: number;
     }
-  | { readonly ok: false; readonly motivo: string };
+  | { readonly ok: false; readonly status: 413 | 415; readonly motivo: string };
 
 /**
  * Manda um arquivo ao conversor do motor — o ffmpeg dele lê AMR, WMA, ALAC,
  * AIFF, CAF, DSS de ditafone, WAV em ADPCM, e o resto que o navegador recusa.
  *
- * `ok: false` é a resposta 415 do motor: o arquivo não é áudio legível. Não é
- * falha de infraestrutura — tentar de novo daria o mesmo resultado, então quem
- * chama registra o motivo e para, em vez de deixar a fila repetir.
+ * `ok: false` é a resposta 415 ou 413 do motor. Não é falha de
+ * infraestrutura — tentar de novo daria o mesmo resultado, então quem chama
+ * registra o motivo e para, em vez de deixar a fila repetir.
  */
 async function converter(
   baseUrl: string,
   rota: "convert" | "envelope",
   arquivo: Uint8Array<ArrayBuffer>,
   nome: string,
+  campos: Record<string, string> = {},
 ): Promise<Convertido> {
   const form = new FormData();
   form.append("file", new Blob([arquivo]), nome);
+  for (const [campo, valor] of Object.entries(campos)) form.append(campo, valor);
   const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/${rota}`, {
     method: "POST",
     body: form,
     // Decodificar uma consulta longa leva segundos. Dez minutos é folga.
     signal: AbortSignal.timeout(10 * 60 * 1000),
+    dispatcher: semCorteDoUndici,
   });
   if (res.status === 415 || res.status === 413) {
     const corpo = (await res.json().catch(() => null)) as { detail?: unknown } | null;
     return {
       ok: false,
+      status: res.status,
       motivo:
         typeof corpo?.detail === "string"
           ? corpo.detail
@@ -308,13 +351,23 @@ async function converter(
   };
 }
 
-/** Qualquer áudio → WAV 16 kHz mono, o mesmo que o navegador prepara. */
-export function converterParaWav(
+/**
+ * Qualquer áudio → M4A (AAC mono, ~14 MB por hora a 32 kbps): a cópia que fica
+ * guardada quando o original não cabe num arquivo só, ou não toca na tela.
+ *
+ * `maxBytes` é o maior arquivo que o armazenamento aceita. Até três horas a
+ * taxa é 32 kbps; acima, o motor a baixa o necessário para caber.
+ */
+export function converterParaM4a(
   baseUrl: string,
   arquivo: Uint8Array<ArrayBuffer>,
   nome: string,
+  maxBytes: number,
 ): Promise<Convertido> {
-  return converter(baseUrl, "convert", arquivo, nome);
+  return converter(baseUrl, "convert", arquivo, nome, {
+    formato: "m4a",
+    max_bytes: String(maxBytes),
+  });
 }
 
 /**

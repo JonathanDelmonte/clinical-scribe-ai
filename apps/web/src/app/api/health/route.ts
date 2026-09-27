@@ -1,3 +1,4 @@
+import { armazenamentoPedido } from "@scribe/storage";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,16 @@ export function GET() {
       supabase: configured("NEXT_PUBLIC_SUPABASE_URL"),
       asrProvider: process.env["ASR_PROVIDER"] ?? null,
       llm: configured("ANTHROPIC_API_KEY"),
+      // "s3" em produção. "disco local" lá é variável faltando na Vercel — e
+      // o site não guarda gravação nenhuma até ser corrigido.
+      armazenamento: descreverArmazenamento(),
     },
   });
+}
+
+function descreverArmazenamento(): string {
+  const pedido = armazenamentoPedido(process.env);
+  if (pedido.tipo === "incompleto")
+    return `s3 incompleto — faltam ${pedido.faltando.join(", ")}`;
+  return pedido.tipo === "s3" ? "s3" : "disco local";
 }

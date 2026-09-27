@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   arquivosDaGravacao,
+  ehManifestoDePartes,
+  LIMITE_ARQUIVO_UNICO_BYTES,
+  sessionPartsManifestKey,
   secondChannelKey,
-  secondChannelOriginalKey,
+  secondChannelPartsManifestKey,
   secondChannelPartKey,
   sessionAudioKey,
   sessionPartKey,
@@ -17,14 +20,29 @@ describe("arquivosDaGravacao", () => {
         audioPath: "p/s.wav",
         secondChannelPath: "p/s-segundo-microfone.cve",
       }),
-    ).toEqual(["p/s.wav", "p/s-segundo-microfone.cve"]);
+    ).toEqual(["p/s.wav", "p/s-segundo-microfone.cve", "p/s.partes.json"]);
   });
 
   it("sessão só com o principal", () => {
     expect(
-      arquivosDaGravacao({ audioPath: "p/s.wav", secondChannelPath: null }),
-    ).toEqual(["p/s.wav"]);
-    expect(arquivosDaGravacao({ audioPath: "p/s.wav" })).toEqual(["p/s.wav"]);
+      arquivosDaGravacao({ audioPath: "p/s.m4a", secondChannelPath: null }),
+    ).toEqual(["p/s.m4a", "p/s.partes.json"]);
+    expect(arquivosDaGravacao({ audioPath: "p/s.wav" })).toEqual([
+      "p/s.wav",
+      "p/s.partes.json",
+    ]);
+  });
+
+  // O áudio já montado, a transcrição que falhou: os pedaços esperam, e o
+  // manifesto deles precisa sair junto com a sessão.
+  it("o manifesto sai junto — o mesmo que o worker e o site usam", () => {
+    const audio = sessionAudioKey("dono", "sessao", "m4a");
+    expect(arquivosDaGravacao({ audioPath: audio })).toContain(
+      sessionPartsManifestKey("dono", "sessao"),
+    );
+    // Ainda em pedaços, o manifesto É o áudio da sessão: aparece uma vez só.
+    const manifesto = sessionPartsManifestKey("dono", "sessao");
+    expect(arquivosDaGravacao({ audioPath: manifesto })).toEqual([manifesto]);
   });
 
   it("sessão sem gravação nenhuma", () => {
@@ -75,10 +93,27 @@ describe("o caminho de reserva do segundo microfone", () => {
     );
   });
 
-  it("o original fica sob o dono, fora da pasta de pedaços", () => {
-    const original = secondChannelOriginalKey("dono", "sessao", ".WMA");
-    expect(original).toBe("dono/sessao-segundo-microfone-original.wma");
-    expect(original).not.toContain("/partes/");
-    expect(original).not.toBe(secondChannelKey("dono", "sessao"));
+  it("o manifesto do original fica sob o dono, fora da pasta de pedaços", () => {
+    const manifesto = secondChannelPartsManifestKey("dono", "sessao");
+    expect(manifesto).toBe("dono/sessao-segundo-microfone.partes.json");
+    expect(manifesto).not.toContain("/partes/");
+    expect(ehManifestoDePartes(manifesto)).toBe(true);
+    // Nem a medida nem o manifesto do áudio principal: são três arquivos.
+    expect(manifesto).not.toBe(secondChannelKey("dono", "sessao"));
+    expect(manifesto).not.toBe(sessionPartsManifestKey("dono", "sessao"));
+  });
+});
+
+describe("o manifesto de pedaços", () => {
+  it("fica sob o dono, fora da pasta de pedaços, e é reconhecível", () => {
+    const m = sessionPartsManifestKey("dono", "sessao");
+    expect(m).toBe("dono/sessao.partes.json");
+    expect(ehManifestoDePartes(m)).toBe(true);
+    expect(ehManifestoDePartes(sessionAudioKey("dono", "sessao", "wav"))).toBe(false);
+  });
+
+  // Folga abaixo dos 50 MB por arquivo do Supabase gratuito.
+  it("o arquivo único fica abaixo do limite do armazenamento gratuito", () => {
+    expect(LIMITE_ARQUIVO_UNICO_BYTES).toBeLessThan(50 * 1024 * 1024);
   });
 });

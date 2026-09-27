@@ -115,31 +115,66 @@ export async function gravarPedaco(
   }
 }
 
-/** Os pedaços de uma gravação, em ordem, remontados num blob só. */
-export async function montarGravacao(
-  sessionId: string,
-  mimeType: string,
-): Promise<Blob | null> {
+interface Pedaco {
+  readonly indice: number;
+  readonly dados: Blob;
+}
+
+async function lerPedacos(sessionId: string): Promise<Pedaco[]> {
   const db = await abrir();
   try {
     const faixa = IDBKeyRange.bound([sessionId, -Infinity], [sessionId, Infinity]);
-    const linhas = (await aguardar(
+    return (await aguardar(
       db.transaction(PEDACOS, "readonly").objectStore(PEDACOS).getAll(faixa),
-    )) as { indice: number; dados: Blob }[];
-
-    if (linhas.length === 0) return null;
-
-    // Ordenação explícita: o IndexedDB devolve em ordem de chave, e a chave é
-    // numérica, então já viria certo. Mas o custo de garantir é zero, e o
-    // custo de estar errado é a consulta com o meio fora de lugar.
-    linhas.sort((a, b) => a.indice - b.indice);
-    return new Blob(
-      linhas.map((l) => l.dados),
-      { type: mimeType },
-    );
+    )) as Pedaco[];
   } finally {
     db.close();
   }
+}
+
+/**
+ * Os pedaços do aparelho e os da memória, cada um no seu lugar.
+ *
+ * Ordenação explícita: o IndexedDB devolve em ordem de chave, e a chave é
+ * numérica, então já viria certo. Mas o custo de garantir é zero, e o custo de
+ * estar errado é a consulta com o meio fora de lugar.
+ */
+export function emOrdem(
+  doAparelho: readonly Pedaco[],
+  daMemoria: ReadonlyMap<number, Blob>,
+): Blob[] {
+  const porIndice = new Map(doAparelho.map((p) => [p.indice, p.dados] as const));
+  for (const [indice, dados] of daMemoria) {
+    if (!porIndice.has(indice)) porIndice.set(indice, dados);
+  }
+  return [...porIndice.entries()].sort(([a], [b]) => a - b).map(([, dados]) => dados);
+}
+
+/**
+ * Os pedaços de uma gravação, em ordem, remontados num blob só.
+ *
+ * `reserva` são os pedaços que o aparelho recusou guardar — pouco espaço
+ * livre, banco bloqueado — e que ficaram na memória da aba (ver
+ * `SessionRecorder`). Se nem o banco abre, a reserva sozinha basta quando ela
+ * tem a gravação INTEIRA, os `total` pedaços; faltando algum, o erro sobe, e
+ * a pessoa tenta de novo em vez de enviar uma consulta pela metade.
+ */
+export async function montarGravacao(
+  sessionId: string,
+  mimeType: string,
+  reserva: ReadonlyMap<number, Blob> = new Map(),
+  total = 0,
+): Promise<Blob | null> {
+  let doAparelho: Pedaco[];
+  try {
+    doAparelho = await lerPedacos(sessionId);
+  } catch (erro) {
+    if (total === 0 || reserva.size < total) throw erro;
+    doAparelho = [];
+  }
+
+  const pedacos = emOrdem(doAparelho, reserva);
+  return pedacos.length === 0 ? null : new Blob(pedacos, { type: mimeType });
 }
 
 export async function listarPendentes(): Promise<GravacaoPendente[]> {

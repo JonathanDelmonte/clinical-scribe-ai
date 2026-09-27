@@ -530,13 +530,14 @@ O motor já decodificava tudo (é o que o Whisper usa), incluindo DSS de
 ditafone, GSM, Speex, APE e WavPack. Faltava ligar isso aos dois caminhos:
 
 - **Gravação principal**: o original sobe como veio, e o worker, antes de
-  transcrever, o converte (`/convert`) para o mesmo WAV que o navegador teria
-  feito. O original é apagado; a duração passa a ser conhecida antes da
-  checagem de quota; a tela toca o trecho das citações.
+  transcrever, o converte (`/convert`) para um formato que todo navegador toca
+  — hoje o M4A, ver "Gravações longas" abaixo. O original é apagado; a duração
+  passa a ser conhecida antes da checagem de quota; a tela toca o trecho das
+  citações.
 - **Segundo microfone**: sem decodificar, o navegador não mede o volume. O
-  arquivo sobe em pedaços, o motor mede (`/envelope`), e o worker apaga o
-  original assim que a medida está gravada. A tela avisa que, nesse formato, o
-  arquivo passa pelo servidor.
+  arquivo sobe em pedaços, o worker os junta, o motor mede (`/envelope`), e o
+  worker apaga pedaços e manifesto assim que a medida está gravada. A tela
+  avisa que, nesse formato, o arquivo passa pelo servidor.
 
 **Por que não converter no navegador** (ffmpeg compilado para WebAssembly): o
 pacote pronto (`@ffmpeg/core` 0.12) tem cerca de 30 MB de WebAssembly para
@@ -561,3 +562,86 @@ Chrome:
   33 trechos de uma pessoa só, 99,8%.
 
 O caminho de reserva chega tão perto do teto quanto o normal.
+
+## Gravações longas — limite, montagem no worker e compressão
+
+A gravação em si nunca parava: cada pedaço de 5 s vai para o IndexedDB assim
+que chega. O que quebrava era o **fim**. A rota de finalização juntava os
+pedaços num arquivo só, e o Supabase gratuito recusa arquivo acima de 50 MB.
+Como o WAV preparado ocupa 1,9 MB por minuto de fala, toda consulta com mais
+de ~27 minutos de fala era gravada inteira — e recusada no envio.
+
+### As decisões
+
+1. **O site não junta; o worker junta.** A finalização confere que todos os
+   pedaços chegaram e grava um manifesto (`<sessão>.partes.json`), que fica em
+   `audio_path` até o worker montar o áudio. Juntar dentro de uma função da
+   Vercel era ler e regravar a consulta inteira com tempo (300 s) e memória
+   contados. O original do segundo microfone segue o mesmo caminho.
+2. **Transcreve-se o melhor áudio; guarda-se o que cabe.** O motor recebe os
+   pedaços juntos, em qualidade total. O que fica guardado para tocar na tela
+   é o WAV do navegador quando ele cabe (até 45 MiB, ~24 min de fala); senão,
+   um M4A — AAC mono a 32 kbps, com o índice no começo para a tela pular direto
+   para uma citação: ~14,7 MB por hora. AAC e não Opus porque é o que o Safari
+   do iPhone toca. Acima de 3 horas o motor baixa a taxa o necessário para
+   caber em 45 MiB, até 12 kbps (~8 horas); acima disso a sessão falha com o
+   motivo escrito: longa demais para guardar.
+3. **Três horas de gravação, avisadas.** Aviso na tela aos 2h45; às 3h a
+   gravação encerra sozinha e é enviada, exatamente como um clique em Parar.
+   O cronômetro é pelo relógio (`performance.now()`), e não uma soma por
+   segundo: com a tela apagada o navegador espaça os timers, e a soma
+   atrasaria justamente o número que decide o encerramento.
+4. **O navegador só prepara o que a memória do aparelho aguenta.** Preparar
+   decodifica a consulta inteira — passa de meio gigabyte no pico para uma
+   hora. Até 60 minutos em aparelhos com 8 GB ou mais
+   (`navigator.deviceMemory`), até 30 nos demais e nos navegadores que não
+   informam; acima disso a gravação sobe como veio (webm/opus, menor que o
+   WAV) e perde só o corte de silêncio no aparelho. Uma marca no
+   `localStorage`, gravada antes do preparo e apagada depois, impede que um
+   preparo que derrubou a aba seja tentado de novo a cada recarga.
+5. **Pedaço que o aparelho recusa fica na memória.** Uma escrita recusada no
+   IndexedDB (pouco espaço livre) perdia 5 s da consulta em silêncio. Agora o
+   pedaço fica na memória da aba, a tela avisa para não fechá-la, e a
+   remontagem o encaixa pelo índice.
+6. Envio: até 400 MB por arquivo; 1500 pedaços de 512 KB por hora — o maior
+   envio possível são 800.
+7. **As chamadas ao motor não têm o corte de 300 s do undici.** O motor só
+   responde quando termina, e o `fetch` do Node desiste em 300 s sem receber
+   o cabeçalho da resposta — antes do `AbortSignal.timeout` de 45 minutos que
+   o código pedia, porque o sinal só encurta a espera, nunca a alonga. Toda
+   transcrição com mais de cinco minutos de processamento falhava, em todas
+   as tentativas: o limite de 3 horas não se sustentava. Achado no teste de
+   ponta a ponta abaixo, não na leitura do código. As chamadas ao motor usam
+   um `Agent` do undici sem esse corte, e o prazo da transcrição é o maior
+   entre 45 minutos e três vezes a duração do áudio.
+8. **Os pedaços só saem depois da transcrição.** O arquivo guardado é trocado
+   antes de transcrever (a cota precisa da duração), mas os pedaços ficam até
+   a transcrição estar salva. Uma tentativa que cai no meio — o Docker
+   desligado, o motor reiniciado — é retomada a partir deles: o motor recebe
+   de novo o áudio inteiro, e não a cópia comprimida.
+
+### Medido de ponta a ponta
+
+33 minutos de fala em WAV preparado (60,7 MiB, 122 pedaços), pelo site local
+com o worker e o motor de verdade:
+
+- envio em 5 s; finalização em 84 ms (só o manifesto); o áudio responde 409,
+  "ainda está sendo preparado", até o worker montar;
+- o worker juntou os pedaços e guardou um M4A de 8,1 MB, que a tela toca e
+  pula para o meio (206);
+- no meio da transcrição, worker e motor foram derrubados. A consulta voltou
+  para a fila quando a reserva de 120 s expirou, e a nova tentativa
+  transcreveu de novo o WAV original — 33:07,694 no log do motor, contra
+  33:07,776 do M4A —, e não a cópia comprimida;
+- pronta para revisão em 627 s, queda incluída, com 559 trechos; só então
+  pedaços e manifesto foram apagados, e ficou só o M4A.
+
+Antes da correção do item 7, a primeira tentativa deste mesmo teste caiu
+exatamente em 300 s ("fetch failed").
+
+Direto no motor, o mesmo arquivo com teto de 4 MB saiu com 3,9 MB (~15 kbps);
+com teto de 2 MB, 413. E o segundo microfone pelo caminho de reserva — 8
+pedaços, a mesma gravação dos dois lados: a rota respondeu na hora, o worker
+juntou, o motor mediu e alinhou (deslocamento 0, qualidade 0,993) e recusou
+trocar os falantes (0,4 dB de separação, mínimo 5), como devia; pedaços e
+manifesto apagados, só a medida ficou.

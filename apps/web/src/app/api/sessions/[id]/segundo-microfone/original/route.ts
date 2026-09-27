@@ -1,12 +1,13 @@
 import {
-  secondChannelOriginalKey,
   secondChannelPartKey,
+  secondChannelPartsManifestKey,
   secondChannelPartsPrefix,
+  type ManifestoDePartes,
 } from "@scribe/storage";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { EXTENSOES_ACEITAS, MAX_AUDIO_BYTES } from "@/lib/audio";
+import { EXTENSOES_ACEITAS } from "@/lib/audio";
 import { asCurrentProfessional } from "@/lib/auth";
 import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
@@ -28,14 +29,20 @@ const Corpo = z.object({
 });
 
 /**
- * Monta a gravação do segundo celular que o navegador não conseguiu ler, e a
- * entrega ao worker para medir.
+ * Entrega ao worker, para medir, a gravação do segundo celular que o
+ * navegador não conseguiu ler.
  *
  * O caminho de reserva. O normal é o navegador medir o volume e mandar só a
  * medida (a rota ao lado); quando o formato é um que ele não lê — AMR de
  * gravador antigo, WMA, ALAC do iPhone —, a gravação sobe inteira, o motor a
  * mede com o ffmpeg, e o worker a apaga assim que a medida está gravada. O
  * que fica guardado no fim é o mesmo nos dois caminhos: só a medida.
+ *
+ * Os pedaços NÃO são juntados aqui, pelo mesmo motivo do áudio principal
+ * (ver a rota de finalização): juntar é ler e regravar a gravação inteira
+ * dentro de uma função com tempo e memória contados, e o arquivo juntado
+ * esbarraria nos 50 MB por arquivo do armazenamento. Esta rota confere que
+ * todos chegaram e escreve o manifesto; o worker junta.
  */
 export async function POST(
   request: Request,
@@ -93,26 +100,12 @@ export async function POST(
         };
       }
 
-      // Em ordem de índice, não na ordem em que o armazenamento listou.
-      const pedacos: Uint8Array[] = [];
-      let tamanho = 0;
-      for (let i = 0; i < parsed.data.total; i++) {
-        const bytes = await storage.get(secondChannelPartKey(me.id, sessao.id, i));
-        tamanho += bytes.byteLength;
-        if (tamanho > MAX_AUDIO_BYTES) {
-          return { status: 413, error: "gravação grande demais" };
-        }
-        pedacos.push(bytes);
-      }
-      const inteiro = new Uint8Array(tamanho);
-      let posicao = 0;
-      for (const pedaco of pedacos) {
-        inteiro.set(pedaco, posicao);
-        posicao += pedaco.byteLength;
-      }
-
-      const chave = secondChannelOriginalKey(me.id, sessao.id, extensao);
-      await storage.put(chave, inteiro);
+      const manifesto: ManifestoDePartes = { partes: parsed.data.total, extensao };
+      const chave = secondChannelPartsManifestKey(me.id, sessao.id);
+      await storage.put(
+        chave,
+        new TextEncoder().encode(JSON.stringify(manifesto)) as Uint8Array<ArrayBuffer>,
+      );
 
       // A duração só se sabe depois de o motor ler o arquivo; o worker a grava.
       const { pedido, anterior } = await enfileirarSegundoMicrofone(
@@ -124,11 +117,7 @@ export async function POST(
         0,
         true,
       );
-
-      // Os pedaços saem depois de o original inteiro estar gravado e apontado.
-      await Promise.all(
-        [...presentes].map((p) => storage.remove(p).catch(() => undefined)),
-      );
+      // Os pedaços ficam: são o arquivo, até o worker juntá-los e medi-los.
       return { estado: pedido, anterior };
     },
   );

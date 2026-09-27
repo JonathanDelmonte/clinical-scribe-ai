@@ -179,9 +179,10 @@ export function makeDeleteAudioHandler(
     for (const chave of arquivosDaGravacao(session)) {
       await storage.remove(chave);
     }
-    // E os pedaços de envios que nunca terminaram — do áudio principal ou do
-    // segundo microfone. Um envio abandonado no meio é gravação de consulta
-    // em fatias, e o prazo vale para ela também.
+    // E os pedaços que ficaram — de envios que nunca terminaram, ou de uma
+    // consulta cuja transcrição falhou (eles esperam o fim dela, ver o
+    // handler de transcrição), do áudio principal ou do segundo microfone. É
+    // gravação de consulta em fatias, e o prazo vale para ela também.
     const pedacos = await storage.list(
       sessionPartsPrefix(session.professionalId, session.id),
     );

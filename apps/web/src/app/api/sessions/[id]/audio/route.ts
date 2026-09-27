@@ -1,5 +1,5 @@
 import { sessions } from "@scribe/db";
-import { extensionOf, sessionAudioKey } from "@scribe/storage";
+import { ehManifestoDePartes, extensionOf, sessionAudioKey } from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -227,6 +227,13 @@ export async function GET(
 
   if (found === null || found === undefined) {
     return NextResponse.json({ error: "áudio não encontrado" }, { status: 404 });
+  }
+  // Ainda em pedaços, esperando o worker juntar: não há arquivo para tocar.
+  if (ehManifestoDePartes(found)) {
+    return NextResponse.json(
+      { error: "o áudio ainda está sendo preparado" },
+      { status: 409 },
+    );
   }
 
   const bytes = await storage.get(found).catch(() => null);

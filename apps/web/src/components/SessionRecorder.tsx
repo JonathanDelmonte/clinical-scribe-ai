@@ -35,6 +35,17 @@ import {
   vigiarMicrofone,
 } from "@/lib/recording/dispositivo";
 import { enviarEmPartes, finalizarEnvio } from "@/lib/recording/enviar";
+import {
+  duracaoPelosMetadados,
+  esquecerPreparo,
+  estadoDoLimite,
+  INTERVALO_DE_PEDACO_MS,
+  LIMITE_GRAVACAO_S,
+  memoriaDoAparelho,
+  prepararArquivoNoNavegador,
+  prepararGravacaoNoNavegador,
+  prepararSemRepetirQueda,
+} from "@/lib/recording/limite";
 import { useLiveDraft } from "@/lib/useLiveDraft";
 
 type Engine = "local" | "cloud";
@@ -65,21 +76,17 @@ function extensionFor(mimeType: string | undefined): string {
 }
 
 function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  const minutos = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return h > 0 ? `${h}:${minutos}` : minutos;
 }
 
-/**
- * Pedaços de 5 segundos.
- *
- * O valor decide quanto se perde no pior caso — o que ainda não foi entregue
- * ao `ondataavailable` quando a aba morre. Um segundo perderia menos e
- * escreveria no IndexedDB sessenta vezes por minuto durante uma hora, o que em
- * celular antigo compete com a própria gravação. Cinco segundos é a troca:
- * doze escritas por minuto, cinco segundos de risco.
- */
-const INTERVALO_DE_PEDACO_MS = 5000;
+/** A chave da marca de preparo de um arquivo escolhido — ver `limite.ts`. */
+function chaveDoArquivo(file: File): string {
+  return `arquivo:${file.name}:${file.size}:${file.lastModified}`;
+}
 
 export function SessionRecorder({
   patientId,
@@ -109,10 +116,26 @@ export function SessionRecorder({
   const [aviso, setAviso] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState<GravacaoPendente[]>([]);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  /** Há pedaços só na memória desta aba — fechá-la agora os perderia. */
+  const [soNaMemoria, setSoNaMemoria] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const indiceRef = useRef(0);
+  /** `performance.now()` do início da gravação — ver o cronômetro abaixo. */
+  const inicioRef = useRef(0);
+  /**
+   * Os pedaços que o aparelho recusou guardar — pouco espaço livre, banco
+   * bloqueado — e que ficam na memória desta aba até o envio.
+   *
+   * Sem isto, uma escrita recusada no IndexedDB perdia o pedaço em silêncio:
+   * cinco segundos de consulta a menos, sem ninguém saber. Numa gravação de
+   * horas num celular quase cheio, isso deixa de ser raro.
+   */
+  const reservaRef = useRef<{
+    gravacao: GravacaoPendente;
+    pedacos: Map<number, Blob>;
+  } | null>(null);
   const soltarTelaRef = useRef<(() => void) | null>(null);
   const pararVigiaRef = useRef<(() => void) | null>(null);
   /**
@@ -135,11 +158,24 @@ export function SessionRecorder({
   const filaRef = useRef<Promise<void>>(Promise.resolve());
 
   const recarregarPendentes = useCallback(() => {
-    if (!bufferDisponivel()) return;
+    // A gravação que só existe na memória desta aba entra na lista também:
+    // sem ela, um envio que falhou não teria botão para tentar de novo.
+    const reserva = reservaRef.current;
+    const naMemoria =
+      reserva !== null && reserva.pedacos.size > 0 ? [reserva.gravacao] : [];
+    if (!bufferDisponivel()) {
+      setPendentes(naMemoria);
+      return;
+    }
     void limparAntigas()
       .then(listarPendentes)
-      .then(setPendentes)
-      .catch(() => setPendentes([]));
+      .then((lista) =>
+        setPendentes([
+          ...naMemoria.filter((g) => !lista.some((l) => l.sessionId === g.sessionId)),
+          ...lista,
+        ]),
+      )
+      .catch(() => setPendentes(naMemoria));
   }, []);
 
   useEffect(() => recarregarPendentes(), [recarregarPendentes]);
@@ -155,24 +191,54 @@ export function SessionRecorder({
     };
   }, []);
 
+  /**
+   * O cronômetro — pelo relógio, e não somando um a cada segundo.
+   *
+   * Com a tela apagada ou o navegador em segundo plano, os timers são
+   * espaçados (até um por minuto), e a soma ficaria para trás. É esta conta
+   * que decide quando a gravação encerra sozinha. `performance.now()` e não
+   * `Date.now()`: não pula quando o relógio do aparelho é acertado.
+   */
   useEffect(() => {
     if (!recording) return;
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
+    const atualizar = () =>
+      setElapsed(Math.floor((performance.now() - inicioRef.current) / 1000));
+    const id = setInterval(atualizar, 1000);
+    document.addEventListener("visibilitychange", atualizar);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", atualizar);
+    };
   }, [recording]);
 
   /**
-   * Avisa antes de fechar a aba com gravação em andamento.
+   * O limite de três horas. Encerrar é o mesmo que clicar em Parar: tudo o
+   * que foi gravado segue para o envio, e nada se perde.
+   */
+  const limite = estadoDoLimite(elapsed);
+  useEffect(() => {
+    if (!recording || limite.tipo !== "encerrar") return;
+    stopRecording();
+    setAviso(
+      `A gravação chegou ao limite de ${LIMITE_GRAVACAO_S / 3600} horas e foi ` +
+        `encerrada sozinha. Tudo o que foi gravado está sendo enviado.`,
+    );
+    // `stopRecording` é recriada a cada render; o que importa é o limite.
+  }, [recording, limite.tipo]);
+
+  /**
+   * Avisa antes de fechar a aba com gravação em andamento — ou com pedaços
+   * que só existem na memória dela.
    *
    * Continua valendo mesmo com o buffer no dispositivo: o buffer garante que a
    * gravação sobrevive, não que a pessoa vá lembrar de voltar para enviá-la.
    */
   useEffect(() => {
-    if (!recording) return;
+    if (!recording && !soNaMemoria) return;
     const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", avisar);
     return () => window.removeEventListener("beforeunload", avisar);
-  }, [recording]);
+  }, [recording, soNaMemoria]);
 
   /** Confere o que o aparelho pode atrapalhar, antes de a consulta começar. */
   async function conferirDispositivo(): Promise<string | null> {
@@ -253,6 +319,18 @@ export function SessionRecorder({
 
       const mimeType = pickMimeType();
       indiceRef.current = 0;
+      reservaRef.current = {
+        gravacao: {
+          sessionId: session.id,
+          patientId,
+          patientName,
+          criadaEm: Date.now(),
+          mimeType: mimeType ?? "audio/webm",
+          extensao: extensionFor(mimeType),
+          pedacos: 0,
+        },
+        pedacos: new Map(),
+      };
 
       if (bufferDisponivel()) {
         await iniciarGravacao({
@@ -272,8 +350,11 @@ export function SessionRecorder({
       recorder.ondataavailable = (e) => {
         if (e.data.size === 0) return;
         const indice = indiceRef.current++;
+        const dados = e.data;
         filaRef.current = filaRef.current.then(() =>
-          gravarPedaco(session.id, indice, e.data).catch(() => undefined),
+          gravarPedaco(session.id, indice, dados).catch(() =>
+            guardarNaMemoria(session.id, indice, dados),
+          ),
         );
       };
 
@@ -291,7 +372,20 @@ export function SessionRecorder({
           return;
         }
 
-        void concluir(session.id, mimeType ?? "audio/webm", extensionFor(mimeType));
+        // O último pedaço chega antes do `onstop`: aqui a contagem está completa.
+        const total = indiceRef.current;
+        if (reservaRef.current?.gravacao.sessionId === session.id) {
+          reservaRef.current.gravacao = {
+            ...reservaRef.current.gravacao,
+            pedacos: total,
+          };
+        }
+        void concluir(
+          session.id,
+          mimeType ?? "audio/webm",
+          extensionFor(mimeType),
+          total,
+        );
       };
 
       pararVigiaRef.current = vigiarMicrofone(stream, () => {
@@ -303,6 +397,7 @@ export function SessionRecorder({
 
       recorder.start(INTERVALO_DE_PEDACO_MS);
       recorderRef.current = recorder;
+      inicioRef.current = performance.now();
       setElapsed(0);
       setRecording(true);
       setStatus(null);
@@ -322,6 +417,30 @@ export function SessionRecorder({
           ? "permissão de microfone negada — libere no navegador e tente de novo"
           : "não foi possível acessar o microfone",
       );
+    }
+  }
+
+  /** O pedaço que o aparelho recusou guardar fica na memória desta aba. */
+  function guardarNaMemoria(sessionId: string, indice: number, dados: Blob) {
+    const reserva = reservaRef.current;
+    if (reserva === null || reserva.gravacao.sessionId !== sessionId) return;
+    reserva.pedacos.set(indice, dados);
+    if (reserva.pedacos.size === 1) {
+      setSoNaMemoria(true);
+      setAviso(
+        "O aparelho não conseguiu guardar parte da gravação (pouco espaço livre?). " +
+          "Ela continua sendo gravada na memória desta aba — não feche a aba até " +
+          "o envio terminar.",
+      );
+    }
+  }
+
+  /** A gravação saiu do aparelho — enviada ou descartada. Nada fica para trás. */
+  function esquecerGravacao(sessionId: string) {
+    esquecerPreparo(sessionId);
+    if (reservaRef.current?.gravacao.sessionId === sessionId) {
+      reservaRef.current = null;
+      setSoNaMemoria(false);
     }
   }
 
@@ -362,6 +481,7 @@ export function SessionRecorder({
     setElapsed(0);
     await filaRef.current.catch(() => undefined);
     await descartarGravacao(sessionId).catch(() => undefined);
+    esquecerGravacao(sessionId);
     // A sessão vazia também some: ela só existia para carimbar o
     // consentimento de uma consulta que não chegou a ser gravada.
     await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" }).catch(
@@ -376,15 +496,27 @@ export function SessionRecorder({
    * É o mesmo caminho para a gravação que acabou de terminar e para a que foi
    * recuperada do aparelho dias depois — e é por isso que ele começa lendo o
    * IndexedDB em vez de receber os pedaços em memória.
+   *
+   * `pedacosGravados` é quantos pedaços a gravação teve — é por ele que se
+   * sabe a duração, e se a memória da aba tem a gravação inteira.
    */
-  async function concluir(sessionId: string, mimeType: string, extensao: string) {
+  async function concluir(
+    sessionId: string,
+    mimeType: string,
+    extensao: string,
+    pedacosGravados: number,
+  ) {
     setError(null);
     setStatus("juntando a gravação…");
 
     try {
       await filaRef.current.catch(() => undefined);
 
-      const bruto = await montarGravacao(sessionId, mimeType);
+      const reserva =
+        reservaRef.current?.gravacao.sessionId === sessionId
+          ? reservaRef.current.pedacos
+          : undefined;
+      const bruto = await montarGravacao(sessionId, mimeType, reserva, pedacosGravados);
       if (bruto === null || bruto.size === 0) {
         setStatus(null);
         setError("a gravação não foi encontrada no aparelho");
@@ -398,31 +530,38 @@ export function SessionRecorder({
       // qualquer jeito, então mandar 48 kHz estéreo é subir seis vezes mais
       // bytes para o servidor descartar cinco sextos.
       //
-      // E o ruído da sala — o silêncio entre as falas — nunca sai daqui.
-      setStatus("preparando o áudio no seu dispositivo…");
-
+      // E o ruído da sala — o silêncio entre as falas — não sai daqui. A
+      // exceção é a gravação longa demais para preparar sem arriscar a
+      // memória do aparelho (ver `limite.ts`): ela sobe como veio.
       let envio: Blob = bruto;
       let extensaoFinal = extensao;
       let mapa: { regions: unknown; removedMs: number; durationMs: number } | null =
         null;
 
-      try {
-        const arquivo = new File([bruto], `consulta.${extensao}`, { type: mimeType });
-        const pronto = await prepareForUpload(arquivo);
-        envio = pronto.file;
-        extensaoFinal = "wav";
-        // `trimmedMs` e não `originalMs`: o que a quota cobra é o que vai ser
-        // transcrito, e o silêncio cortado não chega a ser transcrito.
-        mapa = {
-          regions: pronto.regions,
-          removedMs: pronto.removedMs,
-          durationMs: pronto.trimmedMs,
-        };
-      } catch {
-        // Codec que o navegador não decodifica, memória insuficiente num
-        // celular antigo, AudioContext bloqueado. Enviar o original é a
-        // degradação certa: upload maior e processamento mais lento, nunca
-        // consulta perdida.
+      if (prepararGravacaoNoNavegador(pedacosGravados, memoriaDoAparelho())) {
+        setStatus("preparando o áudio no seu dispositivo…");
+        try {
+          const arquivo = new File([bruto], `consulta.${extensao}`, { type: mimeType });
+          const pronto = await prepararSemRepetirQueda(sessionId, () =>
+            prepareForUpload(arquivo),
+          );
+          if (pronto !== null) {
+            envio = pronto.file;
+            extensaoFinal = "wav";
+            // `trimmedMs` e não `originalMs`: o que a quota cobra é o que vai
+            // ser transcrito, e o silêncio cortado não chega a ser transcrito.
+            mapa = {
+              regions: pronto.regions,
+              removedMs: pronto.removedMs,
+              durationMs: pronto.trimmedMs,
+            };
+          }
+        } catch {
+          // Codec que o navegador não decodifica, memória insuficiente num
+          // celular antigo, AudioContext bloqueado. Enviar o original é a
+          // degradação certa: upload maior e processamento mais lento, nunca
+          // consulta perdida.
+        }
       }
 
       const bytes = envio.size;
@@ -461,6 +600,7 @@ export function SessionRecorder({
       }
 
       await descartarGravacao(sessionId).catch(() => undefined);
+      esquecerGravacao(sessionId);
       router.push(`/sessoes/${sessionId}`);
     } catch (erro) {
       setStatus(null);
@@ -501,18 +641,27 @@ export function SessionRecorder({
     let extensao = extensaoDoNome(file.name);
     let mapa: { regions: unknown; removedMs: number; durationMs: number } | null = null;
 
-    try {
-      const pronto = await prepareForUpload(file);
-      envio = pronto.file;
-      extensao = "wav";
-      mapa = {
-        regions: pronto.regions,
-        removedMs: pronto.removedMs,
-        durationMs: pronto.trimmedMs,
-      };
-    } catch {
-      // Codec que o navegador não decodifica, memória insuficiente, contexto
-      // de áudio bloqueado. Sobe o original: mais lento, nunca perdido.
+    // Arquivo longo demais para decodificar sem arriscar a memória do
+    // aparelho sobe como veio — ver `limite.ts`.
+    const duracaoS = await duracaoPelosMetadados(file);
+    if (prepararArquivoNoNavegador(duracaoS, file.size, memoriaDoAparelho())) {
+      try {
+        const pronto = await prepararSemRepetirQueda(chaveDoArquivo(file), () =>
+          prepareForUpload(file),
+        );
+        if (pronto !== null) {
+          envio = pronto.file;
+          extensao = "wav";
+          mapa = {
+            regions: pronto.regions,
+            removedMs: pronto.removedMs,
+            durationMs: pronto.trimmedMs,
+          };
+        }
+      } catch {
+        // Codec que o navegador não decodifica, memória insuficiente, contexto
+        // de áudio bloqueado. Sobe o original: mais lento, nunca perdido.
+      }
     }
 
     if (!EXTENSOES_ACEITAS.has(extensao)) {
@@ -586,6 +735,7 @@ export function SessionRecorder({
         throw new Error(fim.erro ?? "falha ao concluir o envio");
       }
 
+      esquecerPreparo(chaveDoArquivo(file));
       router.push(`/sessoes/${session.id}`);
     } catch (erro) {
       /**
@@ -611,11 +761,18 @@ export function SessionRecorder({
 
   async function reenviarPendente(g: GravacaoPendente) {
     setPendentes([]);
-    await concluir(g.sessionId, g.mimeType, g.extensao);
+    // O aparelho conta os pedaços que ELE guardou; a memória desta aba, os
+    // que ele recusou. A gravação tem o maior dos dois.
+    const naMemoria =
+      reservaRef.current?.gravacao.sessionId === g.sessionId
+        ? reservaRef.current.gravacao.pedacos
+        : 0;
+    await concluir(g.sessionId, g.mimeType, g.extensao, Math.max(g.pedacos, naMemoria));
   }
 
   async function apagarPendente(g: GravacaoPendente) {
     await descartarGravacao(g.sessionId).catch(() => undefined);
+    esquecerGravacao(g.sessionId);
     await fetch(`/api/sessions/${g.sessionId}`, { method: "DELETE" }).catch(
       () => undefined,
     );
@@ -853,6 +1010,19 @@ export function SessionRecorder({
         </p>
       )}
       {status !== null && <p className="text-sm text-muted">{status}</p>}
+      {recording && limite.tipo === "aviso" && (
+        <p
+          role="status"
+          className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400"
+        >
+          A gravação chega ao limite de {LIMITE_GRAVACAO_S / 3600} horas em{" "}
+          {limite.minutosRestantes === 1
+            ? "1 minuto"
+            : `${limite.minutosRestantes} minutos`}
+          . Nesse momento ela é encerrada e enviada sozinha — nada do que foi gravado se
+          perde.
+        </p>
+      )}
       {aviso !== null && (
         <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
           {aviso}

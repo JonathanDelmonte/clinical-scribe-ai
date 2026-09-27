@@ -1,5 +1,10 @@
 import { sessions } from "@scribe/db";
-import { sessionAudioKey, sessionPartKey, sessionPartsPrefix } from "@scribe/storage";
+import {
+  sessionPartKey,
+  sessionPartsManifestKey,
+  sessionPartsPrefix,
+  type ManifestoDePartes,
+} from "@scribe/storage";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -7,7 +12,7 @@ import { z } from "zod";
 import { asCurrentProfessional } from "@/lib/auth";
 import { limitarPorProfissional } from "@/lib/limites";
 import { storage } from "@/lib/storage";
-import { EXTENSOES_ACEITAS, MAX_AUDIO_BYTES, registrarAudio } from "@/lib/upload";
+import { EXTENSOES_ACEITAS, registrarAudio } from "@/lib/upload";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +25,7 @@ const schema = z.object({
 });
 
 /**
- * Junta os pedaços num áudio só e manda processar.
+ * Fecha o envio e manda processar.
  *
  * A conferência que importa está logo no começo: **todos** os pedaços
  * precisam estar presentes. Montar com um buraco no meio produziria um
@@ -28,6 +33,16 @@ const schema = z.object({
  * reclamar, e cuja falta seria uma parte da consulta simplesmente ausente da
  * nota — sem erro em lugar nenhum. É a classe de falha mais cara que este
  * produto tem: a que não parece falha.
+ *
+ * ## Os pedaços NÃO são juntados aqui
+ *
+ * Esta rota juntava tudo num arquivo só. Na nuvem isso quebra de dois jeitos:
+ * o Supabase gratuito recusa arquivo acima de 50 MB — uns 27 minutos de fala
+ * em WAV —, e uma consulta de horas são centenas de megabytes para caber na
+ * memória e no tempo de uma função. Agora a rota grava um manifesto de poucos
+ * bytes e aponta a sessão para ele; o worker junta os pedaços, transcreve a
+ * partir do áudio inteiro, e guarda o arquivo final. Ver o handler de
+ * transcrição e `sessionPartsManifestKey`.
  */
 export async function POST(
   request: Request,
@@ -74,30 +89,13 @@ export async function POST(
       return { faltando } as const;
     }
 
-    // Lidos em ordem de índice, não na ordem em que o armazenamento listou.
-    // A ordenação de `list()` é alfabética e os índices têm largura fixa
-    // justamente para que as duas coincidam — mas depender disso aqui seria
-    // depender de um detalhe de outra camada.
-    const pedacos: Uint8Array[] = [];
-    let tamanho = 0;
-    for (let i = 0; i < parsed.data.total; i++) {
-      const bytes = await storage.get(sessionPartKey(me.id, session.id, i));
-      tamanho += bytes.byteLength;
-      if (tamanho > MAX_AUDIO_BYTES) {
-        return { error: "áudio montado excede o tamanho máximo" } as const;
-      }
-      pedacos.push(bytes);
-    }
-
-    const inteiro = new Uint8Array(tamanho);
-    let posicao = 0;
-    for (const pedaco of pedacos) {
-      inteiro.set(pedaco, posicao);
-      posicao += pedaco.byteLength;
-    }
-
-    const key = sessionAudioKey(me.id, session.id, extensao);
-    await storage.put(key, inteiro);
+    // Os pedaços ficam onde estão; o manifesto diz quantos são e o que formam.
+    const manifesto: ManifestoDePartes = { partes: parsed.data.total, extensao };
+    const key = sessionPartsManifestKey(me.id, session.id);
+    await storage.put(
+      key,
+      new TextEncoder().encode(JSON.stringify(manifesto)) as Uint8Array<ArrayBuffer>,
+    );
 
     const registro = await registrarAudio(tx, me, session.id, {
       key,
@@ -108,20 +106,10 @@ export async function POST(
       speechRegions: Array.isArray(parsed.data.regions) ? parsed.data.regions : null,
     });
 
-    /**
-     * Os pedaços são apagados DEPOIS de o áudio inteiro estar gravado, e só
-     * então. Na ordem inversa, uma falha no meio deixaria a sessão sem áudio e
-     * sem pedaços — a consulta perdida, que é o único resultado inaceitável
-     * aqui.
-     *
-     * Se a limpeza falhar, sobra lixo no armazenamento. Lixo é barato.
-     */
-    await Promise.all(
-      [...presentes].map((chave) => storage.remove(chave).catch(() => undefined)),
-    );
-
+    // Os pedaços só saem depois que o worker grava o arquivo final — é ele
+    // quem os apaga. Até lá, eles SÃO a consulta.
     return "ok" in registro
-      ? ({ ok: true, bytes: tamanho, key, quota: registro.quota } as const)
+      ? ({ ok: true, partes: parsed.data.total, key, quota: registro.quota } as const)
       : registro;
   });
 

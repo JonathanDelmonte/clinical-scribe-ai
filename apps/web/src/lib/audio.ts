@@ -43,8 +43,15 @@
  */
 export const MAX_CORPO_BUFFERIZADO_BYTES = 10 * 1024 * 1024;
 
-/** ~200 MB. Uma consulta de uma hora em webm/opus fica bem abaixo disso. */
-export const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
+/**
+ * 400 MB — o maior áudio que se envia.
+ *
+ * Folga para o que chega de fora: três horas gravadas no navegador são
+ * ~170 MB, mas um WAV de gravador digital passa de 600 MB por hora. O que é
+ * guardado no fim é outra conta (ver `LIMITE_ARQUIVO_UNICO_BYTES` em
+ * @scribe/storage): o worker comprime o que não couber.
+ */
+export const MAX_AUDIO_BYTES = 400 * 1024 * 1024;
 
 /**
  * Extensões aceitas.

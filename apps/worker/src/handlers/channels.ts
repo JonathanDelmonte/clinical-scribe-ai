@@ -22,11 +22,18 @@ import {
   type EstadoDoSegundoMicrofone,
 } from "@scribe/core";
 import { auditLog, sessions, transcriptSegments, type Database } from "@scribe/db";
-import { secondChannelKey, type AudioStorage } from "@scribe/storage";
+import {
+  ehManifestoDePartes,
+  secondChannelKey,
+  secondChannelPartKey,
+  secondChannelPartsPrefix,
+  type AudioStorage,
+} from "@scribe/storage";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 
 import { config } from "../config.js";
+import { juntarPedacos } from "../pedacos.js";
 import { diarizarPorCanais, medirSegundoMicrofoneNoMotor } from "../providers/local.js";
 import type { ClaimedJob } from "../queue.js";
 
@@ -50,6 +57,11 @@ export function makeChannelsHandler(
     if (sessao.audioPath === null || sessao.secondChannelPath === null) {
       throw new Error("a sessão precisa do áudio e do segundo microfone");
     }
+    if (ehManifestoDePartes(sessao.audioPath)) {
+      // A rota só aceita depois da transcrição, quando o áudio já foi montado;
+      // isto cobre um reprocessamento no meio. A fila tenta de novo depois.
+      throw new Error("o áudio da consulta ainda está sendo montado");
+    }
 
     const pedido = lerEstadoDoSegundoMicrofone(sessao.channelDiarization);
     if (pedido === null) {
@@ -66,11 +78,21 @@ export function makeChannelsHandler(
     let pedidoAtual = pedido;
     let arquivoDoSegundo = sessao.secondChannelPath;
 
+    /** O original — arquivo único, ou manifesto e pedaços — sai inteiro. */
+    const apagarOriginal = async (chave: string): Promise<void> => {
+      await storage.remove(chave);
+      if (!ehManifestoDePartes(chave)) return;
+      const pedacos = await storage.list(
+        secondChannelPartsPrefix(sessao.professionalId, sessao.id),
+      );
+      for (const pedaco of pedacos) await storage.remove(pedaco);
+    };
+
     const recusar = async (motivo: string): Promise<void> => {
       // Um original que não chegou a virar medida não fica para trás: é a
       // gravação do lado do paciente, e só estava aqui para ser medida.
       const descartar = !arquivoDoSegundo.endsWith(".cve");
-      if (descartar) await storage.remove(arquivoDoSegundo);
+      if (descartar) await apagarOriginal(arquivoDoSegundo);
       await db
         .update(sessions)
         .set({
@@ -112,10 +134,25 @@ export function makeChannelsHandler(
       envelope = await storage.get(sessao.secondChannelPath);
     } else {
       const original = sessao.secondChannelPath;
+      let bytesDoOriginal: Uint8Array<ArrayBuffer>;
+      let nomeDoOriginal = original;
+      if (ehManifestoDePartes(original)) {
+        const juntado = await juntarPedacos(storage, original, (i) =>
+          secondChannelPartKey(sessao.professionalId, sessao.id, i),
+        );
+        if (!juntado.ok) {
+          await recusar(juntado.motivo);
+          return;
+        }
+        bytesDoOriginal = juntado.bytes;
+        nomeDoOriginal = `segundo-microfone.${juntado.manifesto.extensao}`;
+      } else {
+        bytesDoOriginal = await storage.get(original);
+      }
       const medida = await medirSegundoMicrofoneNoMotor(
         config.ASR_LOCAL_URL,
-        await storage.get(original),
-        original,
+        bytesDoOriginal,
+        nomeDoOriginal,
       );
       if (!medida.ok) {
         await recusar(
@@ -131,7 +168,7 @@ export function makeChannelsHandler(
         .set({ secondChannelPath: destino, channelDiarization: pedidoAtual })
         .where(eq(sessions.id, sessionId));
       arquivoDoSegundo = destino;
-      await storage.remove(original);
+      await apagarOriginal(original);
       envelope = medida.bytes;
       log.info("segundo microfone medido no motor; original apagado");
     }

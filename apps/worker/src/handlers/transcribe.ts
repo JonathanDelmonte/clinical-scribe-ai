@@ -26,13 +26,21 @@ import {
   usageEvents,
   type Database,
 } from "@scribe/db";
-import { sessionAudioKey, type AudioStorage } from "@scribe/storage";
+import {
+  ehManifestoDePartes,
+  LIMITE_ARQUIVO_UNICO_BYTES,
+  sessionAudioKey,
+  sessionPartKey,
+  sessionPartsManifestKey,
+  type AudioStorage,
+} from "@scribe/storage";
 import { eq } from "drizzle-orm";
 
 import type { Logger } from "pino";
 import { config } from "../config.js";
 import { getAvailableProvider } from "../providers/index.js";
-import { converterParaWav, type Convertido } from "../providers/local.js";
+import { juntarPedacos } from "../pedacos.js";
+import { converterParaM4a, type Convertido } from "../providers/local.js";
 import type { ClaimedJob } from "../queue.js";
 
 export function makeTranscribeHandler(
@@ -73,82 +81,178 @@ export function makeTranscribeHandler(
       throw new Error(`profissional ${session.professionalId} não encontrado`);
     }
 
-    // ---- normalização -----------------------------------------------------
+    // ---- montagem e normalização ------------------------------------------
     //
-    // O navegador prepara (16 kHz, mono, WAV, sem o silêncio) tudo o que ele
-    // consegue decodificar, e deixa o mapa de regiões como marca. Sem mapa, o
-    // arquivo chegou como veio: AMR de gravador antigo de Android, WMA, ALAC
-    // do iPhone, WAV de ditafone em ADPCM. O motor transcreveria assim mesmo —
-    // mas a tela não conseguiria TOCAR o trecho, e cada citação da nota
-    // depende de ouvir o trecho que a sustenta. Aqui ele vira o mesmo WAV que
-    // o navegador teria feito.
+    // `audio` é o que o motor vai transcrever — sempre o melhor que existe: o
+    // áudio inteiro, sem perdas quando possível. O que fica GUARDADO pode ser
+    // outra coisa, e é decidido logo abaixo.
     //
-    // Depois disso o mapa passa a existir, com uma região só: nada foi
-    // cortado. É verdade, e é o que evita converter de novo a cada
-    // reprocessamento.
-    if (session.speechRegions === null) {
-      let convertido: Convertido | null = null;
-      try {
-        convertido = await converterParaWav(
-          config.ASR_LOCAL_URL,
-          await storage.get(session.audioPath),
-          session.audioPath,
-        );
-      } catch (erro) {
-        // Motor fora do ar, ou implantação só com motor de nuvem: o original
-        // ainda pode ser transcrito. O que se perde é tocar o trecho na tela.
+    // Três casos:
+    //
+    //   1. Em pedaços (manifesto): o site não junta mais — ver a rota de
+    //      finalização. Os pedaços são juntados aqui, na memória.
+    //   2. Sem mapa de regiões: o arquivo chegou como veio — AMR de gravador
+    //      antigo, WMA, ALAC do iPhone — e a tela não conseguiria tocá-lo, e
+    //      cada citação da nota depende de ouvir o trecho que a sustenta.
+    //   3. O WAV que o navegador preparou, já guardado: nada a fazer.
+    //
+    // Nos casos 1 e 2 o arquivo guardado é trocado: o próprio áudio se ele é o
+    // WAV do navegador e cabe num arquivo; senão, a cópia comprimida (M4A,
+    // ~14 MB por hora), que qualquer navegador toca e que cabe nos 50 MB por
+    // arquivo do Supabase gratuito mesmo com horas de consulta.
+    //
+    // Os pedaços só saem no FIM, com a transcrição salva (`pedacosParaApagar`).
+    // Se esta tentativa cair no meio — o Docker desligado, o motor reiniciado
+    // —, a próxima encontra o manifesto (`retomada`) e transcreve de novo o
+    // áudio inteiro, sem perdas, e não a cópia comprimida já guardada.
+    let audio: Uint8Array<ArrayBuffer>;
+    let nomeDoAudio: string;
+    let pedacosParaApagar: string[] = [];
+    const manifesto = sessionPartsManifestKey(session.professionalId, session.id);
+    const emPedacos = ehManifestoDePartes(session.audioPath);
+    const retomada = !emPedacos && (await storage.exists(manifesto));
+    if (emPedacos || retomada) {
+      const juntado = await juntarPedacos(storage, manifesto, (i) =>
+        sessionPartKey(session.professionalId, session.id, i),
+      );
+      if (juntado.ok) {
+        audio = juntado.bytes;
+        nomeDoAudio = `consulta.${juntado.manifesto.extensao}`;
+        pedacosParaApagar = [
+          manifesto,
+          ...Array.from({ length: juntado.manifesto.partes }, (_, i) =>
+            sessionPartKey(session.professionalId, session.id, i),
+          ),
+        ];
+      } else if (retomada) {
+        // Faltam pedaços, mas o arquivo final já está guardado: segue com ele.
         log.warn(
-          { err: erro },
-          "conversão para WAV indisponível — seguindo com o original",
+          { motivo: juntado.motivo },
+          "retomada sem os pedaços — usando o guardado",
         );
-      }
-
-      if (convertido !== null && !convertido.ok) {
+        audio = await storage.get(session.audioPath);
+        nomeDoAudio = session.audioPath;
+        pedacosParaApagar = [manifesto];
+      } else {
         await db
           .update(sessions)
-          .set({
-            status: "failed",
-            failureReason:
-              `O arquivo enviado não pôde ser lido como áudio (${convertido.motivo}). ` +
-              `Confira se é mesmo a gravação da consulta.`,
-          })
+          .set({ status: "failed", failureReason: juntado.motivo })
           .where(eq(sessions.id, sessionId));
-        log.warn({ motivo: convertido.motivo }, "arquivo enviado não é áudio legível");
+        log.error({ motivo: juntado.motivo }, "consulta em pedaços incompleta");
         return;
       }
+    } else {
+      audio = await storage.get(session.audioPath);
+      nomeDoAudio = session.audioPath;
+    }
 
-      if (convertido !== null) {
-        const chave = sessionAudioKey(session.professionalId, session.id, "wav");
-        const regioes = [{ startMs: 0, endMs: convertido.duracaoMs }];
-        await storage.put(chave, convertido.bytes);
+    if (emPedacos || (!retomada && session.speechRegions === null)) {
+      const preparadoPeloNavegador =
+        session.speechRegions !== null && nomeDoAudio.endsWith(".wav");
+
+      let guardar: {
+        bytes: Uint8Array<ArrayBuffer>;
+        extensao: string;
+        duracaoMs: number | null;
+      } | null = null;
+      if (preparadoPeloNavegador && audio.byteLength <= LIMITE_ARQUIVO_UNICO_BYTES) {
+        guardar = { bytes: audio, extensao: "wav", duracaoMs: null };
+      } else {
+        let convertido: Convertido | null = null;
+        try {
+          convertido = await converterParaM4a(
+            config.ASR_LOCAL_URL,
+            audio,
+            nomeDoAudio,
+            LIMITE_ARQUIVO_UNICO_BYTES,
+          );
+        } catch (erro) {
+          log.warn({ err: erro }, "conversão indisponível — motor fora do ar?");
+        }
+        if (convertido !== null && !convertido.ok) {
+          await db
+            .update(sessions)
+            .set({
+              status: "failed",
+              failureReason:
+                convertido.status === 413
+                  ? `A gravação é longa demais para guardar (${convertido.motivo}). ` +
+                    `Divida o arquivo em partes menores e envie cada uma.`
+                  : `O arquivo enviado não pôde ser lido como áudio (${convertido.motivo}). ` +
+                    `Confira se é mesmo a gravação da consulta.`,
+            })
+            .where(eq(sessions.id, sessionId));
+          log.warn(
+            { motivo: convertido.motivo, status: convertido.status },
+            "áudio recusado na conversão",
+          );
+          return;
+        }
+        if (convertido !== null) {
+          guardar = {
+            bytes: convertido.bytes,
+            extensao: "m4a",
+            duracaoMs: convertido.duracaoMs,
+          };
+        }
+      }
+
+      if (guardar === null && emPedacos) {
+        // Em pedaços e sem motor para comprimir: não há arquivo final para
+        // guardar ainda. A fila tenta de novo — os pedaços continuam sendo a
+        // consulta até lá.
+        throw new Error(
+          "motor indisponível para juntar a consulta — nova tentativa em breve",
+        );
+      }
+
+      if (guardar !== null) {
+        const chave = sessionAudioKey(
+          session.professionalId,
+          session.id,
+          guardar.extensao,
+        );
+        const semMapa = session.speechRegions === null;
+        const duracaoMs = semMapa
+          ? (guardar.duracaoMs ?? session.durationMs)
+          : session.durationMs;
+        const regioes =
+          semMapa && duracaoMs !== null
+            ? [{ startMs: 0, endMs: duracaoMs }]
+            : session.speechRegions;
+        const silencio = semMapa ? 0 : session.silenceRemovedMs;
+
+        await storage.put(chave, guardar.bytes);
         await db
           .update(sessions)
           .set({
             audioPath: chave,
-            durationMs: convertido.duracaoMs,
-            silenceRemovedMs: 0,
+            durationMs: duracaoMs,
+            silenceRemovedMs: silencio,
             speechRegions: regioes,
           })
           .where(eq(sessions.id, sessionId));
-        // O original só sai depois de o WAV estar gravado e apontado. Com a
-        // mesma chave (um .wav em ADPCM), o put já o substituiu.
-        if (chave !== session.audioPath) {
+
+        // Um original avulso (sem pedaços) sai já, depois de o arquivo final
+        // estar gravado e apontado. Os pedaços esperam o fim da transcrição.
+        if (!emPedacos && chave !== session.audioPath) {
           await storage.remove(session.audioPath).catch((erro: unknown) => {
-            log.error({ err: erro }, "original não apagado depois da conversão");
+            log.error({ err: erro }, "original não apagado depois de guardar o áudio");
           });
         }
         log.info(
           {
-            de: session.audioPath.slice(session.audioPath.lastIndexOf(".")),
-            minutos: Math.round(convertido.duracaoMs / 6000) / 10,
+            de: emPedacos ? "pedaços" : nomeDoAudio.slice(nomeDoAudio.lastIndexOf(".")),
+            guardado: guardar.extensao,
+            megabytes: Math.round(guardar.bytes.byteLength / 1e5) / 10,
           },
-          "áudio convertido para WAV",
+          "áudio montado e guardado",
         );
         session = {
           ...session,
           audioPath: chave,
-          durationMs: convertido.duracaoMs,
-          silenceRemovedMs: 0,
+          durationMs: duracaoMs,
+          silenceRemovedMs: silencio,
           speechRegions: regioes,
         };
       }
@@ -199,7 +303,6 @@ export function makeTranscribeHandler(
       );
     }
 
-    const audio = await storage.get(session.audioPath);
     const started = Date.now();
 
     // Acompanhamento em paralelo com a transcrição.
@@ -241,7 +344,7 @@ export function makeTranscribeHandler(
     try {
       result = await provider.transcribe({
         audio,
-        filename: session.audioPath,
+        filename: nomeDoAudio,
         diarize: true,
         jobId: job.id,
         // Camada A, quando houver: a voz cadastrada compara trecho a trecho, o
@@ -249,6 +352,7 @@ export function makeTranscribeHandler(
         // não dependência.
         professionalEmbedding: owner.voiceEmbedding,
         vocabulary: vocabulario?.texto ?? null,
+        durationMs: session.durationMs,
       });
     } finally {
       // Encerra o laço ANTES de qualquer outra escrita na sessão: um
@@ -400,5 +504,13 @@ export function makeTranscribeHandler(
       .where(eq(sessions.id, sessionId));
 
     log.info({ elapsedMs: Date.now() - started }, "sessão pronta para revisão");
+
+    // Só agora, com a transcrição salva: até aqui os pedaços eram o áudio
+    // inteiro, sem perdas, para uma nova tentativa.
+    for (const chave of pedacosParaApagar) {
+      await storage.remove(chave).catch((erro: unknown) => {
+        log.error({ err: erro }, "pedaço não apagado depois da transcrição");
+      });
+    }
   };
 }
