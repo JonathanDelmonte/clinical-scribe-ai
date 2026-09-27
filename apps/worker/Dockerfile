@@ -27,4 +27,10 @@ COPY apps/worker apps/worker
 USER node
 
 ENV NODE_ENV=production
-CMD ["pnpm", "--filter", "@scribe/worker", "start"]
+
+# Direto pelo Node, e não por `pnpm start`: o pnpm 11 confere as dependências
+# antes de rodar qualquer script e, achando algo a ajustar, tenta REINSTALAR —
+# o que falha aqui (o usuário `node` não escreve em node_modules, de
+# propósito) e derruba o container em loop de reinício.
+WORKDIR /app/apps/worker
+CMD ["node", "--import", "tsx", "src/index.ts"]
