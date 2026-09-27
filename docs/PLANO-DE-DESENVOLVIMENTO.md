@@ -23,7 +23,7 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 
 ---
 
-## Estado atual — 22/09/2026
+## Estado atual — 27/09/2026
 
 > Atualize esta tabela ao fechar cada marco. Um plano que não diz onde o projeto
 > está é um plano que ninguém consulta.
@@ -38,13 +38,52 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 | **5** — Produto ao redor | ✅ completo | Auth real, onboarding, CRUD de pacientes com busca, gravação endurecida, consentimento versionado, export em texto e PDF, quota antes de processar, PWA, telemetria de custo. Ver [PLANO-TRILHA-B.md](./PLANO-TRILHA-B.md). |
 | **6** — Endurecimento e LGPD | ✅ **completo, com pendências nomeadas** | Auditoria, retenção de áudio, portabilidade e exclusão de conta, rate limiting, privacidade e termos. As 8 pendências de segurança estão listadas e justificadas em [REVISAO-DE-SEGURANCA.md](./REVISAO-DE-SEGURANCA.md) — nenhuma é bloqueante para o primeiro usuário, e todas precisam de decisão antes de escalar. |
 
+### Depois do Marco 6 — o que entrou até 27/09
+
+- **Correção da transcrição** e **chave de IA do próprio profissional** — os
+  itens 1 e 2 da fila abaixo.
+- **Dois microfones**: diarização por canal, com o segundo celular mandando só
+  a energia da voz, não o áudio. Ver ADR-0002.
+- **Conversor universal**: o navegador prepara o que lê; o ffmpeg do motor
+  converte o resto (AMR, WMA, ALAC...). Ver ADR-0002.
+- **Implantação**: site na Vercel (funções em São Paulo), banco e gravações no
+  Supabase de São Paulo, processamento na **estação** — o Docker no
+  computador de quem opera, que atende as consultas de todos pela fila.
+- **Gravações longas**: três horas avisadas e encerradas sozinhas, pedaços
+  montados no worker, cópia comprimida guardada. Ver ADR-0002.
+
+### O que falta até o design
+
+Nenhuma tela foi desenhada até aqui, de propósito: o design vem depois de as
+funcionalidades estarem fechadas, para desenhar cada tela uma vez só. Em
+ordem:
+
+1. **Quebrar o trecho onde o falante troca**, pelo tempo de cada palavra.
+   Hoje, quando o Whisper junta falas das duas pessoas num trecho só, o trecho
+   inteiro vai para uma delas — é o item de "O que ainda não funciona bem",
+   abaixo, e melhora todos os caminhos, inclusive o sem configuração nenhuma.
+2. **Testar um modelo mais novo de separação de vozes**, medido contra o
+   atual, com controle.
+3. **"Gravar agora" na tela inicial**, escolhendo o paciente depois.
+4. **"Onde processar"**: no meu computador (o padrão) ou na nuvem (Modal).
+5. **O ajudante**: instalador para Windows, sem Docker, com o mesmo motor.
+   Fica parado enquanto o motor do Docker responde no mesmo computador, e
+   assume quando ele para — dois motores disputariam a mesma placa de vídeo.
+
+Opcionais, a decidir com medição: o verificador de suporte (item 5 da fila) e
+o dicionário de correção depois da transcrição (nota do item 3).
+
+O que foi adiado de propósito — segurança, backup, privacidade, provedor da
+nota — está em [PENDENCIAS.md](./PENDENCIAS.md), e bloqueia o primeiro
+paciente real, não os testes.
+
 ### Fila da Trilha A — o que vem depois
 
-1. **Correção da transcrição pelo profissional** — clicar num trecho, corrigir
+1. ✅ **Feito.** **Correção da transcrição pelo profissional** — clicar num trecho, corrigir
    o que o Whisper ouviu errado, salvar. O texto original nunca é apagado: o
    par (errado → certo) é dado rotulado, gerado pelo uso, que nenhum
    concorrente tem sem ter usuários antes. Exige migration.
-2. **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
+2. ✅ **Feito.** **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
 3. ~~**Vocabulário do domínio no Whisper**~~ — **medido e descartado como
    prompt.** Previsto como "a melhoria mais barata que existe"; na consulta real
    corrigiu um erro e, em troca, apagou frases verdadeiras, inventou um remédio

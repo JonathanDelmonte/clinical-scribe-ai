@@ -141,6 +141,10 @@ dado, porque não é a tela que decide.
 
 ## ⚠️ O que continua aberto
 
+> **Acompanhamento em [PENDENCIAS.md](./PENDENCIAS.md)** (27/09/2026). Com o
+> site na Vercel, a pendência 2 está resolvida — a Vercel sobrescreve o
+> `x-forwarded-for` —, e a 4 ganhou peso: cada instância conta sozinha.
+
 | # | Item | Risco | O que falta |
 |---|---|---|---|
 | 1 | **`script-src` não está na CSP** | XSS teria execução livre | Exige nonce por requisição no `proxy.ts` e no layout. Uma CSP com `unsafe-inline` escrita só para "ter uma CSP" dá impressão de proteção sem dar proteção — por isso a ausência é explícita, e não disfarçada. |

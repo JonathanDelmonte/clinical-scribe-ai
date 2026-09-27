@@ -2,6 +2,11 @@
 
 > Companheiro de [PLANO-DE-DESENVOLVIMENTO.md](./PLANO-DE-DESENVOLVIMENTO.md).
 > Criado em 15/09/2026 · Para quando duas pessoas trabalham no mesmo repositório.
+>
+> **Desde 27/09/2026 o projeto está com uma pessoa só, nas duas trilhas.** A
+> Trilha B entregou tudo o que lhe cabia (Marcos 5 e 6); o que ela deixou
+> nomeado está em [PENDENCIAS.md](./PENDENCIAS.md). A divisão abaixo fica como
+> registro, e volta a valer se alguém entrar na Trilha B.
 
 ---
 

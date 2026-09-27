@@ -176,9 +176,9 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
     });
     if (input.jobId !== undefined) params.set("job", input.jobId);
 
-    // Três vezes a duração, no mínimo o prazo padrão: na GPU disputada com
-    // outros programas o motor chega a ~3,5× o tempo real, e três horas de
-    // consulta passariam dos 45 minutos fixos.
+    // Três vezes a duração, no mínimo o prazo padrão. Em áudio real de
+    // consultório o motor roda a ~3,4× o tempo real (ADR-0002), e três horas
+    // de consulta — ~53 minutos de processamento — passariam dos 45 fixos.
     const prazoMs = Math.max(this.timeoutMs, 3 * (input.durationMs ?? 0));
     const res = await fetch(`${this.baseUrl}/transcribe?${params}`, {
       method: "POST",
