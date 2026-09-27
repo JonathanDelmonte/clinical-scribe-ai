@@ -66,3 +66,12 @@ export function resolveLlm(): LlmStatus {
 }
 
 export { GoogleLlmProvider };
+export { AnthropicLlmProvider } from "./anthropic.js";
+export { OpenAiCompativelLlmProvider } from "./openai.js";
+export {
+  criarEscolhaDeLlm,
+  fabricarProvedor,
+  lerChaveDoBanco,
+  type Escolha,
+  type EscolherLlm,
+} from "./escolha.js";

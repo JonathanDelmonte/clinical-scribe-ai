@@ -42,6 +42,20 @@ export interface LlmCompletion {
   readonly finishReason: string | null;
 }
 
+/**
+ * O formato que a resposta precisa ter: um JSON Schema.
+ *
+ * Por CHAMADA, e não por fornecedor, porque a nota e os documentos de objetivo
+ * têm formatos diferentes. Quando o formato era fixo no adaptador, o do Google
+ * forçava o da nota em toda chamada — e todo documento de objetivo (receita,
+ * pedido de exames) saía vazio, com cara de "a consulta não sustentou nada".
+ */
+export interface FormatoDaResposta {
+  /** Nome curto, sem espaços — alguns fornecedores exigem um. */
+  readonly nome: string;
+  readonly esquema: Readonly<Record<string, unknown>>;
+}
+
 export interface LlmProvider {
   /** Nome do fornecedor, para log e para a nota gravada. */
   readonly name: string;
@@ -49,7 +63,8 @@ export interface LlmProvider {
   readonly dataPolicy: LlmDataPolicy;
   /** Responde? Usado na partida, para falhar antes de haver job na mão. */
   healthy(): Promise<boolean>;
-  complete(prompt: string): Promise<LlmCompletion>;
+  /** `formato`, quando dado, é cumprido pelo fornecedor, não só pedido no texto. */
+  complete(prompt: string, formato?: FormatoDaResposta): Promise<LlmCompletion>;
 }
 
 /**

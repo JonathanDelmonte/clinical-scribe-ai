@@ -11,10 +11,11 @@
  * `baseUrl`, a autenticação e a política declarada — não reescrever o adaptador.
  */
 
-import {
-  NOTE_RESPONSE_SCHEMA,
-  type LlmCompletion,
-  type LlmProvider,
+import type {
+  FormatoDaResposta,
+  LlmCompletion,
+  LlmDataPolicy,
+  LlmProvider,
 } from "@scribe/core";
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
@@ -60,17 +61,30 @@ interface GeminiErro {
 }
 
 export class GoogleLlmProvider implements LlmProvider {
-  readonly name = "google-ai-studio";
-  readonly dataPolicy = "training" as const;
-
+  /**
+   * `dataPolicy` padrão `training`: é o AI Studio gratuito, a chave da
+   * instalação. A chave de um profissional chega com a política que ELE
+   * declarou ao cadastrá-la — ver ADR-0003.
+   */
   constructor(
     private readonly apiKey: string,
     readonly model: string,
+    readonly dataPolicy: LlmDataPolicy = "training",
+    readonly name = "google-ai-studio",
   ) {}
+
+  /**
+   * A chave vai no cabeçalho, e não em `?key=` na URL: endereço aparece em
+   * log de proxy, em rastreamento de erro, em histórico — cabeçalho, não.
+   */
+  private get cabecalhos(): Record<string, string> {
+    return { "content-type": "application/json", "x-goog-api-key": this.apiKey };
+  }
 
   async healthy(): Promise<boolean> {
     try {
-      const res = await fetch(`${BASE_URL}/models/${this.model}?key=${this.apiKey}`, {
+      const res = await fetch(`${BASE_URL}/models/${this.model}`, {
+        headers: this.cabecalhos,
         signal: AbortSignal.timeout(10_000),
       });
       return res.ok;
@@ -79,31 +93,32 @@ export class GoogleLlmProvider implements LlmProvider {
     }
   }
 
-  async complete(prompt: string): Promise<LlmCompletion> {
+  async complete(prompt: string, formato?: FormatoDaResposta): Promise<LlmCompletion> {
     let ultimoErro = "";
 
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
-      const res = await fetch(
-        `${BASE_URL}/models/${this.model}:generateContent?key=${this.apiKey}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            safetySettings: SAFETY_SETTINGS,
-            generationConfig: {
-              // Zero de propósito. Nota clínica não é lugar para variedade:
-              // a mesma consulta deve produzir a mesma nota, senão não há como
-              // investigar uma regressão de qualidade depois.
-              temperature: 0,
-              responseMimeType: "application/json",
-              responseSchema: NOTE_RESPONSE_SCHEMA,
-              maxOutputTokens: 8192,
-            },
-          }),
-          signal: AbortSignal.timeout(120_000),
-        },
-      );
+      const res = await fetch(`${BASE_URL}/models/${this.model}:generateContent`, {
+        method: "POST",
+        headers: this.cabecalhos,
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          safetySettings: SAFETY_SETTINGS,
+          generationConfig: {
+            // Zero de propósito. Nota clínica não é lugar para variedade:
+            // a mesma consulta deve produzir a mesma nota, senão não há como
+            // investigar uma regressão de qualidade depois.
+            temperature: 0,
+            maxOutputTokens: 8192,
+            ...(formato === undefined
+              ? {}
+              : {
+                  responseMimeType: "application/json",
+                  responseSchema: formato.esquema,
+                }),
+          },
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
 
       if (res.ok) {
         return this.lerResposta((await res.json()) as GeminiResposta);

@@ -11,7 +11,9 @@
 1. **Nota clínica num provedor que não treina com os dados.** Hoje a produção
    usa o Gemini gratuito com `LLM_DATA_POLICY=training` — aceitável só para
    conversa de teste. A API paga do Google, por exemplo, não usa os dados para
-   treino. É decisão de custo.
+   treino. É decisão de custo. Desde 27/09 cada profissional também pode
+   cadastrar a própria chave com esses termos (ADR-0003) — o que resolve para
+   ele, não para quem usa a da instalação.
 2. **Política de privacidade** (`/privacidade` e `docs/PRIVACIDADE.md`). Hoje
    ela afirma que o provedor da nota não treina com os dados — falso na
    configuração atual (item 1) — e não cita quem de fato toca nos dados:
@@ -57,6 +59,13 @@ Detalhes e justificativas em [REVISAO-DE-SEGURANCA.md](./REVISAO-DE-SEGURANCA.md
 - **Do checklist de implantação:** HTTPS (Vercel), criptografia em repouso
   (Supabase), `SUPABASE_SERVICE_ROLE_KEY` fora da aplicação web (o site usa
   chaves S3 que só abrem os arquivos), retenção configurada em 30 dias.
+
+## Implantação — conferir ao mexer nas chaves
+
+- **`SEGREDO_MESTRE` igual no site e na estação.** O site cifra as chaves de
+  IA com a dele; a estação abre com a dela. Diferentes, a chave própria de
+  ninguém abre — a sessão avisa, e nada é enviado. Na Vercel ela é "Secret" e
+  não se lê de volta: na dúvida, cole de novo o valor do `.env.producao`.
 
 ## Limites do plano gratuito, para não esquecer
 

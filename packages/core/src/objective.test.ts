@@ -4,12 +4,15 @@ import type { TranscriptSegment } from "./domain";
 import {
   buildObjectivePrompt,
   countGaps,
+  FORMATO_DO_OBJETIVO,
+  OBJECTIVE_RESPONSE_SCHEMA,
   objetivoPorSlug,
   OBJETIVOS_GLOBAIS,
   parseObjectiveResponse,
   PROMPT_VERSION_OBJETIVO,
   validateObjective,
 } from "./objective";
+import { FORMATO_DA_NOTA, NOTE_RESPONSE_SCHEMA } from "./note";
 
 function trecho(id: string, text: string): TranscriptSegment {
   return {
@@ -191,5 +194,27 @@ describe("biblioteca de objetivos", () => {
 
   it("a versão do prompt é gravável", () => {
     expect(PROMPT_VERSION_OBJETIVO).toMatch(/^objetivo-v\d+$/);
+  });
+});
+
+describe("o formato da resposta", () => {
+  it("o esquema do objetivo descreve o que o leitor espera", () => {
+    const conforme = {
+      titulo: "Receita",
+      itens: [{ texto: "Dipirona 500 mg", fontes: ["seg_1"], lacunas: ["frequência"] }],
+    };
+    expect(Object.keys(conforme).sort()).toEqual(
+      [...OBJECTIVE_RESPONSE_SCHEMA.required].sort(),
+    );
+    expect(parseObjectiveResponse(JSON.stringify(conforme)).items).toHaveLength(1);
+  });
+
+  // O defeito que o formato por chamada corrige: o adaptador do Google forçava
+  // o esquema da NOTA em toda chamada, e o documento do objetivo saía vazio.
+  it("uma resposta no formato da nota vira documento vazio", () => {
+    const formatoDaNota = { secoes: [{ chave: "plano", afirmacoes: [] }] };
+    expect(parseObjectiveResponse(JSON.stringify(formatoDaNota)).items).toHaveLength(0);
+    expect(FORMATO_DO_OBJETIVO.esquema).not.toBe(FORMATO_DA_NOTA.esquema);
+    expect(FORMATO_DA_NOTA.esquema).toBe(NOTE_RESPONSE_SCHEMA);
   });
 });

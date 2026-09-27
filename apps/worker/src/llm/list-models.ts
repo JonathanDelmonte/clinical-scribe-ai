@@ -27,7 +27,8 @@ if (chave === undefined || chave === "") {
 }
 
 const res = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models?key=${chave}&pageSize=200`,
+  "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+  { headers: { "x-goog-api-key": chave } },
 );
 
 if (!res.ok) {

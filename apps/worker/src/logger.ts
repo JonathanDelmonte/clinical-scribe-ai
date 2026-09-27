@@ -29,6 +29,9 @@ export const logger = pino({
       "*.authorization",
       "*.apiKey",
       "*.password",
+      // A chave de IA do profissional (ADR-0003, regra 3), aberta ou cifrada.
+      "*.chave",
+      "*.llmKeyCipher",
     ],
     censor: "[REDIGIDO]",
   },

@@ -1,7 +1,7 @@
 # ADR-0003 — O profissional traz a própria chave de IA
 
-> Status: **aceito, não implementado** · 16/09/2026
-> Decide *como* será feito. Quando será feito é outra conversa.
+> Status: **implementado** · aceito em 16/09/2026 · a tela em 23/09 · o
+> worker em 27/09/2026. Ver "Como ficou", no fim.
 
 ---
 
@@ -127,3 +127,52 @@ o cadastro, onde a pessoa está olhando.
 - **Deixar o profissional escrever o prompt.** O prompt é onde moram as regras
   anti-alucinação. Ele é da [Trilha A](../DIVISAO-DE-TRABALHO.md) e continua
   sendo.
+
+---
+
+## Como ficou
+
+**A escolha é por sessão** (`apps/worker/src/llm/escolha.ts`). Com chave
+cadastrada, o documento sai pela do profissional — aberta com `decifrar()` do
+`@scribe/auth`, com a política que ele declarou — e **só por ela**: se a chave
+não abrir, o fornecedor não for conhecido ou a política não servir, o
+documento falha com o motivo na tela da sessão, e a chave da instalação não
+entra no lugar. Sem chave cadastrada, vale a da instalação. A regra 5 é
+conferida ali, a cada sessão, contra o `LLM_DATA_POLICY` da instalação.
+
+**Falha de configuração não repete.** Sem modelo utilizável, o handler lança
+`ErroDefinitivo` e a fila encerra o job na hora, com o motivo — em vez de
+gastar três tentativas num problema que nenhuma tentativa resolve. Por isso os
+handlers de nota e de objetivo passaram a ser registrados sempre.
+
+**Os adaptadores** (`apps/worker/src/llm/`):
+
+- **Compatível com OpenAI** (`openai.ts`) — OpenAI, Groq, Together,
+  OpenRouter, DeepSeek, vLLM. O endereço é guardado sem o `/v1`, o mesmo que a
+  tela confere. Se o serviço recusar um campo pelo nome — modelos de
+  raciocínio recusam `temperature`; servidores simples, `json_schema` —, o
+  campo sai e o pedido segue.
+- **Anthropic** (`anthropic.ts`) — o formato é cumprido por uma ferramenta
+  obrigatória, cujos argumentos seguem o esquema pedido.
+- **Google** (`google.ts`) — a chave passou da URL (`?key=`) para o cabeçalho
+  `x-goog-api-key`: endereço aparece em log, cabeçalho não (regra 3).
+
+**O formato da resposta passou a ser por chamada** (`FormatoDaResposta` em
+`packages/core/src/llm.ts`). Construindo isto apareceu um defeito antigo: o
+adaptador do Google forçava o esquema da NOTA em toda chamada, inclusive nos
+documentos de objetivo, que têm outro formato — e todo documento de objetivo
+(receita, pedido de exames) saía com zero itens, com cara de "a consulta não
+sustentou nada". Os dois únicos que existiam no banco de desenvolvimento
+estavam vazios.
+
+**Medido de ponta a ponta**, pelo site local, com a chave própria do Google
+da conta de teste: a nota saiu com 3 seções, 8 afirmações e nenhum problema de
+citação; o resumo para o paciente, com 3 itens. OpenAI e Anthropic estão
+cobertos por testes do formato exato de pedido e resposta, sem chamada de
+verdade — não havia chave desses fornecedores para medir.
+
+**Uma condição de implantação:** a `SEGREDO_MESTRE` do site e a da estação de
+processamento precisam ser a mesma. O site cifra com a dele, a estação abre
+com a dela; diferentes, a chave não abre, e a sessão diz isso com todas as
+letras — nada é enviado a fornecedor nenhum.
+

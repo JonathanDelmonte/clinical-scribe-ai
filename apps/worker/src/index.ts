@@ -22,10 +22,11 @@ import { makeNoteHandler } from "./handlers/note.js";
 import { makeDeleteAudioHandler, sweepRetention } from "./handlers/retention.js";
 import { makeObjectiveHandler } from "./handlers/objective.js";
 import { makeTranscribeHandler } from "./handlers/transcribe.js";
-import { resolveLlm } from "./llm/index.js";
+import { criarEscolhaDeLlm, lerChaveDoBanco, resolveLlm } from "./llm/index.js";
 import {
   claimJob,
   completeJob,
+  ErroDefinitivo,
   failJob,
   LEASE_RENEW_MS,
   reapAbandoned,
@@ -42,28 +43,30 @@ const storage = createStorageFromEnv({
 type JobHandler = (job: ClaimedJob) => Promise<void>;
 
 /**
- * O LLM é resolvido UMA vez, aqui, e não dentro do handler.
+ * O modelo DA INSTALAÇÃO é resolvido uma vez, aqui: chave ausente ou política
+ * incompatível são erros de configuração, e descobri-los na partida põe a
+ * mensagem na primeira tela de quem rodou `pnpm dev`.
  *
- * Chave ausente ou política de dados incompatível são erros de configuração:
- * eles não mudam entre um job e outro. Descobri-los na partida coloca a
- * mensagem na primeira tela de quem rodou `pnpm dev`; descobri-los no job
- * coloca a mesma mensagem num log, depois de alguém ter esperado.
+ * Mas quem gera cada documento é decidido POR SESSÃO (`criarEscolhaDeLlm`): o
+ * profissional que cadastrou a própria chave usa a dele (ADR-0003), e só quem
+ * não cadastrou cai no modelo da instalação.
  */
 const llm = resolveLlm();
+const escolherLlm = criarEscolhaDeLlm({
+  lerChave: lerChaveDoBanco(db),
+  instalacao: llm,
+  aceita: config.LLM_DATA_POLICY,
+});
 
 const handlers: Record<string, JobHandler> = {
   transcribe: makeTranscribeHandler(db, storage, logger),
 
-  // O handler da nota só é registrado se houver um LLM utilizável. Registrá-lo
-  // sempre e falhar dentro dele consumiria as 3 tentativas da fila contra um
-  // problema que nenhuma tentativa resolve — e o job acabaria como "falhou em
-  // definitivo", que soa como defeito quando é só configuração faltando.
-  ...(llm.provider !== null && llm.blockedReason === null
-    ? {
-        generate_note: makeNoteHandler(db, llm.provider, logger),
-        generate_objective: makeObjectiveHandler(db, llm.provider, logger),
-      }
-    : {}),
+  // Registrados sempre, mesmo sem modelo na instalação: o profissional pode
+  // ter a própria chave. Sem modelo nenhum, o handler encerra o job na hora
+  // com o motivo (`ErroDefinitivo`), sem gastar tentativas da fila num
+  // problema que nenhuma tentativa resolve.
+  generate_note: makeNoteHandler(db, escolherLlm, logger),
+  generate_objective: makeObjectiveHandler(db, escolherLlm, logger),
 
   // Retenção mínima: apaga o áudio após AUDIO_RETENTION_DAYS.
   // Quem enfileira é `sweepRetention`, no laço abaixo.
@@ -78,7 +81,7 @@ const handlers: Record<string, JobHandler> = {
 if (llm.blockedReason !== null) {
   logger.warn(
     { llmProvider: llm.provider?.name ?? null },
-    `GERAÇÃO DE NOTA INDISPONÍVEL
+    `SEM MODELO DE IA NA INSTALAÇÃO — só quem cadastrou a própria chave terá nota
 
 ${llm.blockedReason}
 `,
@@ -130,7 +133,12 @@ async function processOne(): Promise<boolean> {
     log.info({ durationMs: Date.now() - startedAt }, "job concluído");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const { exhausted, retryInSeconds } = await failJob(db, job, message);
+    const { exhausted, retryInSeconds } = await failJob(
+      db,
+      job,
+      message,
+      error instanceof ErroDefinitivo,
+    );
     log.error(
       { exhausted, retryInSeconds, durationMs: Date.now() - startedAt },
       exhausted ? "job falhou em definitivo" : "job falhou, reagendado",

@@ -15,10 +15,10 @@
 
 import {
   buildNotePrompt,
+  FORMATO_DA_NOTA,
   parseNoteResponse,
   PROMPT_VERSION,
   validateNote,
-  type LlmProvider,
   type TranscriptSegment,
 } from "@scribe/core";
 import {
@@ -31,14 +31,17 @@ import {
 import { asc, eq } from "drizzle-orm";
 import type { Logger } from "pino";
 
-import type { ClaimedJob } from "../queue.js";
+import type { EscolherLlm } from "../llm/index.js";
+import { ErroDefinitivo, type ClaimedJob } from "../queue.js";
 
-export function makeNoteHandler(db: Database, llm: LlmProvider, logger: Logger) {
+export function makeNoteHandler(
+  db: Database,
+  escolherLlm: EscolherLlm,
+  logger: Logger,
+) {
   return async function handleGenerateNote(job: ClaimedJob): Promise<void> {
     const { sessionId } = job;
     if (sessionId === null) throw new Error("job de nota sem sessionId");
-
-    const log = logger.child({ sessionId, jobId: job.id, model: llm.model });
 
     const [session] = await db
       .select()
@@ -47,6 +50,25 @@ export function makeNoteHandler(db: Database, llm: LlmProvider, logger: Logger) 
       .limit(1);
 
     if (session === undefined) throw new Error(`sessão ${sessionId} não encontrada`);
+
+    // O modelo é o do profissional, quando ele cadastrou uma chave — ver
+    // `escolha.ts`. Sem modelo utilizável, não há tentativa que resolva: o
+    // motivo vai para a tela da sessão, e o job termina aqui.
+    const escolha = await escolherLlm(session.professionalId);
+    if (!escolha.ok) {
+      await db
+        .update(sessions)
+        .set({ status: "ready_for_review", failureReason: escolha.motivo })
+        .where(eq(sessions.id, sessionId));
+      throw new ErroDefinitivo(escolha.motivo);
+    }
+    const llm = escolha.provider;
+    const log = logger.child({
+      sessionId,
+      jobId: job.id,
+      model: llm.model,
+      chavePropria: escolha.daChaveDoProfissional,
+    });
 
     const linhas = await db
       .select()
@@ -87,7 +109,7 @@ export function makeNoteHandler(db: Database, llm: LlmProvider, logger: Logger) 
     try {
       const prompt = buildNotePrompt(segments, session.objectiveText);
       const inicio = Date.now();
-      const resposta = await llm.complete(prompt);
+      const resposta = await llm.complete(prompt, FORMATO_DA_NOTA);
 
       const parsed = parseNoteResponse(resposta.text);
       const validacao = validateNote(parsed, segments);

@@ -93,6 +93,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@scribe/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@scribe/core':
         specifier: workspace:*
         version: link:../../packages/core

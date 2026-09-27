@@ -73,6 +73,7 @@ export {
   allStatements,
   buildNotePrompt,
   checkApproval,
+  FORMATO_DA_NOTA,
   parseNoteResponse,
   PROMPT_VERSION,
   NOTE_RESPONSE_SCHEMA,
@@ -81,13 +82,21 @@ export {
   validateNote,
 } from "./note";
 
-export type { LlmCompletion, LlmDataPolicy, LlmProvider, LlmUsage } from "./llm";
+export type {
+  FormatoDaResposta,
+  LlmCompletion,
+  LlmDataPolicy,
+  LlmProvider,
+  LlmUsage,
+} from "./llm";
 export { checkDataPolicy, dataPolicyLabel } from "./llm";
 
 export type { ObjectiveItem, ObjectiveSpec, ParsedObjective } from "./objective";
 export {
   buildObjectivePrompt,
   countGaps,
+  FORMATO_DO_OBJETIVO,
+  OBJECTIVE_RESPONSE_SCHEMA,
   objetivoPorSlug,
   OBJETIVOS_GLOBAIS,
   parseObjectiveResponse,

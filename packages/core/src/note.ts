@@ -17,6 +17,7 @@
  */
 
 import { validateCitations, type CitationIssue } from "./citations";
+import type { FormatoDaResposta } from "./llm";
 import type { CitedStatement, TranscriptSegment } from "./domain";
 import { formatSegmentsForPrompt } from "./citations";
 
@@ -299,6 +300,11 @@ export const NOTE_RESPONSE_SCHEMA = {
   },
   required: ["secoes"],
 } as const;
+
+export const FORMATO_DA_NOTA: FormatoDaResposta = {
+  nome: "nota_clinica",
+  esquema: NOTE_RESPONSE_SCHEMA,
+};
 
 /**
  * Uma afirmação depois de passar pelas mãos do profissional.

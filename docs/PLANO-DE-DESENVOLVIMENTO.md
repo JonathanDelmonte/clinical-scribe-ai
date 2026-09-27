@@ -40,9 +40,9 @@ Se o spike falhar, você perdeu duas semanas — não dois meses.
 
 ### Depois do Marco 6 — o que entrou até 27/09
 
-- **Correção da transcrição** — o item 1 da fila abaixo. A **chave de IA do
-  próprio profissional** (item 2) está pela metade: a tela guarda a chave
-  cifrada, mas o worker ainda gera a nota com a chave da instalação.
+- **Correção da transcrição** e **chave de IA do próprio profissional** — os
+  itens 1 e 2 da fila abaixo. A chave própria fechou em 27/09, e com ela o
+  defeito que deixava todo documento de objetivo vazio (ver ADR-0003).
 - **Dois microfones**: diarização por canal, com o segundo celular mandando só
   a energia da voz, não o áudio. Ver ADR-0002.
 - **Conversor universal**: o navegador prepara o que lê; o ffmpeg do motor
@@ -66,8 +66,7 @@ ordem:
    caminhos. O modelo é fechado no Hugging Face: a conta do token precisa
    aceitar os termos antes.
 2. **"Gravar agora" na tela inicial**, escolhendo o paciente depois.
-3. **A chave de IA própria no worker** — a tela e a cifra já existem; falta a
-   nota usar a chave do profissional quando ele tiver uma.
+3. ~~**A chave de IA própria no worker**~~ — ✅ feito em 27/09. Ver ADR-0003.
 4. **"Onde processar"**: no meu computador (o padrão) ou na nuvem (Modal).
 5. **O ajudante**: instalador para Windows, sem Docker, com o mesmo motor.
    Fica parado enquanto o motor do Docker responde no mesmo computador, e
@@ -94,7 +93,7 @@ paciente real, não os testes.
    o que o Whisper ouviu errado, salvar. O texto original nunca é apagado: o
    par (errado → certo) é dado rotulado, gerado pelo uso, que nenhum
    concorrente tem sem ter usuários antes. Exige migration.
-2. ◐ **Metade feita** (tela e cifra; o worker ainda não usa). **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
+2. ✅ **Feito.** **Chave de IA do próprio profissional** — ver [ADR-0003](./adr/0003-chave-de-ia-do-usuario.md).
 3. ~~**Vocabulário do domínio no Whisper**~~ — **medido e descartado como
    prompt.** Previsto como "a melhoria mais barata que existe"; na consulta real
    corrigiu um erro e, em troca, apagou frases verdadeiras, inventou um remédio

@@ -162,8 +162,19 @@ export async function completeJob(db: Database, jobId: string): Promise<void> {
 }
 
 /**
+ * Uma falha que nenhuma nova tentativa resolve — configuração, não acaso.
+ *
+ * Lançada por um handler, encerra o job na hora, com a mensagem como motivo.
+ * Tentar de novo só adiaria o mesmo erro e daria a impressão de defeito
+ * intermitente, quando o que falta é alguém mudar uma configuração.
+ */
+export class ErroDefinitivo extends Error {
+  override readonly name = "ErroDefinitivo";
+}
+
+/**
  * Devolve o job à fila com backoff exponencial, ou o marca como falho quando
- * as tentativas acabam.
+ * as tentativas acabam — ou na hora, com `definitivo`.
  *
  * O backoff importa mais do que parece: a causa mais comum de falha aqui é
  * rate limit do fornecedor de ASR. Sem espera crescente, o retry vira uma
@@ -173,8 +184,9 @@ export async function failJob(
   db: Database,
   job: ClaimedJob,
   error: string,
+  definitivo = false,
 ): Promise<{ exhausted: boolean; retryInSeconds: number }> {
-  const exhausted = job.attempts >= job.maxAttempts;
+  const exhausted = definitivo || job.attempts >= job.maxAttempts;
   const retryInSeconds = Math.min(2 ** job.attempts * 5, 300);
 
   await db.execute(sql`

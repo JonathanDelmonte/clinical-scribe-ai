@@ -24,6 +24,7 @@
 
 import { formatSegmentsForPrompt, validateCitations } from "./citations";
 import type { CitedStatement, DocumentType, TranscriptSegment } from "./domain";
+import type { FormatoDaResposta } from "./llm";
 import type { NoteValidation } from "./note";
 
 export const PROMPT_VERSION_OBJETIVO = "objetivo-v1";
@@ -141,6 +142,32 @@ JSON puro, sem texto em volta, sem blocos de código:
   ]
 }`;
 }
+
+/** O formato do prompt acima, como esquema — ver `FormatoDaResposta`. */
+export const OBJECTIVE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    titulo: { type: "string" },
+    itens: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          texto: { type: "string" },
+          fontes: { type: "array", items: { type: "string" } },
+          lacunas: { type: "array", items: { type: "string" } },
+        },
+        required: ["texto", "fontes", "lacunas"],
+      },
+    },
+  },
+  required: ["titulo", "itens"],
+} as const;
+
+export const FORMATO_DO_OBJETIVO: FormatoDaResposta = {
+  nome: "documento_do_objetivo",
+  esquema: OBJECTIVE_RESPONSE_SCHEMA,
+};
 
 export interface ObjectiveItem extends CitedStatement {
   /** O que o profissional precisa completar. Vazio = nada falta. */

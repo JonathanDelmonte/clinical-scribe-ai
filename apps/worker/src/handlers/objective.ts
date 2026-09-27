@@ -10,11 +10,11 @@
 import {
   buildObjectivePrompt,
   countGaps,
+  FORMATO_DO_OBJETIVO,
   objetivoPorSlug,
   parseObjectiveResponse,
   PROMPT_VERSION_OBJETIVO,
   validateObjective,
-  type LlmProvider,
   type TranscriptSegment,
 } from "@scribe/core";
 import {
@@ -27,9 +27,14 @@ import {
 import { asc, eq } from "drizzle-orm";
 import type { Logger } from "pino";
 
-import type { ClaimedJob } from "../queue.js";
+import type { EscolherLlm } from "../llm/index.js";
+import { ErroDefinitivo, type ClaimedJob } from "../queue.js";
 
-export function makeObjectiveHandler(db: Database, llm: LlmProvider, logger: Logger) {
+export function makeObjectiveHandler(
+  db: Database,
+  escolherLlm: EscolherLlm,
+  logger: Logger,
+) {
   return async function handleGenerateObjective(job: ClaimedJob): Promise<void> {
     const { sessionId } = job;
     if (sessionId === null) throw new Error("job de objetivo sem sessionId");
@@ -53,6 +58,12 @@ export function makeObjectiveHandler(db: Database, llm: LlmProvider, logger: Log
       .limit(1);
 
     if (session === undefined) throw new Error(`sessão ${sessionId} não encontrada`);
+
+    // O mesmo modelo que a nota usaria — ver `escolha.ts`. Sem modelo
+    // utilizável, o motivo fica no job, e a tela o mostra.
+    const escolha = await escolherLlm(session.professionalId);
+    if (!escolha.ok) throw new ErroDefinitivo(escolha.motivo);
+    const llm = escolha.provider;
 
     const linhas = await db
       .select()
@@ -85,7 +96,12 @@ export function makeObjectiveHandler(db: Database, llm: LlmProvider, logger: Log
       );
     }
 
-    const resposta = await llm.complete(buildObjectivePrompt(segments, objetivo));
+    // O formato DO OBJETIVO, e não o da nota: com o da nota imposto pelo
+    // fornecedor, o documento saía sempre vazio.
+    const resposta = await llm.complete(
+      buildObjectivePrompt(segments, objetivo),
+      FORMATO_DO_OBJETIVO,
+    );
     const parsed = parseObjectiveResponse(resposta.text);
     const validacao = validateObjective(parsed, segments);
     const lacunas = countGaps(parsed);
