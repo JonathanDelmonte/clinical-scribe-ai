@@ -145,6 +145,28 @@ COMPUTE_TYPE = os.getenv(
     "WHISPER_COMPUTE_TYPE", "float16" if DEVICE == "cuda" else "int8"
 )
 
+# Toda gravação que chega ao motor passa um instante pelo disco — o ffmpeg lê
+# arquivo, não memória. Os temporários vão para uma pasta SÓ do motor, e ela é
+# esvaziada a cada partida: nessa hora não há trabalho em andamento, então o
+# que estiver lá é sobra de uma execução interrompida — o Docker desligado no
+# meio de uma consulta. O `finally` de cada rota cobre erro, não processo
+# derrubado; sem isto, áudio de paciente ficaria no disco do contêiner para
+# sempre, fora de qualquer regra de retenção.
+PASTA_TEMPORARIA = os.getenv("PASTA_TEMPORARIA", "/tmp/motor")
+
+
+def _preparar_pasta_temporaria() -> int:
+    """Esvazia e recria a pasta. Devolve quantas sobras havia."""
+    sobras = len(os.listdir(PASTA_TEMPORARIA)) if os.path.isdir(PASTA_TEMPORARIA) else 0
+    shutil.rmtree(PASTA_TEMPORARIA, ignore_errors=True)
+    os.makedirs(PASTA_TEMPORARIA, mode=0o700, exist_ok=True)
+    return sobras
+
+
+_sobras = _preparar_pasta_temporaria()
+if _sobras:
+    log.warning("%d temporário(s) de uma execução interrompida apagado(s)", _sobras)
+
 app = FastAPI(title="asr-local", version="0.3.0")
 
 _whisper: WhisperModel | None = None
@@ -569,7 +591,7 @@ async def create_voice_embedding(file: UploadFile = File(...)) -> dict[str, Any]
     if file.filename is None:
         raise HTTPException(status_code=400, detail="arquivo sem nome")
     suffix = os.path.splitext(file.filename)[1] or ".wav"
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, dir=PASTA_TEMPORARIA) as tmp:
         tmp.write(await file.read())
         path = tmp.name
     try:
@@ -639,7 +661,7 @@ async def diarize_channels(
             mapa = [r for r in bruto if isinstance(r, dict) and "startMs" in r and "endMs" in r]
 
     sufixo = os.path.splitext(principal.filename or "")[1] or ".wav"
-    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False, dir=PASTA_TEMPORARIA) as tmp:
         tmp.write(await principal.read())
         caminho = tmp.name
 
@@ -704,7 +726,7 @@ def _decodificar_ou_415(caminho: str) -> np.ndarray:
 async def _guardar_temporario(arquivo: UploadFile) -> str:
     """O upload em disco, copiado em blocos — um arquivo de 200 MB não passa pela memória."""
     sufixo = os.path.splitext(arquivo.filename or "")[1] or ".bin"
-    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False, dir=PASTA_TEMPORARIA) as tmp:
         await asyncio.to_thread(shutil.copyfileobj, arquivo.file, tmp, 1024 * 1024)
         return tmp.name
 
@@ -765,7 +787,7 @@ def _m4a_aac(audio: np.ndarray, bitrate: int = BITRATE_M4A) -> bytes:
     pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
     # Em disco, e não em memória: o `faststart` relê o arquivo PELO NOME para
     # mover o índice para o começo, e um BytesIO não tem nome.
-    with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False, dir=PASTA_TEMPORARIA) as tmp:
         destino = tmp.name
     try:
         _gravar_m4a(pcm, destino, bitrate)
@@ -913,7 +935,7 @@ async def transcribe(
     suffix = os.path.splitext(file.filename)[1] or ".wav"
     set_progress(job, phase="decoding", phase_label="preparando o áudio", percent=1)
 
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, dir=PASTA_TEMPORARIA) as tmp:
         tmp.write(await file.read())
         path = tmp.name
 
