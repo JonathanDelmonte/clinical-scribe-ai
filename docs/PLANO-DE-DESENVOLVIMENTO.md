@@ -59,18 +59,19 @@ Nenhuma tela foi desenhada até aqui, de propósito: o design vem depois de as
 funcionalidades estarem fechadas, para desenhar cada tela uma vez só. Em
 ordem:
 
-1. **Testar um modelo mais novo de separação de vozes** — o
-   `pyannote/speaker-diarization-community-1`, gratuito (CC-BY-4.0), medido
-   contra o 3.1 atual, com controle, na conversa de gabarito e na consulta
-   real. Ataca o item de "O que ainda não funciona bem", abaixo, para todos os
-   caminhos. O modelo é fechado no Hugging Face: a conta do token precisa
-   aceitar os termos antes.
-2. **"Gravar agora" na tela inicial**, escolhendo o paciente depois.
-3. ~~**A chave de IA própria no worker**~~ — ✅ feito em 27/09. Ver ADR-0003.
-4. **"Onde processar"**: no meu computador (o padrão) ou na nuvem (Modal).
-5. **O ajudante**: instalador para Windows, sem Docker, com o mesmo motor.
-   Fica parado enquanto o motor do Docker responde no mesmo computador, e
-   assume quando ele para — dois motores disputariam a mesma placa de vídeo.
+1. ~~**Testar um modelo mais novo de separação de vozes**~~ — ✅ medido em
+   28/09 e **não adotado**: o community-1 empata com o 3.1. A medição achou o
+   que errava de verdade — a nossa suavização de falantes —, e a correção
+   levou o acerto por palavra de 71% para 98,9% no gabarito. Ver ADR-0002.
+2. ~~**A chave de IA própria no worker**~~ — ✅ feito em 27/09. Ver ADR-0003.
+3. **O ajudante**: instalador para Windows, sem Docker, com o mesmo motor —
+   é ele que faz o computador de cada pessoa processar as consultas dela; a
+   nuvem não entra no caminho. Fica parado enquanto o motor do Docker responde
+   no mesmo computador, e assume quando ele para — dois motores disputariam a
+   mesma placa de vídeo.
+
+"Gravar agora" e "processar na nuvem" saíram da lista: o fluxo atual
+(paciente → gravar) atende, e o processamento é sempre num computador.
 
 **Quebrar o trecho onde o falante troca já existe** no caminho comum: o motor
 reconstrói os trechos palavra por palavra e corta nos turnos do pyannote
@@ -139,9 +140,13 @@ Método A ajuda; ele não sustenta o peso sozinho.
 **Atribuição fala a fala em áudio ruim.** O pyannote acerta *quantos* falantes
 existem e erra *onde* cada um começa: na consulta real medida, 49 de 147 turnos
 ficaram abaixo de 0,7 s. O papel no nível do falante está certo; algumas falas
-individuais aparecem atribuídas à pessoa errada. Nem pós-processamento por
-conteúdo nem a camada de voz resolvem nessa qualidade de áudio — é o item aberto
-mais relevante do motor.
+individuais aparecem atribuídas à pessoa errada.
+
+**Atualizado em 28/09:** boa parte desses erros era nossa, e não do pyannote —
+uma regra de suavização que, em cascata, entregava a fala inteira de uma
+pessoa à outra. Corrigida, o acerto por palavra foi de 71% para 98,9% no
+gabarito (ADR-0002). O que sobra são os erros do próprio pyannote no meio da
+frase, que um modelo mais novo também não resolveu.
 
 ---
 

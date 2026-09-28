@@ -645,3 +645,64 @@ pedaços, a mesma gravação dos dois lados: a rota respondeu na hora, o worker
 juntou, o motor mediu e alinhou (deslocamento 0, qualidade 0,993) e recusou
 trocar os falantes (0,4 dB de separação, mínimo 5), como devia; pedaços e
 manifesto apagados, só a medida ficou.
+
+## Suavização de falantes — medida e corrigida (e o community-1, medido e não adotado)
+
+A pergunta era outra: o `pyannote/speaker-diarization-community-1`
+(pyannote.audio 4, CC-BY-4.0), mais novo que o 3.1 em uso, atribui melhor quem
+falou? A resposta foi "não" — e a medição encontrou o que de fato errava.
+
+### Como
+
+- **Duas conversas com gabarito**, montadas com fala de verdade de gravações
+  de uma pessoa só (as de `teste_canais.py`): uma **limpa** (turnos de 1,5 a
+  5 s, com pausa) e uma **difícil** (trocas rápidas, 21 interrupções curtas de
+  menos de 1 s, sobreposição de até 300 ms). E a **consulta real** de 11
+  minutos, sem gabarito: estrutura e concordância entre os modelos.
+- As **mesmas palavras** do Whisper para os dois modelos; o casamento de cada
+  palavra com um falante e os trechos, pelo **código de produção**
+  (`speaker_of`, `smooth_speakers`, `build_segments`) — o que o produto
+  mostraria, e não o modelo cru.
+
+### O que apareceu
+
+| acerto por palavra | limpa | difícil |
+|---|---|---|
+| 3.1, sem suavização | 99,6% | 95,0% |
+| community-1, sem suavização | 99,6% | 95,0% |
+| turnos **do próprio gabarito** + a suavização de então | 70,3% | 75,0% |
+| 3.1 + a suavização de então (produção) | 71,1% | 75,0% |
+| 3.1 + só a regra do bloco curto | **98,9%** | **93,3%** |
+
+Os dois modelos empatam. O que derrubava o acerto era a **nossa suavização**:
+a regra "troca sem pausa entre palavras não é troca". O Whisper quase nunca
+marca pausa entre a última palavra de uma pessoa e a primeira da outra, então
+a regra via "troca impossível" nas trocas de verdade — em cascata, porque cada
+palavra corrigida vira a referência da seguinte, e a fala inteira da segunda
+pessoa ia para a primeira. Na consulta real, ela mudava o falante de 294 das
+1.859 palavras em relação ao pyannote; nos trechos em que as duas versões
+discordavam, dava ao médico 41 palavras seguidas da paciente descrevendo a
+dor, e noutra passagem mais 37.
+
+### Decisão
+
+- **A regra da troca sem pausa saiu; a do bloco curto ficou** (meia palavra
+  do outro entre falas da mesma pessoa é absorvida). Com ela: 98,9% e 93,3%;
+  falas curtas certas de 8 para 12 de 17; trechos com duas pessoas misturadas
+  de 7 para 1 (limpa) e de 16 para 9 (difícil). `teste_suavizacao.py` prende o
+  comportamento.
+- **O community-1 não foi adotado.** Empata no gabarito, na consulta real
+  concorda com o 3.1 em 96,7% das palavras e fragmenta um pouco mais (55 a 66
+  turnos curtos contra 46). Adotá-lo exigiria torch 2.8 na imagem em que o
+  faster-whisper vive, e ele vem com **telemetria ligada por padrão** — manda a
+  duração de cada arquivo processado; `PYANNOTE_METRICS_ENABLED=false`
+  desliga. Em CPU, levou 14 minutos para 11 de áudio, o que pesa para o
+  ajudante em computador fraco.
+
+### O que continua
+
+Os erros do próprio pyannote no meio da frase — na consulta real, "me chamo
+Gabriel, tenho | 50 anos, sou médico…" partido entre os dois — não são coisa
+que suavização resolva. É o item que sobra de "O que ainda não funciona bem",
+no plano.
+

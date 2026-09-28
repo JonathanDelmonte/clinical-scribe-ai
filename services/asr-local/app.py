@@ -20,7 +20,8 @@ import struct
 import tempfile
 import threading
 import time
-from typing import Any, Sequence
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Sequence
 
 import av
 import numpy as np
@@ -101,16 +102,12 @@ SENTENCE_END = re.compile(r"[.!?…]$")
 MIN_TURN_S = float(os.getenv("SEGMENT_MIN_TURN_SECONDS", "0.7"))
 MIN_TURN_WORDS = int(os.getenv("SEGMENT_MIN_TURN_WORDS", "3"))
 
-# Intervalo mínimo entre palavras para que uma troca de falante seja aceita.
-#
-# Ninguém toma o turno da conversa sem que haja uma pausa. Duas palavras
-# coladas — menos de dois décimos de segundo entre elas — são a mesma pessoa
-# continuando a falar, e uma fronteira de falante ali é erro do modelo.
-#
-# Medido no áudio real de consulta: 49 dos 147 turnos do pyannote duram menos
-# de 0,7s, e os erros visíveis caíam no meio de frases sem pausa alguma
-# ("Me" | "chamo Gabriel.", "Vou fazer uma" | "coisa.").
-MIN_SWITCH_GAP_S = float(os.getenv("SEGMENT_MIN_SWITCH_GAP_SECONDS", "0.2"))
+# Houve aqui uma segunda regra — "troca sem pausa entre palavras não é troca" —
+# e ela foi REMOVIDA por medição (ADR-0002, "Suavização de falantes"). O
+# Whisper quase nunca marca pausa entre a última palavra de uma pessoa e a
+# primeira da outra, então a regra via "troca sem pausa" nas trocas de verdade,
+# e em cascata: a fala inteira da outra pessoa ia junto. Com os turnos do
+# PRÓPRIO gabarito, ela derrubava o acerto por palavra de 100% para 70%.
 
 # Peso de cada fase no progresso total. Medido: transcrever 11 min de áudio
 # levou ~57s e separar as vozes ~34s, então a transcrição vale cerca de dois
@@ -153,21 +150,37 @@ COMPUTE_TYPE = os.getenv(
 # derrubado; sem isto, áudio de paciente ficaria no disco do contêiner para
 # sempre, fora de qualquer regra de retenção.
 PASTA_TEMPORARIA = os.getenv("PASTA_TEMPORARIA", "/tmp/motor")
+os.makedirs(PASTA_TEMPORARIA, mode=0o700, exist_ok=True)
 
 
-def _preparar_pasta_temporaria() -> int:
-    """Esvazia e recria a pasta. Devolve quantas sobras havia."""
-    sobras = len(os.listdir(PASTA_TEMPORARIA)) if os.path.isdir(PASTA_TEMPORARIA) else 0
-    shutil.rmtree(PASTA_TEMPORARIA, ignore_errors=True)
-    os.makedirs(PASTA_TEMPORARIA, mode=0o700, exist_ok=True)
+def _esvaziar_pasta_temporaria() -> int:
+    """Apaga o que está na pasta. Devolve quantas sobras havia."""
+    sobras = 0
+    for nome in os.listdir(PASTA_TEMPORARIA):
+        caminho = os.path.join(PASTA_TEMPORARIA, nome)
+        try:
+            if os.path.isdir(caminho):
+                shutil.rmtree(caminho)
+            else:
+                os.remove(caminho)
+            sobras += 1
+        except OSError as exc:
+            log.error("temporário não apagado na partida: %s", exc)
     return sobras
 
 
-_sobras = _preparar_pasta_temporaria()
-if _sobras:
-    log.warning("%d temporário(s) de uma execução interrompida apagado(s)", _sobras)
+@asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
+    # Na partida do SERVIDOR, e não na importação do módulo: um script de teste
+    # que importe este arquivo dentro do contêiner em uso apagaria o upload de
+    # uma consulta que está sendo transcrita agora.
+    sobras = await asyncio.to_thread(_esvaziar_pasta_temporaria)
+    if sobras:
+        log.warning("%d temporário(s) de uma execução interrompida apagado(s)", sobras)
+    yield
 
-app = FastAPI(title="asr-local", version="0.3.0")
+
+app = FastAPI(title="asr-local", version="0.3.0", lifespan=_ciclo_de_vida)
 
 _whisper: WhisperModel | None = None
 _batched: Any | None = None
@@ -385,28 +398,20 @@ def smooth_speakers(words: Sequence[Any], speakers: list[str]) -> list[str]:
     """
     Corrige trocas de falante que não podem ser reais.
 
-    Duas passadas, em ordem:
+    Uma regra só: TURNO CURTO DEMAIS — sequência de poucas palavras e pouco
+    tempo cercada pelo MESMO outro falante dos dois lados. A exigência de que
+    os dois lados coincidam evita estragar uma troca legítima: A→B→C não é
+    suavizado, só A→B→A.
 
-    1. TROCA SEM PAUSA — palavras coladas são a mesma pessoa. Esta é a regra
-       forte: uma fronteira de falante no meio de uma frase corrida é sempre
-       erro do modelo, porque a fala humana não funciona assim.
-
-    2. TURNO CURTO DEMAIS — sequência de poucas palavras e pouco tempo cercada
-       pelo MESMO outro falante dos dois lados. A exigência de que os dois lados
-       coincidam evita estragar uma troca legítima: A→B→C não é suavizado, só
-       A→B→A.
+    Medido contra gabarito (ADR-0002, "Suavização de falantes"): acerto por
+    palavra de 98,9% numa conversa limpa e 93,3% numa com interrupções curtas —
+    contra 71% e 75% com a regra de "troca sem pausa" que existia antes, e
+    99,6% e 95% sem suavização nenhuma. O pouco que ela custa no gabarito, ela
+    devolve na consulta real, onde o pyannote solta blocos de meia palavra.
     """
     if not words:
         return speakers
 
-    # ---- passada 1: nenhuma troca sem pausa --------------------------------
-    speakers = list(speakers)
-    for i in range(1, len(words)):
-        intervalo = words[i].start - words[i - 1].end
-        if speakers[i] != speakers[i - 1] and intervalo < MIN_SWITCH_GAP_S:
-            speakers[i] = speakers[i - 1]
-
-    # ---- passada 2: blocos curtos demais ----------------------------------
     # Agrupa em blocos de mesmo falante: (inicio, fim_exclusivo, falante)
     blocos: list[list[Any]] = []
     for i, spk in enumerate(speakers):
