@@ -58,20 +58,17 @@ export function ExcluirConta({ consultas }: { consultas: number }) {
 
   if (!aberto) {
     return (
-      <button
-        onClick={() => setAberto(true)}
-        className="text-sm text-muted underline underline-offset-2 hover:text-red-500"
-      >
-        excluir minha conta
+      <button onClick={() => setAberto(true)} className="botao-texto perigo">
+        Excluir minha conta
       </button>
     );
   }
 
   return (
-    <div className="rounded-lg border border-red-500/40 px-5 py-4">
-      <h3 className="font-medium text-red-500">Excluir a conta</h3>
+    <div className="vidro flex flex-col gap-4 rounded-[26px] border-erro/30 px-6 py-6">
+      <h3 className="titulo-secao text-erro">Excluir a conta</h3>
 
-      <p className="mt-3 text-sm">
+      <p className="text-[15px] leading-relaxed">
         Apaga a sua conta,{" "}
         {consultas === 0 ? "" : `as ${consultas} consultas gravadas, `}
         os pacientes, as transcrições, as notas e os áudios. Imediatamente e sem
@@ -83,24 +80,23 @@ export function ExcluirConta({ consultas }: { consultas: number }) {
        * do prontuário, e é bem provável que a pessoa não tenha isso em mente ao
        * clicar — dizer antes é mais útil que qualquer confirmação a mais.
        */}
-      <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-        <strong>Antes de continuar:</strong> a documentação clínica que você produziu
-        aqui pode estar sujeita a prazo de guarda (Resolução CFM 1.821/2007). Baixe seus
-        dados e arquive o que precisar — depois desta ação não há como recuperar.
+      <p className="alerta alerta-aviso">
+        <strong className="font-semibold">Antes de continuar:</strong> a documentação
+        clínica que você produziu aqui pode estar sujeita a prazo de guarda (Resolução
+        CFM 1.821/2007). Baixe seus dados e arquive o que precisar — depois desta ação
+        não há como recuperar.
       </p>
 
-      <p className="mt-3 text-sm text-muted">
+      <p className="legenda text-[13.5px]">
         A trilha de auditoria é preservada — é o registro de que a conta existiu e foi
         apagada. O que identificava você nela (endereço de IP e navegador) é anulado no
         mesmo instante; sobram as ações e seus horários.
       </p>
 
-      <label className="mt-4 block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Digite {PALAVRA} para confirmar
-        </span>
+      <label className="block">
+        <span className="rotulo">Digite {PALAVRA} para confirmar</span>
         <input
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+          className="campo font-mono tracking-[0.08em]"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           autoComplete="off"
@@ -109,11 +105,11 @@ export function ExcluirConta({ consultas }: { consultas: number }) {
         />
       </label>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         <button
           onClick={() => void excluir()}
           disabled={texto !== PALAVRA || ocupado}
-          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="botao-perigo botao-pequeno"
         >
           {ocupado ? "Excluindo…" : "Excluir definitivamente"}
         </button>
@@ -123,14 +119,14 @@ export function ExcluirConta({ consultas }: { consultas: number }) {
             setTexto("");
             setErro(null);
           }}
-          className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+          className="botao-texto"
         >
-          cancelar
+          Cancelar
         </button>
       </div>
 
       {erro !== null && (
-        <p role="alert" className="mt-3 text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}

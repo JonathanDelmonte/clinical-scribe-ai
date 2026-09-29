@@ -26,8 +26,15 @@ export interface Assignment {
   evidence?: Evidence[];
 }
 
+/**
+ * Quem fala, do ponto de vista de quem está na tela.
+ *
+ * O profissional é "Você": é ele quem abre a consulta, e ler "Você" ao lado
+ * da própria fala dispensa decifrar um rótulo. É a mesma palavra da legenda da
+ * hélice, e a mesma cor.
+ */
 export const ROLE_LABEL: Record<string, string> = {
-  professional: "Profissional",
+  professional: "Você",
   patient: "Paciente",
   other: "Acompanhante",
   unknown: "Não identificado",
@@ -113,62 +120,74 @@ export function SpeakerRoles({
   }
 
   return (
-    <section className="rounded-lg border border-line px-4 py-3">
+    <section
+      aria-labelledby="titulo-quem-e-quem"
+      className="vidro flex flex-col gap-3 rounded-[26px] px-5 py-5"
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-xs font-medium tracking-widest text-muted uppercase">
+        <h2 id="titulo-quem-e-quem" className="titulo-secao">
           Quem é quem
         </h2>
 
-        {indefinido ? (
-          <span className="text-sm text-amber-500">
-            não foi possível identificar — confira a transcrição
+        {!indefinido && (
+          <span
+            className={`ficha min-h-6 px-2.5 text-[12px] ${baixa ? "ficha-aviso" : "ficha-ok"}`}
+          >
+            {Math.round(confianca * 100)}% de confiança
           </span>
-        ) : (
-          <>
-            <span className="text-sm">
-              {assignment
-                .filter((a) => a.role !== "unknown")
-                .map((a, i) => (
-                  <span key={a.speakerLabel} title={a.speakerLabel}>
-                    {i > 0 && <span className="text-muted"> · </span>}
-                    {nomeDaVoz(a.speakerLabel)} ={" "}
-                    <strong className="font-medium">
-                      {ROLE_LABEL[a.role] ?? a.role}
-                    </strong>
-                  </span>
-                ))}
-            </span>
-            <span
-              className={`rounded px-2 py-0.5 text-xs ${
-                baixa ? "bg-amber-500/15 text-amber-500" : "bg-accent/15 text-accent"
-              }`}
-            >
-              {Math.round(confianca * 100)}% de confiança
-            </span>
-          </>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           {profissional !== undefined && (profissional.evidence?.length ?? 0) > 0 && (
             <button
+              type="button"
               onClick={() => setAberto((v) => !v)}
-              className="text-xs text-muted underline underline-offset-2 hover:text-ink"
+              className="botao-texto text-[13px]"
             >
               {aberto ? "ocultar" : "por quê?"}
             </button>
           )}
           <button
+            type="button"
             onClick={() => void inverter()}
             disabled={busy || indefinido}
-            className="rounded-md border border-line px-3 py-1 text-xs hover:border-accent disabled:opacity-40"
+            className="botao-vidro botao-pequeno"
           >
-            {busy ? "trocando…" : "trocar"}
+            {busy ? "trocando…" : "Trocar"}
           </button>
         </div>
       </div>
 
+      {indefinido ? (
+        <span className="text-[14px] font-medium text-aviso">
+          não foi possível identificar — confira a transcrição
+        </span>
+      ) : (
+        <span className="text-[14.5px]">
+          {assignment
+            .filter((a) => a.role !== "unknown")
+            .map((a, i) => (
+              <span key={a.speakerLabel} title={a.speakerLabel}>
+                {i > 0 && <span className="text-nevoa"> · </span>}
+                {nomeDaVoz(a.speakerLabel)} ={" "}
+                <strong
+                  className={`font-semibold ${
+                    a.role === "professional"
+                      ? "text-viva-texto"
+                      : a.role === "patient"
+                        ? "text-pessego-texto"
+                        : "text-tinta"
+                  }`}
+                >
+                  {ROLE_LABEL[a.role] ?? a.role}
+                </strong>
+              </span>
+            ))}
+        </span>
+      )}
+
       {baixa && !indefinido && (
-        <p className="mt-2 text-xs text-amber-500">
+        <p className="alerta alerta-aviso text-[13px]">
           Confiança baixa. Confira antes de gerar a nota — uma troca invertida
           atribuiria a queixa ao profissional e a conduta ao paciente.
         </p>
@@ -184,19 +203,19 @@ export function SpeakerRoles({
        * não tinha acontecido nada.
        */}
       {trocado && (
-        <p className="mt-2 text-xs text-accent">
+        <p className="alerta alerta-ok text-[13px]">
           Pronto — os papéis foram trocados, e a transcrição inteira foi reetiquetada.
         </p>
       )}
 
       {erro !== null && (
-        <p role="alert" className="mt-2 text-xs text-red-500">
+        <p role="alert" className="alerta alerta-erro text-[13px]">
           {erro}
         </p>
       )}
 
       {aberto && profissional !== undefined && (
-        <div className="mt-3 border-t border-line pt-3">
+        <div className="border-t border-line pt-3">
           {/*
            * "O que a identificação automática encontrou" — e não "por que a
            * atribuição atual está certa".
@@ -207,15 +226,15 @@ export function SpeakerRoles({
            * que ele de fato é — a leitura do classificador —, ele continua
            * verdadeiro com ou sem correção humana por cima.
            */}
-          <p className="mb-2 text-xs text-muted">
+          <p className="legenda mb-2">
             O que a identificação automática encontrou na fala de{" "}
             {nomeDaVoz(profissional.speakerLabel)}:
           </p>
           <ul className="space-y-1.5">
             {(profissional.evidence ?? []).map((e, i) => (
-              <li key={i} className="text-xs">
-                <span className="text-accent">{e.signal}</span>
-                <span className="text-muted"> — “{e.excerpt}”</span>
+              <li key={i} className="text-[13px]">
+                <span className="font-semibold text-viva-texto">{e.signal}</span>
+                <span className="text-grafite"> — “{e.excerpt}”</span>
               </li>
             ))}
           </ul>

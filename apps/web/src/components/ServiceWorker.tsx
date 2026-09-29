@@ -55,7 +55,7 @@ export function ServiceWorker() {
   return (
     <div
       role="status"
-      className="bg-amber-500/15 px-5 py-2 text-center text-xs text-amber-700 dark:text-amber-300"
+      className="alerta alerta-aviso fixed inset-x-0 top-3 z-[60] mx-auto w-fit max-w-[calc(100%-2rem)] rounded-[18px] text-center font-medium shadow-[0_16px_32px_-18px_rgb(15_27_36/0.45)]"
     >
       Sem conexão. Você pode continuar gravando — a consulta fica guardada neste
       aparelho e é enviada quando a rede voltar.

@@ -58,22 +58,21 @@ export function EntrarComoTeste({ destino }: { destino: string }) {
   }
 
   return (
-    <div className="mt-8 rounded-lg border border-dashed border-line px-4 py-3">
-      <p className="mb-2 text-xs tracking-widest text-muted uppercase">
-        Só em desenvolvimento
-      </p>
+    <div className="w-full max-w-[440px] rounded-3xl border border-dashed border-tinta/20 bg-white/40 px-5 py-4">
+      <p className="rotulo">Só em desenvolvimento</p>
       <button
+        type="button"
         onClick={() => void entrar()}
         disabled={enviando}
-        className="w-full rounded-lg border border-line px-4 py-2.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40"
+        className="botao-vidro botao-pequeno w-full"
       >
-        {enviando ? "entrando…" : "Entrar como Ana (teste)"}
+        {enviando ? "Entrando…" : "Entrar como Ana (teste)"}
       </button>
-      <p className="mt-2 text-xs text-muted">
-        {conta.email} · senha <code className="text-ink">{conta.senha}</code>
+      <p className="legenda mt-2">
+        {conta.email} · senha <code className="text-tinta">{conta.senha}</code>
       </p>
       {erro !== null && (
-        <p role="alert" className="mt-2 text-xs text-red-500">
+        <p role="alert" className="alerta alerta-erro mt-2">
           {erro}
         </p>
       )}

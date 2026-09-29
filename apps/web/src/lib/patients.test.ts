@@ -4,8 +4,21 @@ import {
   dataParaExibicao,
   dataParaFormulario,
   idadeEmAnos,
+  normalizarParaBusca,
   padraoDeBusca,
 } from "./patients";
+
+describe("normalizar para busca", () => {
+  it("tira acento e maiúscula", () => {
+    expect(normalizarParaBusca("João Conceição")).toBe("joao conceicao");
+  });
+
+  it("deixa quem digitou sem acento achar quem tem", () => {
+    expect(
+      normalizarParaBusca("Helena Müller").includes(normalizarParaBusca("muller")),
+    ).toBe(true);
+  });
+});
 
 describe("padrão de busca", () => {
   it("envolve o termo em curingas", () => {

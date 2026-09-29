@@ -27,7 +27,7 @@
  * cópia do áudio num lugar diferente, para resolver um problema já resolvido.
  */
 
-const VERSAO = "v1";
+const VERSAO = "v2";
 const CACHE_ESTATICO = `consulta-viva-estatico-${VERSAO}`;
 const PAGINA_OFFLINE = "/offline.html";
 

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { IconeCheck, IconeEscudo, IconeMicrofone } from "./Icones";
+
 /** Abaixo disto a impressão vocal fica instável. */
 const MINIMO_S = 15;
 /** Acima disto não melhora o bastante para justificar a espera. */
@@ -111,21 +113,23 @@ export function VoiceEnrollment({
   const suficiente = segundos >= MINIMO_S;
 
   return (
-    <section className="space-y-4 rounded-lg border border-line px-5 py-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-medium">Sua voz</h2>
+    <section className="vidro flex flex-col gap-4 rounded-[26px] px-6 py-6">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 className="titulo-secao">Sua voz</h2>
         {enrolledAt !== null ? (
-          <span className="rounded bg-accent/15 px-2 py-0.5 text-xs text-accent">
-            cadastrada
+          <span className="ficha ficha-ok">
+            <IconeCheck tamanho={14} />
+            Cadastrada
           </span>
         ) : (
-          <span className="text-xs text-muted">ainda não cadastrada</span>
+          <span className="ficha">Ainda não cadastrada</span>
         )}
       </div>
 
-      <p className="text-sm text-muted">
+      <p className="text-[15px] leading-relaxed text-grafite">
         Grave uma amostra da sua voz e o sistema passa a reconhecer quais falas são suas
-        em cada consulta. É uma camada <strong>a mais</strong> sobre a separação
+        em cada consulta. É uma camada{" "}
+        <strong className="font-semibold text-tinta">a mais</strong> sobre a separação
         automática — ela corrige falas que a separação atribuiu à pessoa errada.
       </p>
 
@@ -137,47 +141,51 @@ export function VoiceEnrollment({
        * salvo: só os 256 números derivados dele, que servem para comparar e
        * não permitem reconstruir a gravação.
        */}
-      <p className="rounded-md bg-accent/5 px-3 py-2 text-xs text-muted">
-        A gravação <strong className="text-ink">não é guardada</strong>. O sistema
-        extrai dela 256 números que representam o timbre da sua voz, e descarta o áudio.
-        Você pode apagar essa impressão quando quiser.
+      <p className="alerta alerta-info flex gap-2.5">
+        <IconeEscudo tamanho={18} className="mt-0.5 shrink-0 text-viva-texto" />
+        <span>
+          A gravação{" "}
+          <strong className="font-semibold text-tinta">não é guardada</strong>. O
+          sistema extrai dela 256 números que representam o timbre da sua voz, e
+          descarta o áudio. Você pode apagar essa impressão quando quiser.
+        </span>
       </p>
 
       {!gravando && enrolledAt === null && (
-        <ol className="space-y-1 text-sm">
-          <li className="mb-1 text-xs tracking-widest text-muted uppercase">
-            leia em voz alta, sem pressa
-          </li>
+        <ol className="flex flex-col gap-1.5 rounded-[20px] border border-white/85 bg-white/50 px-5 py-4 text-[15px]">
+          <li className="rotulo">Leia em voz alta, sem pressa</li>
           {ROTEIRO.map((linha) => (
-            <li key={linha} className="text-muted">
-              · {linha}
+            <li key={linha} className="leading-relaxed text-tinta">
+              {linha}
             </li>
           ))}
         </ol>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         {gravando ? (
           <>
-            <button
-              onClick={parar}
-              disabled={!suficiente}
-              className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white disabled:opacity-40"
-            >
-              <span className="size-2.5 animate-pulse rounded-full bg-white" />
+            <button onClick={parar} disabled={!suficiente} className="botao-principal">
+              <span
+                aria-hidden="true"
+                className="size-2.5 animate-pulse rounded-full bg-gravando-ponto"
+              />
               {suficiente ? "Concluir" : `Fale mais ${MINIMO_S - segundos}s`}
             </button>
-            <span className="font-mono text-sm tabular-nums text-muted">
-              {segundos}s / {SUGERIDO_S}s
+            <span className="text-[15px] font-medium tabular-nums text-grafite">
+              {segundos}s de {SUGERIDO_S}s
             </span>
           </>
         ) : (
           <button
             onClick={() => void iniciar()}
             disabled={status !== null}
-            className="rounded-lg bg-accent px-5 py-2.5 font-medium text-surface disabled:opacity-40"
+            className={enrolledAt === null ? "botao-principal" : "botao-vidro"}
           >
             {enrolledAt === null ? "Gravar minha voz" : "Regravar"}
+            <span className="botao-icone" aria-hidden="true">
+              <IconeMicrofone tamanho={18} />
+            </span>
           </button>
         )}
 
@@ -187,16 +195,21 @@ export function VoiceEnrollment({
               await fetch("/api/voice", { method: "DELETE" });
               router.refresh();
             }}
-            className="text-xs text-muted underline underline-offset-2 hover:text-ink"
+            className="botao-texto"
           >
-            apagar impressão vocal
+            Apagar impressão vocal
           </button>
         )}
       </div>
 
-      {status !== null && <p className="text-sm text-muted">{status}</p>}
+      {status !== null && (
+        <p className="ficha ficha-processando self-start">
+          <span aria-hidden="true" className="ficha__ponto" />
+          {status}
+        </p>
+      )}
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}

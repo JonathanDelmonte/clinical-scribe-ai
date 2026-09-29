@@ -3,8 +3,17 @@
 import { prepareForUpload } from "@scribe/audio-browser";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { Atmosfera } from "./Atmosfera";
+import {
+  IconeAparelho,
+  IconeCheck,
+  IconeEnviarArquivo,
+  IconeMicrofone,
+} from "./Icones";
 import { LiveDraft } from "./LiveDraft";
+import { Orbe, PontoViva } from "./Orbe";
 import {
   ACCEPT_DE_AUDIO,
   EXTENSOES_ACEITAS,
@@ -781,6 +790,15 @@ export function SessionRecorder({
 
   const busy = status !== null;
   const ready = consent && !busy;
+  /**
+   * O modo foco: a tela inteira durante a gravação e o envio.
+   *
+   * Enquanto a consulta acontece, o resto do aplicativo sai de cena. Não é
+   * estética: um celular na mesa, com a lista de pacientes e dez botões à
+   * vista, é um convite a um toque errado no meio da consulta — e a gravação
+   * que se perde aconteceu uma vez só.
+   */
+  const emFoco = recording || busy;
 
   return (
     <div className="space-y-5">
@@ -790,8 +808,8 @@ export function SessionRecorder({
        * descobrir isso no fim da página seria descobrir tarde.
        */}
       {pendentes.length > 0 && !recording && (
-        <div className="rounded-lg border border-accent bg-accent/5 px-4 py-3">
-          <p className="text-sm font-medium">
+        <div className="alerta alerta-aviso">
+          <p className="font-semibold">
             {pendentes.length === 1
               ? "Há uma gravação neste aparelho que não chegou a ser enviada."
               : `Há ${pendentes.length} gravações neste aparelho que não chegaram a ser enviadas.`}
@@ -807,16 +825,18 @@ export function SessionRecorder({
                   })}
                 </span>
                 <button
+                  type="button"
                   onClick={() => void reenviarPendente(g)}
                   disabled={busy}
-                  className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-surface disabled:opacity-40"
+                  className="botao-principal botao-pequeno"
                 >
                   Enviar agora
                 </button>
                 <button
+                  type="button"
                   onClick={() => void apagarPendente(g)}
                   disabled={busy}
-                  className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+                  className="botao-texto"
                 >
                   descartar
                 </button>
@@ -826,18 +846,18 @@ export function SessionRecorder({
         </div>
       )}
 
-      <div className="rounded-lg border border-line px-4 py-3">
-        <label className="flex items-start gap-3">
+      <div className="rounded-[20px] border border-white/85 bg-white/55 px-4 py-4">
+        <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
-            className="mt-1"
+            className="caixa mt-0.5"
             checked={consent}
             onChange={(e) => setConsent(e.target.checked)}
             disabled={busy || recording}
           />
-          <span className="text-sm">
+          <span className="text-[15px] font-medium">
             O paciente foi informado de que a consulta será gravada.
-            <span className="mt-1 block text-xs text-muted">
+            <span className="legenda mt-1 block font-normal">
               A base legal do tratamento é a tutela da saúde (LGPD Art. 11, II,
               &ldquo;f&rdquo;), mas a transparência é obrigatória: o paciente precisa
               estar ciente.
@@ -852,13 +872,11 @@ export function SessionRecorder({
          * disse ter feito.
          */}
         {consent && (
-          <div className="mt-3 border-t border-line pt-3">
+          <div className="mt-4 border-t border-line pt-4">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-                Como foi informado
-              </span>
+              <span className="rotulo">Como foi informado</span>
               <select
-                className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+                className="campo"
                 value={consentMethod}
                 onChange={(e) => setConsentMethod(e.target.value as ConsentMethod)}
                 disabled={busy || recording}
@@ -870,7 +888,7 @@ export function SessionRecorder({
                 ))}
               </select>
             </label>
-            <p className="mt-2 text-xs text-muted">
+            <p className="legenda mt-2">
               Fica registrado nesta sessão: &ldquo;{textoParaExibicao(consentMethod)}
               &rdquo;
             </p>
@@ -878,22 +896,10 @@ export function SessionRecorder({
         )}
       </div>
 
-      {minutosRestantes !== null && (
-        <p
-          className={`text-xs ${minutosRestantes <= 0 ? "text-red-500" : "text-muted"}`}
-        >
-          {minutosRestantes <= 0
-            ? "Quota do mês esgotada. A gravação é guardada, mas só será processada no próximo mês ou com outro plano."
-            : `Restam ${Math.floor(minutosRestantes)} minutos de processamento neste mês.`}
-        </p>
-      )}
-
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Objetivo desta sessão (opcional)
-        </span>
+        <span className="rotulo">Pedido desta consulta (opcional)</span>
         <input
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm placeholder:text-muted"
+          className="campo"
           placeholder="ex.: gerar plano alimentar e pontos de acompanhamento"
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
@@ -903,11 +909,9 @@ export function SessionRecorder({
 
       {canChooseEngine && (
         <label className="block">
-          <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-            Motor de transcrição
-          </span>
+          <span className="rotulo">Motor de transcrição</span>
           <select
-            className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+            className="campo"
             value={engine}
             onChange={(e) => setEngine(e.target.value as Engine | "")}
             disabled={busy || recording}
@@ -916,73 +920,30 @@ export function SessionRecorder({
             <option value="local">local — Whisper no servidor</option>
             <option value="cloud">cloud — API comercial</option>
           </select>
-          <span className="mt-1 block text-xs text-muted">
+          <span className="legenda mt-1.5 block">
             Disponível porque seu cargo é <code>developer</code>.
           </span>
         </label>
       )}
 
-      <LiveDraft estado={rascunho.estado} trechos={rascunho.trechos} />
-
       <div className="flex flex-wrap items-center gap-3">
-        {recording ? (
-          <>
-            <button
-              onClick={stopRecording}
-              className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white"
-            >
-              <span className="size-2.5 animate-pulse rounded-full bg-white" />
-              Parar · {formatElapsed(elapsed)}
-            </button>
-
-            {/*
-             * Descartar fica DEPOIS de parar, e discreto.
-             *
-             * São ações opostas com consequências muito diferentes, e a
-             * destrutiva não pode disputar atenção com a normal. Quem termina
-             * a consulta clica no vermelho sem pensar; quem quer jogar fora
-             * procura — e encontra.
-             */}
-            <button
-              onClick={cancelRecording}
-              className={`rounded-lg px-4 py-2.5 text-sm ${
-                confirmandoCancelamento
-                  ? "bg-red-500/15 font-medium text-red-500"
-                  : "text-muted underline underline-offset-2 hover:text-ink"
-              }`}
-            >
-              {confirmandoCancelamento
-                ? "Confirmar: apagar esta gravação"
-                : "descartar"}
-            </button>
-
-            {confirmandoCancelamento && (
-              <button
-                onClick={() => setConfirmandoCancelamento(false)}
-                className="text-sm text-muted underline underline-offset-2 hover:text-ink"
-              >
-                continuar gravando
-              </button>
-            )}
-          </>
-        ) : (
-          <button
-            onClick={() => void startRecording()}
-            disabled={!ready}
-            className="rounded-lg bg-accent px-5 py-2.5 font-medium text-surface disabled:opacity-40"
-          >
-            Gravar consulta
-          </button>
-        )}
-
-        <span className="text-xs text-muted">ou</span>
+        <button
+          type="button"
+          onClick={() => void startRecording()}
+          disabled={!ready}
+          className="botao-principal"
+        >
+          Começar a ouvir
+          <span className="botao-icone">
+            <IconeMicrofone tamanho={19} />
+          </span>
+        </button>
 
         <label
-          className={`cursor-pointer rounded-lg border border-line px-4 py-2.5 text-sm ${
-            ready ? "hover:border-accent" : "pointer-events-none opacity-40"
-          }`}
+          className={`botao-fantasma ${ready ? "" : "pointer-events-none opacity-45"}`}
         >
-          Enviar arquivo
+          <IconeEnviarArquivo tamanho={19} />
+          Enviar um áudio
           <input
             type="file"
             accept={ACCEPT_DE_AUDIO}
@@ -1004,35 +965,282 @@ export function SessionRecorder({
         </label>
       </div>
 
-      {!consent && (
-        <p className="text-xs text-muted">
-          Confirme a ciência do paciente para habilitar a gravação.
-        </p>
-      )}
-      {status !== null && <p className="text-sm text-muted">{status}</p>}
-      {recording && limite.tipo === "aviso" && (
-        <p
-          role="status"
-          className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400"
-        >
-          A gravação chega ao limite de {LIMITE_GRAVACAO_S / 3600} horas em{" "}
-          {limite.minutosRestantes === 1
-            ? "1 minuto"
-            : `${limite.minutosRestantes} minutos`}
-          . Nesse momento ela é encerrada e enviada sozinha — nada do que foi gravado se
-          perde.
-        </p>
-      )}
-      {aviso !== null && (
-        <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
-          {aviso}
-        </p>
-      )}
-      {error !== null && (
-        <p role="alert" className="text-sm text-red-500">
-          {error}
-        </p>
-      )}
+      <div className="space-y-2">
+        {!consent && (
+          <p className="legenda">
+            Confirme a ciência do paciente para habilitar a gravação.
+          </p>
+        )}
+        {minutosRestantes !== null && (
+          <p
+            className={`text-[13px] ${minutosRestantes <= 0 ? "text-erro" : "text-nevoa"}`}
+          >
+            {minutosRestantes <= 0
+              ? "Quota do mês esgotada. A gravação é guardada, mas só será processada no próximo mês ou com outro plano."
+              : `Restam ${Math.floor(minutosRestantes)} minutos de processamento neste mês.`}
+          </p>
+        )}
+        {aviso !== null && !emFoco && <p className="alerta alerta-aviso">{aviso}</p>}
+        {error !== null && !emFoco && (
+          <p role="alert" className="alerta alerta-erro">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {/*
+       * Num portal, direto no `body`. O cartão de vidro em volta do gravador
+       * usa `backdrop-filter`, e isso faz do cartão o referencial de todo
+       * `position: fixed` lá dentro: sem o portal, a "tela cheia" ficaria
+       * presa ao tamanho do cartão, com a página inteira aparecendo em volta.
+       */}
+      {emFoco &&
+        createPortal(
+          <ModoFoco
+            paciente={patientName}
+            gravando={recording}
+            status={status}
+            tempo={formatElapsed(elapsed)}
+            pedido={objective.trim()}
+            guardadoNoAparelho={bufferDisponivel() && !soNaMemoria}
+            aviso={aviso}
+            erro={error}
+            avisoDeLimite={
+              recording && limite.tipo === "aviso"
+                ? `A gravação chega ao limite de ${LIMITE_GRAVACAO_S / 3600} horas em ${
+                    limite.minutosRestantes === 1
+                      ? "1 minuto"
+                      : `${limite.minutosRestantes} minutos`
+                  }. Nesse momento ela é encerrada e enviada sozinha — nada do que foi gravado se perde.`
+                : null
+            }
+            confirmandoDescarte={confirmandoCancelamento}
+            aoEncerrar={stopRecording}
+            aoDescartar={cancelRecording}
+            aoContinuar={() => setConfirmandoCancelamento(false)}
+            rascunho={<LiveDraft estado={rascunho.estado} trechos={rascunho.trechos} />}
+          />,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+/**
+ * A tela da consulta em andamento — e do envio, logo depois.
+ *
+ * Um componente à parte para que o gravador continue sendo lido de cima a
+ * baixo como lógica. Aqui só há apresentação: tudo o que ele faz chega por
+ * propriedade, e nada aqui decide nada sobre a gravação.
+ */
+function ModoFoco({
+  paciente,
+  gravando,
+  status,
+  tempo,
+  pedido,
+  guardadoNoAparelho,
+  aviso,
+  erro,
+  avisoDeLimite,
+  confirmandoDescarte,
+  aoEncerrar,
+  aoDescartar,
+  aoContinuar,
+  rascunho,
+}: {
+  paciente: string;
+  gravando: boolean;
+  status: string | null;
+  tempo: string;
+  pedido: string;
+  guardadoNoAparelho: boolean;
+  aviso: string | null;
+  erro: string | null;
+  avisoDeLimite: string | null;
+  confirmandoDescarte: boolean;
+  aoEncerrar: () => void;
+  aoDescartar: () => void;
+  aoContinuar: () => void;
+  rascunho: React.ReactNode;
+}) {
+  const encerrarRef = useRef<HTMLButtonElement | null>(null);
+
+  // A página de trás não rola enquanto a consulta ocupa a tela: no celular,
+  // um dedo apoiado no vidro arrastaria a pasta do paciente por baixo.
+  useEffect(() => {
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = anterior;
+    };
+  }, []);
+
+  // O foco vai para "Encerrar" ao abrir: quem usa teclado ou leitor de tela
+  // cai direto na ação que importa, e não num elemento atrás da cortina.
+  useEffect(() => {
+    if (gravando) encerrarRef.current?.focus();
+  }, [gravando]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modo-foco-titulo"
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-perola"
+    >
+      <Atmosfera luz="foco" />
+
+      <div className="mx-auto flex min-h-dvh max-w-[1440px] flex-col px-4 pt-4 pb-6 sm:px-8 sm:pt-6">
+        <header className="flex items-center justify-between gap-3">
+          <span className="hidden items-center gap-2.5 sm:flex">
+            <PontoViva tamanho={26} />
+            <span className="text-base font-semibold tracking-tight">
+              Consulta Viva
+            </span>
+          </span>
+          <span className="vidro-polido flex h-11 min-w-0 items-center gap-2.5 rounded-full pr-4 pl-1.5">
+            <span
+              aria-hidden="true"
+              className="grid size-8 shrink-0 place-items-center rounded-full bg-pessego-claro text-[12px] font-semibold"
+            >
+              {paciente.trim().charAt(0).toLocaleUpperCase("pt-BR")}
+            </span>
+            <span className="truncate text-[14.5px] font-semibold">{paciente}</span>
+          </span>
+          <span
+            className={`flex items-center gap-2 text-[13px] ${
+              guardadoNoAparelho ? "text-grafite" : "text-aviso"
+            }`}
+          >
+            <IconeAparelho
+              tamanho={18}
+              className={guardadoNoAparelho ? "text-viva-texto" : "text-aviso"}
+            />
+            <span className="hidden sm:inline">
+              {guardadoNoAparelho ? "Salvo neste aparelho" : "Só na memória desta aba"}
+            </span>
+          </span>
+        </header>
+
+        <div className="flex flex-1 flex-col items-center gap-10 py-8 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-12">
+          <div className="order-3 w-full max-w-md justify-self-start lg:order-1">
+            {gravando && rascunho}
+          </div>
+
+          <div className="order-1 flex flex-col items-center gap-4 lg:order-2">
+            <div className="mb-8 sm:mb-10">
+              <Orbe
+                tamanho={220}
+                modo={gravando ? "ouvindo" : "pensando"}
+                className="sm:hidden"
+              />
+              <Orbe
+                tamanho={300}
+                modo={gravando ? "ouvindo" : "pensando"}
+                className="hidden sm:block"
+              />
+            </div>
+
+            <h2 id="modo-foco-titulo" className="sr-only">
+              {gravando
+                ? `Consulta de ${paciente} em andamento`
+                : "Guardando a consulta"}
+            </h2>
+
+            {gravando ? (
+              <span className="ficha ficha-gravando">
+                <span aria-hidden="true" className="ficha__ponto" />
+                Ouvindo
+              </span>
+            ) : (
+              <span className="ficha ficha-processando" role="status">
+                <span aria-hidden="true" className="ficha__ponto" />
+                {status ?? "Guardando a consulta"}
+              </span>
+            )}
+
+            <span
+              aria-label="Tempo de gravação"
+              className="text-[clamp(4rem,3rem+4vw,6.5rem)] leading-none font-light tracking-[-0.04em] tabular-nums"
+            >
+              {tempo}
+            </span>
+
+            {pedido !== "" && (
+              <p className="max-w-sm text-center text-[14px] text-grafite">
+                Pedido desta consulta: {pedido}
+              </p>
+            )}
+          </div>
+
+          <div className="order-2 flex w-full max-w-md flex-col items-center gap-4 lg:order-3 lg:items-start">
+            {avisoDeLimite !== null && (
+              <p role="status" className="alerta alerta-aviso">
+                {avisoDeLimite}
+              </p>
+            )}
+            {aviso !== null && <p className="alerta alerta-aviso">{aviso}</p>}
+            {erro !== null && (
+              <p role="alert" className="alerta alerta-erro">
+                {erro}
+              </p>
+            )}
+
+            {gravando ? (
+              <>
+                <button
+                  ref={encerrarRef}
+                  type="button"
+                  onClick={aoEncerrar}
+                  className="botao-principal min-h-[60px] px-7 text-base"
+                >
+                  Encerrar e escrever a nota
+                  <span className="botao-icone size-11">
+                    <IconeCheck tamanho={20} traco={2} />
+                  </span>
+                </button>
+
+                {/*
+                 * Descartar fica DEPOIS de encerrar, e discreto.
+                 *
+                 * São ações opostas com consequências muito diferentes, e a
+                 * destrutiva não pode disputar atenção com a normal. Quem termina
+                 * a consulta toca no botão escuro sem pensar; quem quer jogar
+                 * fora procura — e encontra.
+                 */}
+                <span className="flex flex-wrap items-center justify-center gap-4">
+                  <button
+                    type="button"
+                    onClick={aoDescartar}
+                    className={`botao-texto ${confirmandoDescarte ? "perigo font-semibold" : ""}`}
+                  >
+                    {confirmandoDescarte
+                      ? "Confirmar: apagar esta gravação"
+                      : "Descartar gravação"}
+                  </button>
+                  {confirmandoDescarte && (
+                    <button type="button" onClick={aoContinuar} className="botao-texto">
+                      Continuar gravando
+                    </button>
+                  )}
+                </span>
+
+                <p className="legenda max-w-xs text-center lg:text-left">
+                  {guardadoNoAparelho
+                    ? "Pode deixar a tela assim. Se a internet cair, a gravação continua guardada neste aparelho."
+                    : "Não feche esta aba: a gravação está só na memória dela até o envio."}
+                </p>
+              </>
+            ) : (
+              <p className="legenda max-w-xs text-center lg:text-left">
+                Não feche esta aba até o envio terminar. Em seguida a consulta abre para
+                você acompanhar a nota sendo escrita.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

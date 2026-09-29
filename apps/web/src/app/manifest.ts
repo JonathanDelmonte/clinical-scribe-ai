@@ -28,8 +28,10 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#fcfcfd",
-    theme_color: "#0f8e9c",
+    // Os mesmos da casca clara (`themeColor` em `layout.tsx`): a janela do
+    // aplicativo instalado abre na cor do fundo, sem um flash de outra cor.
+    background_color: "#f2f5f6",
+    theme_color: "#f2f5f6",
     categories: ["medical", "productivity", "health"],
     icons: [
       { src: "/icones/icone-192.png", sizes: "192x192", type: "image/png" },

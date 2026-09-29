@@ -1,11 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
+import { Host_Grotesk } from "next/font/google";
 
-import { SairButton } from "@/components/SairButton";
 import { ServiceWorker } from "@/components/ServiceWorker";
-import { currentProfessional } from "@/lib/auth";
 
 import "./globals.css";
+
+/**
+ * A fonte da casa: Host Grotesk.
+ *
+ * Uma grotesca contemporânea, precisa como as suíças e um pouco mais calorosa
+ * — e longe das famílias que viraram o rosto padrão de site gerado por IA. O
+ * `next/font` baixa os arquivos no build e os serve deste domínio: a página
+ * não faz nenhuma requisição ao Google, o que num produto de saúde é um
+ * terceiro a menos sabendo quem abriu o quê.
+ */
+const hostGrotesk = Host_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-host-grotesk",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Consulta Viva",
@@ -33,21 +46,17 @@ export const viewport: Viewport = {
   // Mobile-first de verdade: a consulta é gravada no celular, muitas vezes
   // com o aparelho na mesa.
   maximumScale: 5,
-  // A cor da barra do sistema quando instalado. Acompanha o tema para que a
-  // borda superior não fique branca num aparelho no modo escuro.
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fcfcfd" },
-    { media: "(prefers-color-scheme: dark)", color: "#1c1f26" },
-  ],
+  // A cor da barra do sistema quando instalado: a mesma pérola do fundo, para
+  // a borda superior não parecer outra superfície. O tema é claro sempre —
+  // ver `globals.css`.
+  themeColor: "#f2f5f6",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const me = await currentProfessional().catch(() => null);
-
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={hostGrotesk.variable}>
       {/*
        * `suppressHydrationWarning` no <body> por causa de EXTENSÕES DO
        * NAVEGADOR, não de código nosso.
@@ -62,60 +71,15 @@ export default async function RootLayout({
        * profundidade. Erros de hidratação reais, dentro da árvore, continuam
        * sendo reportados normalmente — que é o que queremos.
        */}
-      <body className="min-h-dvh antialiased" suppressHydrationWarning>
+      <body className="min-h-dvh font-sans antialiased" suppressHydrationWarning>
         <ServiceWorker />
-        <header className="border-b border-line">
-          <div className="mx-auto flex max-w-3xl items-center gap-4 px-5 py-3">
-            <Link href="/" className="font-semibold tracking-tight">
-              Consulta&nbsp;Viva
-            </Link>
-            {me !== null && (
-              <span className="hidden text-xs text-muted sm:inline">
-                {me.specialty ?? "—"}
-              </span>
-            )}
-            {/*
-             * O cabeçalho só mostra navegação de conta para quem tem conta. Na
-             * tela de login, "configurações" e "sair" seriam links que não
-             * levam a lugar nenhum — e um "sair" visível para quem não entrou
-             * é o tipo de detalhe que faz a pessoa duvidar se entrou.
-             */}
-            {me !== null && (
-              <>
-                <Link href="/uso" className="ml-auto text-xs text-muted hover:text-ink">
-                  uso
-                </Link>
-                <Link
-                  href="/configuracoes"
-                  className="text-xs text-muted hover:text-ink"
-                >
-                  configurações
-                </Link>
-                <SairButton />
-              </>
-            )}
-          </div>
-        </header>
-        {children}
-
         {/*
-         * O rodapé fica fora do `main` de cada página e vale para todas,
-         * inclusive as de login e cadastro. Um documento de privacidade que só
-         * é alcançável depois de entrar é um documento que a pessoa lê depois
-         * de já ter decidido confiar.
+         * Cabeçalho, navegação e rodapé moram nos layouts de cada grupo:
+         * `(app)` tem a barra lateral; `(acesso)` tem o vídeo e o rodapé com
+         * privacidade e termos, que precisam estar ao alcance de quem ainda
+         * não entrou.
          */}
-        <footer className="mt-16 border-t border-line">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-1 px-5 py-4 text-xs text-muted">
-            <span>Consulta Viva</span>
-            <Link href="/privacidade" className="hover:text-ink">
-              privacidade
-            </Link>
-            <Link href="/termos" className="hover:text-ink">
-              termos
-            </Link>
-            <span className="ml-auto">seus dados não treinam nenhuma IA</span>
-          </div>
-        </footer>
+        {children}
       </body>
     </html>
   );

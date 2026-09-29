@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { Atmosfera } from "./Atmosfera";
+import { PontoViva } from "./Orbe";
+
 /**
  * A moldura das páginas de privacidade e termos.
  *
@@ -27,30 +30,46 @@ export function PaginaLegal({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto max-w-2xl px-5 py-12">
-      <nav className="mb-8 flex flex-wrap gap-4 text-sm text-muted">
-        <Link href="/" className="hover:text-ink">
-          ← início
-        </Link>
-        <Link href="/privacidade" className="hover:text-ink">
-          privacidade
-        </Link>
-        <Link href="/termos" className="hover:text-ink">
-          termos
-        </Link>
-      </nav>
+    <>
+      <Atmosfera />
+      <main className="mx-auto max-w-[760px] px-4 py-6 sm:px-6 sm:py-10">
+        <nav className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-3 px-1 text-sm">
+          <Link
+            href="/"
+            className="mr-auto inline-flex items-center gap-2.5 text-tinta no-underline"
+          >
+            <PontoViva tamanho={24} />
+            <span className="text-[16px] font-semibold tracking-tight">
+              Consulta Viva
+            </span>
+          </Link>
+          <Link
+            href="/privacidade"
+            className="text-grafite no-underline hover:text-tinta"
+          >
+            Privacidade
+          </Link>
+          <Link href="/termos" className="text-grafite no-underline hover:text-tinta">
+            Termos
+          </Link>
+        </nav>
 
-      <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>
-      <p className="mt-2 text-sm text-muted">{resumo}</p>
-      <p className="mt-1 text-xs text-muted">Em vigor desde {VIGENCIA}.</p>
+        <article className="vidro rounded-[30px] px-6 py-8 sm:px-10 sm:py-11">
+          <h1 className="titulo-pagina">{titulo}</h1>
+          <p className="mt-4 text-[16.5px] leading-relaxed text-grafite">{resumo}</p>
+          <p className="legenda mt-2">Em vigor desde {VIGENCIA}.</p>
 
-      {/*
-       * `prose` não existe neste projeto (não há plugin de tipografia), então
-       * o espaçamento é dado aqui, uma vez, em vez de repetido em cada
-       * parágrafo dos dois documentos.
-       */}
-      <div className="mt-10 space-y-8 text-sm leading-relaxed">{children}</div>
-    </main>
+          {/*
+           * `prose` não existe neste projeto (não há plugin de tipografia), então
+           * o espaçamento é dado aqui, uma vez, em vez de repetido em cada
+           * parágrafo dos dois documentos.
+           */}
+          <div className="mt-10 flex flex-col gap-9 text-[15px] leading-relaxed [&_a]:font-medium [&_a]:text-viva-texto [&_a]:underline [&_a]:decoration-viva-texto/35 [&_a]:underline-offset-[3px]">
+            {children}
+          </div>
+        </article>
+      </main>
+    </>
   );
 }
 
@@ -62,21 +81,24 @@ export function Secao({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-base font-medium">{titulo}</h2>
+    <section className="flex flex-col gap-3">
+      <h2 className="titulo-secao text-[18px]">{titulo}</h2>
       {children}
     </section>
   );
 }
 
 export function Lista({ children }: { children: React.ReactNode }) {
-  return <ul className="space-y-2 pl-1">{children}</ul>;
+  return <ul className="flex flex-col gap-2.5">{children}</ul>;
 }
 
 export function Item({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex gap-2">
-      <span className="text-muted">•</span>
+    <li className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className="mt-2.5 size-1.5 shrink-0 rounded-full bg-viva"
+      />
       <span>{children}</span>
     </li>
   );

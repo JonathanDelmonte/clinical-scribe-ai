@@ -3,6 +3,8 @@
 import { sectionTitle, type SecaoChave } from "@scribe/core";
 import { useState } from "react";
 
+import { IconeAlerta, IconeCheck, IconeTocar } from "./Icones";
+
 export interface NoteStatement {
   path: string;
   text: string;
@@ -37,6 +39,8 @@ interface Props {
   validSegmentIds: Set<string>;
   activeSources: Set<string>;
   onCite: (sources: string[]) => void;
+  /** O instante, no áudio, do primeiro trecho citado — "04:12". */
+  tempoDe: (sources: string[]) => string | null;
   onSaved: () => void;
 }
 
@@ -65,6 +69,7 @@ export function ClinicalNote({
   validSegmentIds,
   activeSources,
   onCite,
+  tempoDe,
   onSaved,
 }: Props) {
   const aprovada = note.approvedAt !== null;
@@ -117,21 +122,26 @@ export function ClinicalNote({
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-xs font-medium tracking-widest text-muted uppercase">
+    <section
+      aria-labelledby="titulo-nota"
+      className="vidro flex flex-col gap-5 rounded-[26px] px-4 pt-6 pb-5 sm:px-6"
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
+        <h2 id="titulo-nota" className="titulo-secao">
           Nota clínica
         </h2>
         {aprovada ? (
-          <span className="rounded bg-accent/15 px-2 py-0.5 text-xs text-accent">
-            aprovada em {new Date(note.approvedAt ?? "").toLocaleString("pt-BR")}
+          <span className="ficha ficha-ok">
+            <IconeCheck tamanho={14} traco={2.4} />
+            Aprovada em {new Date(note.approvedAt ?? "").toLocaleString("pt-BR")}
           </span>
         ) : (
-          <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
-            rascunho
+          <span className="ficha ficha-aviso">
+            <span aria-hidden="true" className="ficha__ponto" />
+            Rascunho
           </span>
         )}
-        <span className="text-xs text-muted">
+        <span className="legenda ml-auto">
           {note.model ?? "modelo desconhecido"} · {note.promptVersion ?? "?"}
         </span>
       </div>
@@ -145,29 +155,31 @@ export function ClinicalNote({
        * com ele — e é justamente ele quem responde pelo dado do paciente.
        */}
       {note.content.dataPolicy === "training" && (
-        <p className="rounded-lg bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
-          <strong>Gerada com modelo de nível gratuito.</strong> O fornecedor pode
-          registrar e treinar com a transcrição enviada. Use apenas com áudio de teste —
-          nunca com consulta de paciente real.
+        <p className="alerta alerta-aviso text-[13px]">
+          <strong className="font-semibold">
+            Gerada com modelo de nível gratuito.
+          </strong>{" "}
+          O fornecedor pode registrar e treinar com a transcrição enviada. Use apenas
+          com áudio de teste — nunca com consulta de paciente real.
         </p>
       )}
 
       {!aprovada && pendentes.length > 0 && (
-        <p
-          role="alert"
-          className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-500"
-        >
-          <strong>
-            {pendentes.length} {pendentes.length === 1 ? "afirmação" : "afirmações"} sem
-            âncora no áudio.
-          </strong>{" "}
-          Corrija, remova, ou assuma cada uma. Assumir registra que a informação é sua,
-          não da transcrição.
+        <p role="alert" className="alerta alerta-aviso flex items-start gap-2.5">
+          <IconeAlerta tamanho={18} className="mt-0.5 shrink-0" />
+          <span>
+            <strong className="font-semibold">
+              {pendentes.length} {pendentes.length === 1 ? "frase" : "frases"} sem
+              âncora no áudio.
+            </strong>{" "}
+            Corrija, remova, ou assuma cada uma. Assumir registra que a informação é
+            sua, não da transcrição.
+          </span>
         </p>
       )}
 
       {secoes.length === 0 && (
-        <p className="text-sm text-muted">
+        <p className="px-1 text-[15px] text-grafite">
           {sujo
             ? "Todas as afirmações foram removidas."
             : "O modelo não encontrou nada que sustentasse uma nota nesta consulta."}
@@ -175,27 +187,31 @@ export function ClinicalNote({
       )}
 
       {secoes.map((secao) => (
-        <div key={secao.key} className="rounded-lg border border-line px-5 py-4">
-          <h3 className="mb-2 text-sm font-medium">{sectionTitle(secao.key)}</h3>
-          <ul className="space-y-2">
+        <div key={secao.key} className="flex flex-col gap-1">
+          <h3 className="px-3 pb-1 text-[13px] font-semibold text-grafite">
+            {sectionTitle(secao.key)}
+          </h3>
+          <ul className="flex flex-col gap-1">
             {secao.statements.map((af) => {
               const ok = sustentada(af, validSegmentIds);
               const invalidas = af.sources.filter((s) => !validSegmentIds.has(s));
               const ativa =
                 af.sources.length > 0 && af.sources.every((s) => activeSources.has(s));
+              const tempo = invalidas.length === 0 ? tempoDe(af.sources) : null;
 
               if (editando === af.path) {
                 return (
-                  <li key={af.path} className="space-y-2">
+                  <li key={af.path} className="space-y-2 px-1 py-1">
                     <textarea
                       value={rascunho}
                       onChange={(e) => setRascunho(e.target.value)}
                       rows={3}
                       autoFocus
-                      className="w-full rounded-md border border-accent bg-transparent px-3 py-2 text-sm"
+                      className="campo"
                     />
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-3">
                       <button
+                        type="button"
                         onClick={() => {
                           alterar(af.path, {
                             text: rascunho,
@@ -203,13 +219,14 @@ export function ClinicalNote({
                           });
                           setEditando(null);
                         }}
-                        className="rounded bg-accent px-3 py-1 text-xs font-medium text-surface"
+                        className="botao-principal botao-pequeno"
                       >
                         Salvar frase
                       </button>
                       <button
+                        type="button"
                         onClick={() => setEditando(null)}
-                        className="text-xs text-muted hover:text-ink"
+                        className="botao-texto"
                       >
                         cancelar
                       </button>
@@ -221,76 +238,91 @@ export function ClinicalNote({
               return (
                 <li key={af.path}>
                   <div
-                    className={`rounded-md px-3 py-2 text-sm ${
+                    className={`rounded-2xl border px-3 py-2.5 transition-colors ${
                       !ok
-                        ? "bg-red-500/10"
+                        ? "border-aviso-ponto/35 bg-[#fff6e3]"
                         : ativa
-                          ? "bg-accent/15"
-                          : "hover:bg-accent/5"
+                          ? "vidro-polido border-white/95"
+                          : "border-transparent hover:bg-white/60"
                     }`}
                   >
                     <button
+                      type="button"
                       onClick={() => onCite(af.sources)}
                       disabled={af.sources.length === 0}
-                      className={`w-full text-left ${!ok ? "text-red-600 dark:text-red-400" : ""} ${
-                        af.sources.length === 0 ? "cursor-default" : "cursor-pointer"
-                      }`}
+                      className={`w-full text-left text-[15.5px] leading-relaxed ${
+                        !ok ? "text-[#5c3e00]" : "text-tinta"
+                      } ${af.sources.length === 0 ? "cursor-default" : "cursor-pointer"}`}
                     >
                       {af.text}
                     </button>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px]">
                       {af.sources.length === 0 ? (
-                        <span className="font-medium text-red-600 dark:text-red-400">
-                          ⚠ sem fonte
+                        <span className="ficha ficha-aviso min-h-6 px-2.5 text-[12px]">
+                          <IconeAlerta tamanho={13} traco={2} />
+                          sem fonte no áudio
                         </span>
                       ) : invalidas.length > 0 ? (
-                        <span className="font-medium text-red-600 dark:text-red-400">
-                          ⚠ cita trecho que não existe
+                        <span className="ficha ficha-erro min-h-6 px-2.5 text-[12px]">
+                          <IconeAlerta tamanho={13} traco={2} />
+                          cita trecho que não existe
                         </span>
                       ) : (
                         <button
+                          type="button"
                           onClick={() => onCite(af.sources)}
-                          className="text-muted hover:text-accent"
+                          className="inline-flex min-h-6 items-center gap-1.5 rounded-full bg-viva/15 px-2.5 font-semibold text-viva-texto tabular-nums hover:bg-viva/25"
                         >
-                          ▸ ouvir {af.sources.length}{" "}
-                          {af.sources.length === 1 ? "trecho" : "trechos"}
+                          <IconeTocar tamanho={11} />
+                          {tempo ?? "ouvir"}
+                          {af.sources.length > 1 && (
+                            <span className="font-medium">
+                              · {af.sources.length} trechos
+                            </span>
+                          )}
                         </button>
                       )}
 
                       {af.confirmedAt !== undefined && (
-                        <span className="text-accent">✓ assumida por você</span>
+                        <span className="ficha ficha-ok min-h-6 px-2.5 text-[12px]">
+                          <IconeCheck tamanho={13} traco={2.4} />
+                          assumida por você
+                        </span>
                       )}
                       {af.editedAt !== undefined && (
-                        <span className="text-muted">editada</span>
+                        <span className="text-nevoa">editada</span>
                       )}
 
                       {!aprovada && (
-                        <span className="ml-auto flex gap-3">
+                        <span className="ml-auto flex gap-4">
                           <button
+                            type="button"
                             onClick={() => {
                               setEditando(af.path);
                               setRascunho(af.text);
                             }}
-                            className="text-muted underline underline-offset-2 hover:text-ink"
+                            className="botao-texto text-[12.5px]"
                           >
                             editar
                           </button>
                           {!ok && (
                             <button
+                              type="button"
                               onClick={() =>
                                 alterar(af.path, {
                                   confirmedAt: new Date().toISOString(),
                                 })
                               }
-                              className="text-muted underline underline-offset-2 hover:text-ink"
+                              className="botao-texto text-[12.5px]"
                             >
                               assumir
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => alterar(af.path, null)}
-                            className="text-muted underline underline-offset-2 hover:text-red-500"
+                            className="botao-texto perigo text-[12.5px]"
                           >
                             remover
                           </button>
@@ -306,26 +338,31 @@ export function ClinicalNote({
       ))}
 
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}
 
       {!aprovada && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+        <div className="flex flex-wrap items-center gap-3 border-t border-line px-1 pt-5">
           <button
+            type="button"
             onClick={() => void enviar(true)}
             disabled={salvando || pendentes.length > 0}
-            className="rounded-lg bg-accent px-5 py-2.5 font-medium text-surface disabled:opacity-40"
+            className="botao-principal"
           >
-            {salvando ? "salvando…" : "Aprovar nota"}
+            {salvando ? "Salvando…" : "Aprovar nota"}
+            <span className="botao-icone">
+              <IconeCheck tamanho={19} traco={2} />
+            </span>
           </button>
 
           {sujo && (
             <button
+              type="button"
               onClick={() => void enviar(false)}
               disabled={salvando}
-              className="rounded-lg border border-line px-4 py-2.5 text-sm disabled:opacity-40"
+              className="botao-vidro"
             >
               Salvar sem aprovar
             </button>
@@ -339,10 +376,10 @@ export function ClinicalNote({
            * "Aprovar" sem essa frase deixaria a pessoa descobrir isso depois —
            * que é tarde, porque a assinatura já aconteceu.
            */}
-          <span className="text-xs text-muted">
+          <span className="legenda basis-full">
             {pendentes.length > 0
-              ? `resolva ${pendentes.length} ${pendentes.length === 1 ? "pendência" : "pendências"} para aprovar`
-              : "aprovar transforma o rascunho em registro clínico sob sua responsabilidade"}
+              ? `Resolva ${pendentes.length} ${pendentes.length === 1 ? "pendência" : "pendências"} para aprovar.`
+              : "Aprovar transforma o rascunho em registro clínico sob sua responsabilidade."}
           </span>
         </div>
       )}

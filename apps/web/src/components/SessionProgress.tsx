@@ -1,5 +1,8 @@
 "use client";
 
+import { IconeCheck } from "./Icones";
+import { Orbe } from "./Orbe";
+
 export interface ProgressData {
   percent: number | null;
   phase: string | null;
@@ -48,89 +51,105 @@ export function SessionProgress({ data }: { data: ProgressData }) {
   const pct = Math.min(100, Math.max(0, data.percent ?? 0));
 
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="mb-2 flex items-baseline justify-between gap-3">
-          <span className="text-sm font-medium">
-            {data.phase ?? "aguardando na fila"}
-          </span>
-          {!indeterminado && (
-            <span className="font-mono text-2xl tabular-nums">{pct}%</span>
-          )}
-        </div>
-
-        <div
-          className="h-2 w-full overflow-hidden rounded-full bg-line"
-          role="progressbar"
-          aria-valuenow={indeterminado ? undefined : pct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Progresso do processamento"
-        >
-          {indeterminado ? (
-            <div className="h-full w-1/3 animate-pulse rounded-full bg-accent/60" />
-          ) : (
-            <div
-              className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
-              style={{ width: `${pct}%` }}
-            />
-          )}
-        </div>
-
-        {data.etaSeconds !== null && data.etaSeconds > 0 && (
-          <p className="mt-2 text-sm text-muted">
-            cerca de {formatarEspera(data.etaSeconds)} restantes
-          </p>
-        )}
+    <section
+      aria-label="Processando a consulta"
+      className="vidro flex flex-col gap-6 rounded-[26px] px-5 py-6 sm:flex-row sm:items-center sm:gap-8 sm:px-8"
+    >
+      {/*
+       * O orbe pensando: a Viva está trabalhando nesta consulta. É o mesmo
+       * corpo que ouviu a gravação, agora escrevendo.
+       */}
+      <div className="flex justify-center sm:block">
+        <Orbe tamanho={112} modo="pensando" />
       </div>
 
-      <ol className="space-y-1.5">
-        {FASES.map((f, i) => {
-          const concluida = i < fase;
-          const atual = i === fase;
-          return (
-            <li
-              key={f.chave}
-              className={`flex items-center gap-2.5 text-sm ${
-                concluida ? "text-muted" : atual ? "text-ink" : "text-muted/50"
-              }`}
-            >
-              <span
-                className={`flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
-                  concluida
-                    ? "bg-accent/20 text-accent"
-                    : atual
-                      ? "bg-accent text-surface"
-                      : "border border-line"
+      <div className="flex min-w-0 flex-1 flex-col gap-5">
+        <div>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <span className="text-[15.5px] font-semibold">
+              {data.phase ?? "Aguardando na fila"}
+            </span>
+            {!indeterminado && (
+              <span className="text-[28px] leading-none font-light tabular-nums">
+                {pct}%
+              </span>
+            )}
+          </div>
+
+          <div
+            className="h-2 w-full overflow-hidden rounded-full bg-tinta/[0.07]"
+            role="progressbar"
+            aria-valuenow={indeterminado ? undefined : pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Progresso do processamento"
+          >
+            {indeterminado ? (
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-viva/60" />
+            ) : (
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#8fe3d8] to-viva transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            )}
+          </div>
+
+          {data.etaSeconds !== null && data.etaSeconds > 0 && (
+            <p className="legenda mt-2">
+              cerca de {formatarEspera(data.etaSeconds)} restantes
+            </p>
+          )}
+        </div>
+
+        <ol className="grid gap-2 sm:grid-cols-2">
+          {FASES.map((f, i) => {
+            const concluida = i < fase;
+            const atual = i === fase;
+            return (
+              <li
+                key={f.chave}
+                className={`flex items-center gap-2.5 text-[14px] ${
+                  concluida ? "text-grafite" : atual ? "text-tinta" : "text-nevoa/70"
                 }`}
               >
-                {concluida ? "✓" : atual ? "" : ""}
-              </span>
-              <span className={atual ? "font-medium" : ""}>{f.rotulo}</span>
-              {atual && (
-                <span className="size-1.5 animate-pulse rounded-full bg-accent" />
-              )}
-            </li>
-          );
-        })}
-      </ol>
+                <span
+                  className={`grid size-5 shrink-0 place-items-center rounded-full ${
+                    concluida
+                      ? "bg-viva/20 text-viva-texto"
+                      : atual
+                        ? "bg-tinta text-perola"
+                        : "border border-tinta/15"
+                  }`}
+                >
+                  {concluida && <IconeCheck tamanho={12} traco={2.6} />}
+                </span>
+                <span className={atual ? "font-semibold" : ""}>{f.rotulo}</span>
+                {atual && (
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 animate-pulse rounded-full bg-viva"
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ol>
 
-      {/*
-       * O trecho mais recente reconhecido.
-       *
-       * É a parte visual que prova que algo está acontecendo agora — barra e
-       * porcentagem podem parecer decorativas, texto que muda não parece.
-       * Também dá ao profissional uma primeira leitura da qualidade antes do
-       * resultado final.
-       */}
-      {data.preview !== null && data.preview !== "" && (
-        <div className="rounded-lg border border-line bg-accent/5 px-4 py-3">
-          <p className="mb-1 text-xs tracking-widest text-muted uppercase">
-            reconhecendo agora
-          </p>
-          <p className="text-sm italic">“{data.preview}”</p>
-        </div>
-      )}
-    </div>
+        {/*
+         * O trecho mais recente reconhecido.
+         *
+         * É a parte visual que prova que algo está acontecendo agora — barra e
+         * porcentagem podem parecer decorativas, texto que muda não parece.
+         * Também dá ao profissional uma primeira leitura da qualidade antes do
+         * resultado final.
+         */}
+        {data.preview !== null && data.preview !== "" && (
+          <div className="rounded-2xl border border-white/85 bg-white/55 px-4 py-3">
+            <p className="legenda mb-1">Reconhecendo agora</p>
+            <p className="text-[14.5px] italic">“{data.preview}”</p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

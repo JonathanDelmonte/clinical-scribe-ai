@@ -32,7 +32,7 @@ export function PassoDeVoz({ enrolledAt }: { enrolledAt: string | null }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <VoiceEnrollment enrolledAt={enrolledAt} aoConcluir={seguir} />
 
       {/*
@@ -43,17 +43,13 @@ export function PassoDeVoz({ enrolledAt }: { enrolledAt: string | null }) {
        * vontade. Quem tem motivo para pular — sala compartilhada, microfone
        * ruim, pressa — precisa achar a saída na primeira olhada.
        */}
-      <div className="flex flex-col items-center gap-2">
-        <button
-          onClick={seguir}
-          className="text-sm text-muted underline underline-offset-4 hover:text-ink"
-        >
+      <div className="flex flex-col items-center gap-2 text-center">
+        <button onClick={seguir} className="botao-texto text-[15px] text-tinta">
           Pular por enquanto
         </button>
-        <span className="text-center text-xs text-muted">
-          Dá para cadastrar depois em configurações, quando quiser. Sem a voz, a
-          separação entre profissional e paciente continua funcionando pelo conteúdo da
-          conversa.
+        <span className="legenda max-w-sm">
+          Dá para cadastrar depois em Ajustes, quando quiser. Sem a voz, a separação
+          entre profissional e paciente continua funcionando pelo conteúdo da conversa.
         </span>
       </div>
     </div>
