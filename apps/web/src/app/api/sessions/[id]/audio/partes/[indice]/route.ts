@@ -72,7 +72,7 @@ export async function PUT(
   const declarado = Number(request.headers.get("content-length") ?? "");
   if (Number.isFinite(declarado) && declarado !== bytes.byteLength) {
     return NextResponse.json(
-      { error: "o pedaço chegou incompleto — envie de novo" },
+      { error: "O pedaço chegou incompleto. Envie de novo." },
       { status: 400 },
     );
   }

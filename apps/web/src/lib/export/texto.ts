@@ -56,6 +56,9 @@ export interface CabecalhoDeExportacao {
  * como se tivesse sido digitado por quem assina — e 62% dos achados fabricados
  * passaram despercebidos justamente por soarem críveis.
  */
+/** Linha entre o documento e o rodapé. */
+const SEPARADOR = "________";
+
 export const RODAPE =
   "Documento produzido com auxílio de inteligência artificial a partir da " +
   "gravação da consulta, e revisado e aprovado pelo profissional que o assina. " +
@@ -138,7 +141,7 @@ export function notaComoTexto(
 ): string {
   const linhas: string[] = [];
 
-  linhas.push(`CONSULTA — ${dataBr(cabecalho.dataDaConsulta)}`);
+  linhas.push(`CONSULTA DE ${dataBr(cabecalho.dataDaConsulta)}`);
   linhas.push("");
   linhas.push(
     `Paciente: ${cabecalho.paciente}` +
@@ -146,7 +149,7 @@ export function notaComoTexto(
   );
   linhas.push(
     `Profissional: ${cabecalho.profissional}` +
-      (cabecalho.registro === null ? "" : ` — ${cabecalho.registro}`) +
+      (cabecalho.registro === null ? "" : `, ${cabecalho.registro}`) +
       (cabecalho.especialidade === null ? "" : ` · ${cabecalho.especialidade}`),
   );
 
@@ -161,7 +164,7 @@ export function notaComoTexto(
   }
 
   linhas.push("");
-  linhas.push("—");
+  linhas.push(SEPARADOR);
   linhas.push(RODAPE);
 
   return linhas.join("\n");
@@ -181,7 +184,7 @@ export function objetivoComoTexto(
   linhas.push(`Paciente: ${cabecalho.paciente}`);
   linhas.push(
     `Profissional: ${cabecalho.profissional}` +
-      (cabecalho.registro === null ? "" : ` — ${cabecalho.registro}`),
+      (cabecalho.registro === null ? "" : `, ${cabecalho.registro}`),
   );
   linhas.push(`Data: ${dataBr(cabecalho.dataDaConsulta)}`);
   linhas.push("");
@@ -189,7 +192,7 @@ export function objetivoComoTexto(
   for (const item of itens) linhas.push(linhaDaAfirmacao(item, trechos));
 
   linhas.push("");
-  linhas.push("—");
+  linhas.push(SEPARADOR);
   linhas.push(RODAPE);
 
   return linhas.join("\n");

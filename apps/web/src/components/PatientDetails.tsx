@@ -102,12 +102,12 @@ export function PatientDetails(props: PatientDetailsProps) {
           <dt className="text-[13px] font-semibold text-grafite">Nascimento</dt>
           <dd>
             {props.nascimento === ""
-              ? "—"
+              ? "não informado"
               : `${dataParaExibicao(props.nascimento)}${idade === null ? "" : ` · ${idade} anos`}`}
           </dd>
           <dt className="text-[13px] font-semibold text-grafite">Observações</dt>
           <dd className="leading-relaxed whitespace-pre-wrap">
-            {props.observacoes === "" ? "—" : props.observacoes}
+            {props.observacoes === "" ? "nenhuma" : props.observacoes}
           </dd>
         </dl>
 
@@ -148,7 +148,7 @@ export function PatientDetails(props: PatientDetailsProps) {
             O paciente sai da lista.{" "}
             {props.sessoes === 0
               ? "Não há consultas gravadas."
-              : `As ${props.sessoes} consultas gravadas são preservadas — registro clínico não some por causa de uma lista.`}
+              : `As ${props.sessoes} consultas gravadas são preservadas: registro clínico não some por causa de uma lista.`}
           </p>
         )}
 
@@ -197,8 +197,8 @@ export function PatientDetails(props: PatientDetailsProps) {
           maxLength={5000}
         />
         <span className="legenda mt-1.5 block">
-          Contexto permanente do paciente — alergias, preferências, o que você quer ter
-          à mão em toda consulta. Não substitui a nota clínica.
+          Contexto permanente do paciente: alergias, preferências, o que você quer ter à
+          mão em toda consulta. Não substitui a nota clínica.
         </span>
       </label>
 

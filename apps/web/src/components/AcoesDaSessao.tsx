@@ -85,7 +85,7 @@ export function AcoesDaSessao({
     if (corpo?.haviaRodando === true) {
       setAviso(
         "Processamento interrompido. A etapa que já estava em curso no " +
-          "servidor pode terminar mesmo assim — se a consulta voltar a " +
+          "servidor pode terminar mesmo assim. Se a consulta voltar a " +
           "aparecer processada, é isso.",
       );
     }

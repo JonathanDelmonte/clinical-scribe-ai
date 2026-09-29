@@ -31,14 +31,13 @@ export default async function PassoDeVozPage() {
         <Passos atual={2} />
         <h1 className="titulo-pagina">Sua voz</h1>
         <p className="text-[16px] leading-relaxed text-grafite">
-          Opcional. Se o sistema conhecer sua voz, ele acerta mais quando decide quais
-          falas são suas e quais são do paciente. Leva meio minuto — e dá para deixar
-          para depois.
+          Opcional. Com a sua voz, o sistema acerta mais quais falas são suas e quais
+          são do paciente.
         </p>
       </header>
 
       <div className="surgir surgir-2">
-        <PassoDeVoz enrolledAt={null} />
+        <PassoDeVoz enrolledAt={null} nome={me.name} especialidade={me.specialty} />
       </div>
     </div>
   );

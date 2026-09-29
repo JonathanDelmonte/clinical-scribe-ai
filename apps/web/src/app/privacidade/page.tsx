@@ -5,7 +5,7 @@ import { Item, Lista, PaginaLegal, Secao } from "@/components/PaginaLegal";
 export const dynamic = "force-static";
 
 export const metadata = {
-  title: "Política de privacidade — Consulta Viva",
+  title: "Política de privacidade · Consulta Viva",
 };
 
 /**
@@ -46,8 +46,8 @@ export default function Privacidade() {
             mais nada.
           </Item>
           <Item>
-            Sobre os <strong>seus</strong> dados de conta — nome, e-mail, registro
-            profissional, consumo — nós somos o controlador.
+            Sobre os <strong>seus</strong> dados de conta (nome, e-mail, registro
+            profissional, consumo), nós somos o controlador.
           </Item>
         </Lista>
       </Secao>
@@ -61,8 +61,8 @@ export default function Privacidade() {
           </Item>
           <Item>
             <strong>Sua voz, se você cadastrar:</strong> um vetor de 256 números que
-            representa o timbre. Não é áudio e não reconstrói fala — serve para o
-            sistema saber qual voz na gravação é a sua.
+            representa o timbre. Não é áudio e não reconstrói fala: serve para o sistema
+            saber qual voz na gravação é a sua.
           </Item>
           <Item>
             <strong>Seus pacientes:</strong> nome, data de nascimento e as observações
@@ -80,7 +80,7 @@ export default function Privacidade() {
           <Item>
             <strong>Trilha de auditoria:</strong> ação, horário, identificador do
             registro afetado, endereço de IP e navegador.{" "}
-            <strong>Nunca o conteúdo</strong> das consultas — a trilha registra que você
+            <strong>Nunca o conteúdo</strong> das consultas: a trilha registra que você
             abriu uma ficha, não o que estava escrito nela.{" "}
             <Link href="/auditoria">Você pode ler a sua</Link>.
           </Item>
@@ -89,14 +89,14 @@ export default function Privacidade() {
 
       <Secao titulo="Com que base legal">
         <p>
-          Existe um mito de que tudo em saúde depende de consentimento. Não depende — e
+          Existe um mito de que tudo em saúde depende de consentimento. Não depende, e
           fingir que depende atrapalha mais do que ajuda.
         </p>
         <Lista>
           <Item>
             <strong>Documentar o atendimento</strong> tem base na tutela da saúde (LGPD,
             Art. 11, II, &ldquo;f&rdquo;). O profissional documenta a consulta
-            independentemente de consentimento — é o trabalho dele.
+            independentemente de consentimento: é o trabalho dele.
           </Item>
           <Item>
             <strong>Gravar</strong> a consulta para produzir essa documentação segue a
@@ -112,9 +112,9 @@ export default function Privacidade() {
             na segurança do registro clínico.
           </Item>
           <Item>
-            <strong>Uso secundário</strong> — treinar modelos, pesquisa, compartilhar
-            com terceiros — <strong>não acontece</strong>. Exigiria consentimento
-            específico, e não o coletamos porque não fazemos.
+            <strong>Uso secundário</strong> (treinar modelos, pesquisa, compartilhar com
+            terceiros) <strong>não acontece</strong>. Exigiria consentimento específico,
+            e não o coletamos porque não fazemos.
           </Item>
         </Lista>
       </Secao>
@@ -140,18 +140,18 @@ export default function Privacidade() {
         </p>
         <Lista>
           <Item>
-            <strong>Transcrição com o motor local</strong> — o padrão do plano grátis. O
+            <strong>Transcrição com o motor local</strong>, o padrão do plano grátis. O
             áudio é processado no próprio servidor, por software que roda ali.{" "}
             <strong>Nenhum subprocessador, nenhuma transferência internacional.</strong>
           </Item>
           <Item>
-            <strong>Transcrição com o motor de nuvem</strong> — o áudio vai para um
+            <strong>Transcrição com o motor de nuvem:</strong> o áudio vai para um
             fornecedor externo de reconhecimento de fala. O fornecedor ainda não foi
             escolhido; quando for, o nome, o país e os termos entram nesta lista{" "}
             <strong>antes</strong> de o motor ser oferecido a alguém.
           </Item>
           <Item>
-            <strong>Geração da nota clínica</strong> — a transcrição (não o áudio) é
+            <strong>Geração da nota clínica:</strong> a transcrição (não o áudio) é
             enviada a um provedor de modelo de linguagem, sob termos que proíbem o uso
             para treinamento. É a única saída de dado que existe no caminho padrão, e é
             por isso que ela está escrita aqui em vez de escondida.
@@ -163,7 +163,7 @@ export default function Privacidade() {
         <Lista>
           <Item>
             <strong>O áudio da consulta é apagado automaticamente</strong> depois do
-            prazo de retenção configurado na sua instalação — 30 dias por padrão. É
+            prazo de retenção configurado na sua instalação, 30 dias por padrão. É
             minimização (LGPD, Art. 6º) e é a defesa mais barata que existe: dado
             apagado não vaza. A transcrição e a nota permanecem.
           </Item>
@@ -174,7 +174,7 @@ export default function Privacidade() {
           <Item>
             A trilha de auditoria sobrevive à exclusão da conta, porque o registro de
             que ela existiu é o que uma auditoria precisa guardar. O que identificava
-            você nela — IP e navegador — é anulado no mesmo instante.
+            você nela (IP e navegador) é anulado no mesmo instante.
           </Item>
         </Lista>
       </Secao>
@@ -200,7 +200,7 @@ export default function Privacidade() {
           </Item>
           <Item>
             <strong>O registro de acesso</strong> guarda IDs e horários, nunca conteúdo
-            clínico — inclusive nos logs do servidor.
+            clínico, inclusive nos logs do servidor.
           </Item>
         </Lista>
       </Secao>
@@ -232,7 +232,7 @@ export default function Privacidade() {
         <p>
           O banco de dados e o armazenamento de áudio ficam no Brasil. Com o motor
           local, o áudio não sai da mesma máquina. A geração da nota envolve um provedor
-          que pode estar fora do país — declarado acima, como manda o Art. 33.
+          que pode estar fora do país, como declarado acima e como manda o Art. 33.
         </p>
       </Secao>
 

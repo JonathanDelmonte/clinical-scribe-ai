@@ -15,7 +15,7 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Consulta Viva — escriba clínico",
+    name: "Consulta Viva, escriba clínico",
     short_name: "Consulta Viva",
     description:
       "Grava a consulta, transcreve, separa as vozes e devolve a nota pronta para revisão.",

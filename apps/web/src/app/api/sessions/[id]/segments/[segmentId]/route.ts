@@ -54,7 +54,7 @@ export async function PATCH(
     // que cite este trecho. Quem quer remover conteúdo remove a afirmação na
     // nota, onde a consequência está visível.
     return NextResponse.json(
-      { error: "o texto não pode ficar vazio — corrija, não apague" },
+      { error: "O texto não pode ficar vazio. Corrija, não apague." },
       { status: 400 },
     );
   }

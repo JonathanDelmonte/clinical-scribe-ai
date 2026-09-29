@@ -153,7 +153,7 @@ export default async function Exportar({
       {notas.length > 1 && (
         <p className="legenda px-1">
           Esta consulta tem {notas.length} versões da nota. A exportação usa sempre a
-          mais recente — as anteriores ficam guardadas como histórico.
+          mais recente. As anteriores ficam guardadas como histórico.
         </p>
       )}
 
@@ -165,7 +165,7 @@ export default async function Exportar({
           Este produto é um assistente de documentação: ele produz a nota e a entrega
           para o prontuário que você já usa e que tem validade jurídica. O PDF traz sua
           identificação e sua assinatura, e declara que foi produzido com auxílio de IA
-          e revisado por você — mas não é assinatura digital ICP-Brasil.
+          e revisado por você, mas não é assinatura digital ICP-Brasil.
         </p>
       </div>
     </div>

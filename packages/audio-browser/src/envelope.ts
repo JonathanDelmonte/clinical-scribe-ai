@@ -169,7 +169,7 @@ export function lerCabecalhoDoEnvelope(bytes: Uint8Array): LeituraDoEnvelope {
   if (bytes.byteLength !== CABECALHO_ENVELOPE + 2 * passos) {
     return {
       ok: false,
-      erro: "a medida do segundo microfone chegou cortada — envie de novo",
+      erro: "A medida do segundo microfone chegou cortada. Envie de novo.",
     };
   }
   return { ok: true, passos, duracaoS: (passos * PASSO_ENVELOPE) / TAXA_ENVELOPE };

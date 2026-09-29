@@ -179,7 +179,7 @@ export function isUsableForRoleIdentification(
       usable: false,
       reason:
         `Transcrição incompleta: os últimos ${seconds}s do áudio não foram ` +
-        `transcritos. Não gere nota a partir de uma consulta cortada — o que ` +
+        `transcritos. Não gere nota a partir de uma consulta cortada: o que ` +
         `falta no fim costuma ser a conduta.`,
     };
   }
@@ -195,7 +195,7 @@ export function isUsableForRoleIdentification(
     return {
       usable: false,
       reason:
-        "Apenas um falante detectado — verifique o microfone ou a qualidade do áudio.",
+        "Apenas um falante detectado. Verifique o microfone ou a qualidade do áudio.",
     };
   }
   return { usable: true };

@@ -77,7 +77,7 @@ export function makeNoteHandler(
       .orderBy(asc(transcriptSegments.startMs));
 
     if (linhas.length === 0) {
-      throw new Error("sessão sem transcrição — nada de onde gerar a nota");
+      throw new Error("Consulta sem transcrição: não há de onde gerar a nota.");
     }
 
     const segments: TranscriptSegment[] = linhas.map((l) => ({

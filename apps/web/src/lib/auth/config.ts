@@ -89,7 +89,7 @@ function lerProvedor(): AuthProvider {
   if (bruto === "supabase") {
     throw new Error(
       'AUTH_PROVIDER="supabase" ainda não está implementado. O que falta está ' +
-        "em docs/adr/0004-autenticacao.md — é um verificador de token e o " +
+        "em docs/adr/0004-autenticacao.md: é um verificador de token e o " +
         "mapeamento de `user.id` para `professionals.auth_user_id`, sem tocar " +
         "em rota, página ou consulta. Use `password` até lá.",
     );

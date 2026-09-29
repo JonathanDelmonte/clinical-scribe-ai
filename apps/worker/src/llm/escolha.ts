@@ -58,25 +58,25 @@ export type EscolherLlm = (professionalId: string) => Promise<Escolha>;
 // servidor. O detalhe técnico fica no log.
 
 const CHAVE_ILEGIVEL =
-  "A chave de IA cadastrada em Configurações não pôde ser aberta pela estação " +
+  "A chave de IA cadastrada em Ajustes não pôde ser aberta pela estação " +
   "de processamento: a chave-mestra dela (SEGREDO_MESTRE) é diferente da do " +
   "site. Nada foi enviado a nenhum fornecedor. Quem administra a instalação " +
   "precisa usar a mesma SEGREDO_MESTRE nos dois lugares.";
 
 const CHAVE_DE_TREINO =
-  "Sua chave de IA foi cadastrada como de nível gratuito — o fornecedor pode " +
-  "usar o texto da consulta para treinar — e esta instalação só aceita " +
-  "fornecedores com termos de não-treinamento. Cadastre em Configurações → IA " +
+  "Sua chave de IA foi cadastrada como de nível gratuito: o fornecedor pode " +
+  "usar o texto da consulta para treinar, e esta instalação só aceita " +
+  "fornecedores com termos de não-treinamento. Cadastre em Ajustes " +
   "uma chave com esses termos.";
 
 const SEM_MODELO =
   "Nenhum modelo de IA disponível para gerar o documento. Cadastre sua chave " +
-  "em Configurações → IA, ou peça a quem administra a instalação para " +
+  "em Ajustes, ou peça a quem administra a instalação para " +
   "configurar a dela.";
 
 const INSTALACAO_BLOQUEADA =
   "O modelo de IA desta instalação não atende à política de dados exigida " +
-  "aqui (só termos de não-treinamento). Cadastre em Configurações → IA uma " +
+  "aqui (só termos de não-treinamento). Cadastre em Ajustes uma " +
   "chave com esses termos.";
 
 /** Os fornecedores da tela de configurações — mesmos identificadores. */
@@ -151,7 +151,7 @@ export function criarEscolhaDeLlm(opcoes: {
         return {
           ok: false,
           motivo:
-            `O fornecedor "${cadastrada.fornecedor}" cadastrado em Configurações → IA ` +
+            `O fornecedor "${cadastrada.fornecedor}" cadastrado em Ajustes ` +
             `não é suportado por esta estação de processamento. Escolha outro, ou ` +
             `atualize a estação.`,
         };

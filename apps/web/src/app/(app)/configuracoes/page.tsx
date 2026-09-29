@@ -63,7 +63,11 @@ export default async function Configuracoes() {
         </p>
       </header>
 
-      <VoiceEnrollment enrolledAt={me.voiceEnrolledAt?.toISOString() ?? null} />
+      <VoiceEnrollment
+        enrolledAt={me.voiceEnrolledAt?.toISOString() ?? null}
+        nome={me.name}
+        especialidade={me.specialty}
+      />
 
       {/*
        * Só o que a tela precisa. A chave cifrada não atravessa esta fronteira
@@ -100,9 +104,9 @@ export default async function Configuracoes() {
           <dt className="text-[13px] font-semibold text-grafite">Nome</dt>
           <dd>{me.name}</dd>
           <dt className="text-[13px] font-semibold text-grafite">E-mail</dt>
-          <dd className="break-all">{me.email ?? "—"}</dd>
+          <dd className="break-all">{me.email ?? "não informado"}</dd>
           <dt className="text-[13px] font-semibold text-grafite">Especialidade</dt>
-          <dd>{me.specialty ?? "—"}</dd>
+          <dd>{me.specialty ?? "não informada"}</dd>
           <dt className="text-[13px] font-semibold text-grafite">Cargo</dt>
           <dd>{me.role}</dd>
           <dt className="text-[13px] font-semibold text-grafite">Plano</dt>

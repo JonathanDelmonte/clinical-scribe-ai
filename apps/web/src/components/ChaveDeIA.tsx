@@ -107,15 +107,15 @@ export function ChaveDeIA({
 
       <p className="text-[15px] leading-relaxed text-grafite">
         As notas são geradas com <code className="text-tinta">{modeloDoSistema}</code>,
-        que é nosso. Você pode ligar a sua própria chave — do Claude, do ChatGPT, do
-        Gemini ou de qualquer serviço compatível — e aí o consumo vai para a sua conta,
+        que é nosso. Você pode ligar a sua própria chave (do Claude, do ChatGPT, do
+        Gemini ou de qualquer serviço compatível), e aí o consumo vai para a sua conta,
         com os termos que você contratou.
       </p>
 
       {!cofreDisponivel && (
         <p role="alert" className="alerta alerta-erro">
           Este servidor não está preparado para guardar chaves com segurança (
-          <code>SEGREDO_MESTRE</code> ausente). Sem isso não pedimos a sua chave —
+          <code>SEGREDO_MESTRE</code> ausente). Sem isso não pedimos a sua chave:
           guardá-la sem cifra seria pior que não ter o recurso.
         </p>
       )}
@@ -177,7 +177,7 @@ export function ChaveDeIA({
               className="campo font-mono"
             />
             <span className="legenda mt-1.5 block">
-              Guardada cifrada. Depois de salva ela não volta para esta tela — só os
+              Guardada cifrada. Depois de salva, ela não volta para esta tela; só os
               quatro últimos caracteres.
             </span>
           </label>
@@ -204,7 +204,7 @@ export function ChaveDeIA({
                 className="campo font-mono"
               />
               <span className="legenda mt-1.5 block">
-                Precisa ser https — por http a chave e a consulta iriam em texto puro.
+                Precisa ser https: por http, a chave e a consulta iriam em texto puro.
               </span>
             </label>
           )}

@@ -141,7 +141,7 @@ export class AnthropicLlmProvider implements LlmProvider {
   ): LlmCompletion {
     if (dados.stop_reason === "max_tokens") {
       throw new Error(
-        "A resposta do modelo foi cortada no limite de tamanho — a consulta é " +
+        "A resposta do modelo foi cortada no limite de tamanho: a consulta é " +
           "longa demais para uma passada só com este modelo.",
       );
     }
@@ -183,11 +183,11 @@ export class AnthropicLlmProvider implements LlmProvider {
     if (status === 401 || status === 403) {
       return (
         `A Anthropic recusou a chave de IA (HTTP ${status}). Confira a chave em ` +
-        `Configurações → IA — ela pode ter sido revogada ou ficado sem crédito.`
+        `Ajustes, em "Sua chave de IA". Ela pode ter sido revogada ou ficado sem crédito.`
       );
     }
     if (status === 404) {
-      return `A Anthropic não encontrou o modelo "${this.model}" (HTTP 404). Confira o nome em Configurações → IA.`;
+      return `A Anthropic não encontrou o modelo "${this.model}" (HTTP 404). Confira o nome em Ajustes, em "Sua chave de IA".`;
     }
     return `A Anthropic respondeu ${status}: ${mensagem.slice(0, 300)}`;
   }

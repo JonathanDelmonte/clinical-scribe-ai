@@ -164,7 +164,7 @@ export function SegundoMicrofone({
       setFase({
         tipo: "erro",
         mensagem:
-          "gravação curta demais — o segundo celular precisa gravar a consulta inteira",
+          "Gravação curta demais. O segundo celular precisa gravar a consulta inteira.",
       });
       return;
     }
@@ -194,7 +194,7 @@ export function SegundoMicrofone({
     } catch {
       setFase({
         tipo: "erro",
-        mensagem: "sem resposta do servidor — confira a conexão e tente de novo",
+        mensagem: "Sem resposta do servidor. Confira a conexão e tente de novo.",
       });
     }
   }
@@ -215,8 +215,8 @@ export function SegundoMicrofone({
         tipo: "erro",
         mensagem:
           extensao === ""
-            ? "não dá para saber o formato deste arquivo — ele precisa ter extensão"
-            : `arquivos .${extensao} não são de áudio`,
+            ? "Não dá para saber o formato deste arquivo: ele precisa ter extensão."
+            : `Arquivos .${extensao} não são de áudio.`,
       });
       return;
     }
@@ -263,7 +263,7 @@ export function SegundoMicrofone({
     } catch (erro) {
       setFase({
         tipo: "erro",
-        mensagem: `${erro instanceof Error ? erro.message : "falha no envio"} — o arquivo continua no seu computador; pode tentar de novo`,
+        mensagem: `${erro instanceof Error ? erro.message : "Falha no envio"}. O arquivo continua no seu computador; pode tentar de novo.`,
       });
     }
   }
@@ -292,7 +292,7 @@ export function SegundoMicrofone({
           </span>
         ) : estado?.estado === "recusado" ? (
           <span className="ficha ficha-aviso min-h-6 px-2.5 text-[12px]">
-            não aplicado — nada mudou
+            não aplicado, nada mudou
           </span>
         ) : (
           <span className="legenda basis-full">
@@ -358,9 +358,9 @@ export function SegundoMicrofone({
           </p>
           {estado.conteudoDiscorda === true && (
             <p className="font-medium text-aviso">
-              O que foi dito na consulta sugere o contrário da posição informada —
-              talvez o segundo celular estivesse perto de você. Confira a transcrição;
-              se os papéis estiverem invertidos, use “trocar” em Quem é quem.
+              O que foi dito na consulta sugere o contrário da posição informada. Talvez
+              o segundo celular estivesse perto de você. Confira a transcrição; se os
+              papéis estiverem invertidos, use “trocar” em Quem é quem.
             </p>
           )}
           {notaVelha && (
@@ -467,7 +467,7 @@ export function SegundoMicrofone({
           {fase.tipo === "subindo" && (
             <p className="legenda">
               O navegador não lê este formato, então o arquivo vai ao servidor para ser
-              medido — e é apagado assim que a medida sai. Nada para você fazer.
+              medido, e é apagado assim que a medida sai. Nada para você fazer.
             </p>
           )}
         </div>
