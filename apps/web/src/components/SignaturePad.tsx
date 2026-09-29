@@ -18,7 +18,7 @@ export function SignaturePad({
   className,
 }: {
   onChange: (png: Blob | null) => void;
-  className?: string;
+  className?: string | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const desenhando = useRef(false);
@@ -96,7 +96,7 @@ export function SignaturePad({
         ref={canvasRef}
         // `touch-none` é o que impede o navegador de rolar a página enquanto o
         // dedo desenha. Sem isso, no celular, assinar move a tela.
-        className="h-40 w-full touch-none rounded-lg border border-line bg-white"
+        className="h-40 w-full touch-none rounded-[18px] border border-tinta/10 bg-white shadow-[inset_0_1px_3px_rgb(15_27_36/0.05)]"
         onPointerDown={comecar}
         onPointerMove={mover}
         onPointerUp={terminar}
@@ -104,14 +104,12 @@ export function SignaturePad({
         onPointerCancel={terminar}
         aria-label="Área para desenhar a assinatura"
       />
-      <div className="mt-1.5 flex items-center justify-between text-xs text-muted">
-        <span>{temTraco ? "Assinado" : "Assine com o dedo ou o mouse"}</span>
-        <button
-          type="button"
-          onClick={limpar}
-          className="underline underline-offset-2 hover:text-ink"
-        >
-          limpar
+      <div className="mt-2 flex items-center justify-between">
+        <span className="text-[13px] font-medium text-grafite">
+          {temTraco ? "Assinado" : "Assine com o dedo ou o mouse"}
+        </span>
+        <button type="button" onClick={limpar} className="botao-texto">
+          Limpar
         </button>
       </div>
     </div>

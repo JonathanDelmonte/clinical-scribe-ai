@@ -3,6 +3,8 @@
 import { OBJETIVOS_GLOBAIS } from "@scribe/core";
 import { useState } from "react";
 
+import { IconeAlerta, IconeTocar } from "./Icones";
+
 export interface ObjectiveItem {
   path: string;
   text: string;
@@ -72,19 +74,28 @@ export function SessionObjectives({
   }
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-xs font-medium tracking-widest text-muted uppercase">
-        Objetivo da sessão
-      </h2>
+    <section
+      aria-labelledby="titulo-objetivos"
+      className="vidro flex flex-col gap-4 rounded-[26px] px-4 pt-6 pb-5 sm:px-6"
+    >
+      <div className="flex flex-col gap-1 px-1">
+        <h2 id="titulo-objetivos" className="titulo-secao">
+          Além da nota
+        </h2>
+        <p className="legenda">
+          Documentos feitos só com o que foi dito nesta consulta. Toque para pedir.
+        </p>
+      </div>
 
       {canGenerate && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 px-1">
           {OBJETIVOS_GLOBAIS.map((o) => (
             <button
               key={o.slug}
+              type="button"
               onClick={() => void gerar(o.slug)}
               disabled={working || pedindo !== null}
-              className="rounded-lg border border-line px-4 py-2 text-sm hover:border-accent hover:text-accent disabled:opacity-40"
+              className="botao-vidro botao-pequeno"
             >
               {pedindo === o.slug ? "pedindo…" : o.name}
             </button>
@@ -93,7 +104,7 @@ export function SessionObjectives({
       )}
 
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}
@@ -103,13 +114,19 @@ export function SessionObjectives({
         const comLacuna = itens.filter((i) => i.gaps.length > 0);
 
         return (
-          <div key={doc.id} className="rounded-lg border border-line px-5 py-4">
-            <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h3 className="font-medium">{doc.content.title ?? doc.type}</h3>
-              <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
-                rascunho
+          <div
+            key={doc.id}
+            className="rounded-[20px] border border-white/85 bg-white/55 px-4 py-4"
+          >
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h3 className="text-[15.5px] font-semibold">
+                {doc.content.title ?? doc.type}
+              </h3>
+              <span className="ficha ficha-aviso min-h-6 px-2.5 text-[12px]">
+                <span aria-hidden="true" className="ficha__ponto" />
+                Rascunho
               </span>
-              <span className="text-xs text-muted">{doc.model ?? "?"}</span>
+              <span className="legenda ml-auto">{doc.model ?? "?"}</span>
             </div>
 
             {/*
@@ -122,8 +139,8 @@ export function SessionObjectives({
              * automático causaria.
              */}
             {comLacuna.length > 0 && (
-              <p className="mb-3 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-                <strong>
+              <p className="alerta alerta-aviso mb-3">
+                <strong className="font-semibold">
                   {comLacuna.length}{" "}
                   {comLacuna.length === 1 ? "item incompleto" : "itens incompletos"}.
                 </strong>{" "}
@@ -133,12 +150,12 @@ export function SessionObjectives({
             )}
 
             {itens.length === 0 ? (
-              <p className="text-sm text-muted">
+              <p className="text-[14.5px] text-grafite">
                 Nada nesta consulta sustenta este documento. Documento vazio é a
                 resposta correta quando não houve o que registrar.
               </p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="flex flex-col gap-1">
                 {itens.map((item) => {
                   const invalidas = item.sources.filter((s) => !validSegmentIds.has(s));
                   const semAncora = item.sources.length === 0 || invalidas.length > 0;
@@ -149,40 +166,41 @@ export function SessionObjectives({
                   return (
                     <li
                       key={item.path}
-                      className={`rounded-md px-3 py-2 text-sm ${
+                      className={`rounded-2xl border px-3 py-2.5 transition-colors ${
                         semAncora
-                          ? "bg-red-500/10"
+                          ? "border-aviso-ponto/35 bg-[#fff6e3]"
                           : ativa
-                            ? "bg-accent/15"
-                            : "hover:bg-accent/5"
+                            ? "vidro-polido border-white/95"
+                            : "border-transparent hover:bg-white/70"
                       }`}
                     >
                       <button
+                        type="button"
                         onClick={() => onCite(item.sources)}
                         disabled={item.sources.length === 0}
-                        className={`w-full text-left ${
-                          semAncora
-                            ? "text-red-600 dark:text-red-400"
-                            : "cursor-pointer"
+                        className={`w-full text-left text-[15px] leading-relaxed ${
+                          semAncora ? "text-[#5c3e00]" : "cursor-pointer text-tinta"
                         }`}
                       >
                         {item.text}
                       </button>
 
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
                         {semAncora ? (
-                          <span className="font-medium text-red-600 dark:text-red-400">
-                            ⚠ sem âncora no áudio
+                          <span className="ficha ficha-aviso min-h-6 px-2.5 text-[12px]">
+                            <IconeAlerta tamanho={13} traco={2} />
+                            sem âncora no áudio
                           </span>
                         ) : (
-                          <span className="text-muted">
-                            ▸ ouvir {item.sources.length}{" "}
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-viva-texto">
+                            <IconeTocar tamanho={11} />
+                            ouvir {item.sources.length}{" "}
                             {item.sources.length === 1 ? "trecho" : "trechos"}
                           </span>
                         )}
 
                         {item.gaps.length > 0 && (
-                          <span className="text-amber-600 dark:text-amber-400">
+                          <span className="font-medium text-aviso">
                             falta: {item.gaps.join(" · ")}
                           </span>
                         )}

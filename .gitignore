@@ -26,6 +26,10 @@ spikes/**/corpus/
 spikes/**/output/
 spikes/**/.venv/
 
+# Vídeo de fundo da entrada: vem de VIDEO_DE_ENTRADA, nunca do Git. A pasta
+# serve para testar localmente em /video/… (ver docs/DESIGN.md).
+apps/web/public/video/
+
 # Python (spikes)
 __pycache__/
 *.py[cod]

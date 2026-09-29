@@ -103,8 +103,12 @@ export const config = {
    * Sem esta exclusão o proxy roda em cada CSS, ícone e chunk de JavaScript —
    * e, pior, um usuário sem sessão receberia um redirecionamento no lugar do
    * arquivo, o que quebra a própria tela de login que ele precisa ver.
+   *
+   * `video/` entra pela mesma razão: o vídeo de fundo da tela de entrada,
+   * quando servido de `public/video/`, é pedido justamente por quem ainda não
+   * entrou.
    */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|icones/|offline.html|manifest.webmanifest|sw.js).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|icones/|video/|offline.html|manifest.webmanifest|sw.js).*)",
   ],
 };

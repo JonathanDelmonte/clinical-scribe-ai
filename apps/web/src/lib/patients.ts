@@ -24,6 +24,22 @@ export function padraoDeBusca(termo: string): string | null {
 }
 
 /**
+ * O texto na forma em que a busca compara: minúsculo e sem acento.
+ *
+ * Quem digita "joao" procura o João. Os acentos saem pela decomposição
+ * Unicode — a letra e o acento viram dois caracteres, e o acento (categoria
+ * "marca", `\p{M}`) é descartado. Escrito com a classe e não com o intervalo
+ * de caracteres combinantes, que ferramentas de edição costumam comer.
+ */
+export function normalizarParaBusca(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim();
+}
+
+/**
  * Idade em anos completos.
  *
  * A conta é feita em partes de data (ano, mês, dia) e não em milissegundos:

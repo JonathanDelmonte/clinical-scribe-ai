@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { IconeSeta } from "./Icones";
+
 type Modo = "entrar" | "cadastrar";
 
 /**
@@ -62,14 +64,13 @@ export function AuthForm({ modo, destino }: { modo: Modo; destino: string }) {
     <form onSubmit={enviar} className="space-y-4">
       {cadastro && (
         <label className="block">
-          <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-            Seu nome
-          </span>
+          <span className="rotulo">Seu nome</span>
           <input
-            className="w-full rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+            className="campo"
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             autoComplete="name"
+            placeholder="Nome e sobrenome"
             maxLength={200}
             required
           />
@@ -77,28 +78,25 @@ export function AuthForm({ modo, destino }: { modo: Modo; destino: string }) {
       )}
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          E-mail
-        </span>
+        <span className="rotulo">E-mail</span>
         <input
           type="email"
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+          className="campo"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           inputMode="email"
+          placeholder="voce@consultorio.com.br"
           maxLength={320}
           required
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Senha
-        </span>
+        <span className="rotulo">Senha</span>
         <input
           type="password"
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+          className="campo"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           // `new-password` no cadastro faz o gerenciador de senhas OFERECER uma
@@ -111,7 +109,7 @@ export function AuthForm({ modo, destino }: { modo: Modo; destino: string }) {
           required
         />
         {cadastro && (
-          <span className="mt-1 block text-xs text-muted">
+          <span className="legenda mt-1.5 block">
             Pelo menos 10 caracteres. Uma frase que só você saiba vale mais que símbolos
             difíceis de digitar no celular.
           </span>
@@ -121,13 +119,16 @@ export function AuthForm({ modo, destino }: { modo: Modo; destino: string }) {
       <button
         type="submit"
         disabled={enviando}
-        className="w-full rounded-lg bg-accent px-5 py-2.5 font-medium text-surface disabled:opacity-40"
+        className="botao-principal mt-2 w-full justify-between"
       >
         {enviando ? "Aguarde…" : cadastro ? "Criar conta" : "Entrar"}
+        <span className="botao-icone">
+          <IconeSeta tamanho={19} traco={1.9} />
+        </span>
       </button>
 
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}

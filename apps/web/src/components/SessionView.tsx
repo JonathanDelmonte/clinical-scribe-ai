@@ -1,8 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { desenharHelice, duracaoDaConversa, posicaoNaConversa } from "@/lib/helice";
+
 import { ClinicalNote, type NoteDoc } from "./ClinicalNote";
+import { FichaDeEstado } from "./FichaDeEstado";
+import { Helice, LegendaDaHelice } from "./Helice";
+import { IconeCheck, IconeExportar } from "./Icones";
 import { SessionObjectives, type ObjectiveDoc } from "./SessionObjectives";
 import { SegundoMicrofone } from "./SegundoMicrofone";
 import { SessionProgress } from "./SessionProgress";
@@ -46,17 +52,6 @@ interface SessionData {
   objectives: ObjectiveDoc[];
   objectiveJob: { status: string; error: string | null } | null;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "rascunho",
-  recording: "gravando",
-  uploaded: "na fila",
-  transcribing: "transcrevendo",
-  generating: "gerando nota",
-  ready_for_review: "pronta para revisão",
-  approved: "aprovada",
-  failed: "falhou",
-};
 
 /** Estados em que ainda há trabalho acontecendo no worker. */
 const IN_PROGRESS = new Set(["uploaded", "transcribing", "generating"]);
@@ -192,10 +187,10 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   }
 
   if (error !== null && data === null) {
-    return <p className="text-sm text-red-500">{error}</p>;
+    return <p className="alerta alerta-erro">{error}</p>;
   }
   if (data === null) {
-    return <p className="text-sm text-muted">carregando…</p>;
+    return <p className="legenda">carregando…</p>;
   }
 
   const { session, segments, note, noteJob, objectives, objectiveJob } = data;
@@ -206,8 +201,31 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   const idsValidos = new Set(segments.map((s) => s.id));
   const temProfissional = segments.some((s) => s.role === "professional");
 
+  // ---- a hélice: o desenho, as frases citadas e o trecho em destaque ------
+  const inicioDoTrecho = new Map(segments.map((s) => [s.id, s.startMs]));
+  const total = duracaoDaConversa(segments);
+  const desenho = desenharHelice(segments);
+  const inicioDe = (fontes: Iterable<string>): number | null => {
+    let menor = Number.POSITIVE_INFINITY;
+    for (const f of fontes) menor = Math.min(menor, inicioDoTrecho.get(f) ?? Infinity);
+    return Number.isFinite(menor) ? menor : null;
+  };
+  const contas = (note?.content.sections ?? [])
+    .flatMap((secao) => secao.statements)
+    .map((afirmacao) => inicioDe(afirmacao.sources))
+    .filter((ms): ms is number => ms !== null)
+    .map((ms) => posicaoNaConversa(ms, total));
+  const inicioAtivo = inicioDe(fontesAtivas);
+  const marcador =
+    inicioAtivo === null
+      ? null
+      : {
+          posicao: posicaoNaConversa(inicioAtivo, total),
+          rotulo: timestamp(inicioAtivo),
+        };
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/*
        * O agradecimento fica FIXO no rodapé, e não ao lado do trecho.
        *
@@ -218,56 +236,57 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       {avisoCorrecao !== null && (
         <div
           role="status"
-          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-lg bg-accent px-4 py-3 text-sm text-surface shadow-lg sm:inset-x-auto sm:right-6 sm:left-auto"
+          className="fixed inset-x-4 bottom-28 z-50 mx-auto flex max-w-md gap-3 rounded-3xl bg-tinta px-5 py-4 text-sm text-perola shadow-[0_24px_50px_-20px_rgb(15_27_36/0.6)] sm:inset-x-auto sm:right-6 sm:left-auto lg:bottom-6"
         >
-          <strong>✓ {avisoCorrecao}</strong>
-          <span className="mt-0.5 block text-xs opacity-90">
-            Guardamos o que a máquina tinha entendido junto com a sua correção. É assim
-            que o reconhecimento e a separação de vozes melhoram.
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-menta text-tinta">
+            <IconeCheck tamanho={16} traco={2.4} />
+          </span>
+          <span>
+            <strong className="font-semibold">{avisoCorrecao}</strong>
+            <span className="mt-0.5 block text-[13px] text-perola/80">
+              Guardamos o que a máquina tinha entendido junto com a sua correção. É
+              assim que o reconhecimento e a separação de vozes melhoram.
+            </span>
           </span>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-        <span
-          className={`inline-flex items-center gap-2 rounded px-2.5 py-1 ${
-            session.status === "failed"
-              ? "bg-red-500/15 text-red-500"
-              : working
-                ? "bg-accent/10 text-accent"
-                : "bg-accent/15 text-accent"
-          }`}
-        >
-          {working && <span className="size-2 animate-pulse rounded-full bg-current" />}
-          {STATUS_LABEL[session.status] ?? session.status}
-        </span>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <FichaDeEstado status={session.status} />
+        {session.durationMs !== null && (
+          <span className="text-[14.5px] text-grafite">
+            {Math.max(1, Math.round(session.durationMs / 60_000))} min de áudio
+          </span>
+        )}
         {session.engineUsed !== null && (
-          <span className="text-muted">
-            motor <strong className="text-ink">{session.engineUsed}</strong>
+          <span className="legenda">
+            motor {session.engineUsed}
             {session.engineChoice !== null &&
               session.engineChoice !== session.engineUsed && (
                 <> · pedido {session.engineChoice}, descartado</>
               )}
           </span>
         )}
-        {session.durationMs !== null && (
-          <span className="text-muted">
-            {(session.durationMs / 60_000).toFixed(1)} min de áudio
-          </span>
+        {(session.status === "ready_for_review" || session.status === "approved") && (
+          <Link
+            href={`/exportar/${session.id}`}
+            className="botao-vidro botao-pequeno ml-auto"
+          >
+            <IconeExportar tamanho={18} />
+            Exportar
+          </Link>
         )}
       </div>
 
       {session.objectiveText !== null && (
-        <p className="rounded-lg border border-line px-4 py-3 text-sm">
-          <span className="text-muted">objetivo: </span>
+        <p className="alerta alerta-info">
+          <span className="font-semibold text-tinta">Pedido desta consulta: </span>
           {session.objectiveText}
         </p>
       )}
 
       {session.failureReason !== null && (
-        <p
-          role="alert"
-          className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-500"
-        >
+        <p role="alert" className="alerta alerta-erro">
           {session.failureReason}
         </p>
       )}
@@ -284,30 +303,29 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         />
       )}
 
-      {session.roleAssignment !== null && session.roleAssignment.length > 0 && (
-        <SpeakerRoles
-          sessionId={session.id}
-          assignment={session.roleAssignment}
-          onChanged={() => setRecarga((n) => n + 1)}
-        />
-      )}
-
-      {/*
-       * Logo abaixo de "Quem é quem", porque responde à mesma pergunta — e é
-       * para onde o olho vai quando a separação por voz errou.
-       */}
-      {segments.length > 0 && !working && (
-        <SegundoMicrofone
-          sessionId={session.id}
-          estadoGravado={session.channelDiarization}
-          bloqueio={
-            note?.approvedAt != null
-              ? "A nota desta consulta já foi aprovada: quem falou não muda depois da assinatura."
-              : null
-          }
-          notaGeradaEm={note?.createdAt ?? null}
-          onAplicado={() => setRecarga((n) => n + 1)}
-        />
+      {desenho !== null && !working && (
+        <section
+          aria-labelledby="titulo-helice"
+          className="vidro rounded-[26px] px-5 pt-5 pb-4 sm:px-6"
+        >
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="titulo-helice" className="titulo-secao">
+              Quem falou, e quando
+            </h2>
+            <LegendaDaHelice />
+          </div>
+          <Helice
+            desenho={desenho}
+            contas={contas}
+            marcador={marcador}
+            className="mt-7 h-[72px]"
+            rotulo="Hélice da conversa: a fita turquesa engrossa quando você fala, a pêssego quando o paciente fala. As contas marcam os momentos citados pela nota."
+          />
+          <div className="mt-2 flex justify-between text-[12.5px] text-nevoa tabular-nums">
+            <span>00:00</span>
+            <span>{timestamp(total)}</span>
+          </div>
+        </section>
       )}
 
       {/*
@@ -332,106 +350,147 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         className="hidden"
       />
 
-      {note !== null && (
-        <ClinicalNote
-          key={note.id}
-          note={note}
-          sessionId={sessionId}
-          validSegmentIds={idsValidos}
-          activeSources={fontesAtivas}
-          onCite={ouvir}
-          onSaved={() => setRecarga((n) => n + 1)}
-        />
-      )}
-
-      {segments.length > 0 && !working && note?.approvedAt == null && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => void gerarNota()}
-            disabled={notaEmAndamento || !temProfissional}
-            className="rounded-lg bg-accent px-5 py-2.5 font-medium text-surface disabled:opacity-40"
-          >
-            {notaEmAndamento
-              ? "Gerando nota…"
-              : note !== null
-                ? "Gerar nota de novo"
-                : "Gerar nota clínica"}
-          </button>
-
-          {!temProfissional && (
-            <span className="text-xs text-muted">
-              confirme quem é o profissional antes de gerar
-            </span>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-6">
+          {note !== null && (
+            <ClinicalNote
+              key={note.id}
+              note={note}
+              sessionId={sessionId}
+              validSegmentIds={idsValidos}
+              activeSources={fontesAtivas}
+              onCite={ouvir}
+              tempoDe={(fontes) => {
+                const ms = inicioDe(fontes);
+                return ms === null ? null : timestamp(ms);
+              }}
+              onSaved={() => setRecarga((n) => n + 1)}
+            />
           )}
-          {note !== null && !notaEmAndamento && (
-            <span className="text-xs text-muted">a nota atual fica no histórico</span>
+
+          {segments.length > 0 && !working && note?.approvedAt == null && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void gerarNota()}
+                disabled={notaEmAndamento || !temProfissional}
+                className={note === null ? "botao-principal" : "botao-vidro"}
+              >
+                {notaEmAndamento
+                  ? "Escrevendo a nota…"
+                  : note !== null
+                    ? "Escrever a nota de novo"
+                    : "Escrever a nota clínica"}
+              </button>
+
+              {!temProfissional && (
+                <span className="legenda">
+                  confirme quem é o profissional antes de gerar
+                </span>
+              )}
+              {note !== null && !notaEmAndamento && (
+                <span className="legenda">a nota atual fica no histórico</span>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {erroNota !== null && (
-        <p
-          role="alert"
-          className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-500"
-        >
-          {erroNota}
-        </p>
-      )}
-      {noteJob?.status === "failed" && noteJob.error !== null && (
-        <p
-          role="alert"
-          className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-500"
-        >
-          A geração da nota falhou: {noteJob.error}
-        </p>
-      )}
-
-      {segments.length > 0 && !working && (
-        <SessionObjectives
-          sessionId={sessionId}
-          documents={objectives ?? []}
-          working={objectiveJob !== null && JOB_ATIVO.has(objectiveJob.status)}
-          canGenerate={temProfissional}
-          validSegmentIds={idsValidos}
-          activeSources={fontesAtivas}
-          onCite={ouvir}
-          onQueued={() => setRecarga((n) => n + 1)}
-        />
-      )}
-
-      {segments.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-xs font-medium tracking-widest text-muted uppercase">
-            Transcrição · {segments.length} trechos · {speakers.length}{" "}
-            {speakers.length === 1 ? "falante" : "falantes"}
-          </h2>
-
-          {speakers.length === 1 && (
-            <p className="mb-4 rounded-lg border border-line px-4 py-3 text-xs text-muted">
-              Um único falante detectado. A separação de vozes depende do pyannote, que
-              exige um token do Hugging Face — sem ele o serviço transcreve normalmente
-              e rotula tudo como <code className="text-ink">SPEAKER_00</code>.
+          {erroNota !== null && (
+            <p role="alert" className="alerta alerta-erro">
+              {erroNota}
+            </p>
+          )}
+          {noteJob?.status === "failed" && noteJob.error !== null && (
+            <p role="alert" className="alerta alerta-erro">
+              A geração da nota falhou: {noteJob.error}
             </p>
           )}
 
-          <ol className="space-y-1.5">
-            {segments.map((s) => (
-              <TrechoEditavel
-                key={s.id}
-                sessionId={sessionId}
-                trecho={s}
-                destacado={fontesAtivas.has(s.id)}
-                timestamp={timestamp(s.startMs)}
-                onOuvir={() => ouvir([s.id])}
-                onCorrigido={(msg) => {
-                  setAvisoCorrecao(msg);
-                  setRecarga((n) => n + 1);
-                }}
-              />
-            ))}
-          </ol>
-        </section>
-      )}
+          {segments.length > 0 && !working && (
+            <SessionObjectives
+              sessionId={sessionId}
+              documents={objectives ?? []}
+              working={objectiveJob !== null && JOB_ATIVO.has(objectiveJob.status)}
+              canGenerate={temProfissional}
+              validSegmentIds={idsValidos}
+              activeSources={fontesAtivas}
+              onCite={ouvir}
+              onQueued={() => setRecarga((n) => n + 1)}
+            />
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-5">
+          {session.roleAssignment !== null && session.roleAssignment.length > 0 && (
+            <SpeakerRoles
+              sessionId={session.id}
+              assignment={session.roleAssignment}
+              onChanged={() => setRecarga((n) => n + 1)}
+            />
+          )}
+
+          {/*
+           * Logo abaixo de "Quem é quem", porque responde à mesma pergunta — e é
+           * para onde o olho vai quando a separação por voz errou.
+           */}
+          {segments.length > 0 && !working && (
+            <SegundoMicrofone
+              sessionId={session.id}
+              estadoGravado={session.channelDiarization}
+              bloqueio={
+                note?.approvedAt != null
+                  ? "A nota desta consulta já foi aprovada: quem falou não muda depois da assinatura."
+                  : null
+              }
+              notaGeradaEm={note?.createdAt ?? null}
+              onAplicado={() => setRecarga((n) => n + 1)}
+            />
+          )}
+
+          {segments.length > 0 && (
+            <section
+              aria-labelledby="titulo-conversa"
+              className="vidro flex flex-col gap-3 rounded-[26px] px-3 pt-5 pb-3"
+            >
+              <div className="flex flex-col gap-0.5 px-3">
+                <h2 id="titulo-conversa" className="titulo-secao">
+                  Na conversa
+                </h2>
+                <span className="legenda">
+                  {segments.length} trechos · {speakers.length}{" "}
+                  {speakers.length === 1 ? "voz" : "vozes"} · toque num trecho para
+                  corrigir
+                </span>
+              </div>
+
+              {speakers.length === 1 && (
+                <p className="alerta alerta-aviso mx-2 text-[13px]">
+                  Um único falante detectado. A separação de vozes depende do pyannote,
+                  que exige um token do Hugging Face — sem ele o serviço transcreve
+                  normalmente e rotula tudo como{" "}
+                  <code className="text-tinta">SPEAKER_00</code>.
+                </p>
+              )}
+
+              <ol className="flex flex-col gap-1 lg:max-h-[calc(100dvh-14rem)] lg:overflow-y-auto">
+                {segments.map((s) => (
+                  <TrechoEditavel
+                    key={s.id}
+                    sessionId={sessionId}
+                    trecho={s}
+                    destacado={fontesAtivas.has(s.id)}
+                    timestamp={timestamp(s.startMs)}
+                    onOuvir={() => ouvir([s.id])}
+                    onCorrigido={(msg) => {
+                      setAvisoCorrecao(msg);
+                      setRecarga((n) => n + 1);
+                    }}
+                  />
+                ))}
+              </ol>
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

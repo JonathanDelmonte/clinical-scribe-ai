@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { dataParaExibicao, idadeEmAnos } from "@/lib/patients";
 
+import { IconeEditar } from "./Icones";
+
 export interface PatientDetailsProps {
   id: string;
   nome: string;
@@ -95,54 +97,54 @@ export function PatientDetails(props: PatientDetailsProps) {
 
   if (!editando) {
     return (
-      <div className="rounded-lg border border-line px-5 py-4">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-          <dt className="text-muted">nascimento</dt>
+      <div className="rounded-[20px] border border-white/85 bg-white/50 px-5 py-4">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[15px]">
+          <dt className="text-[13px] font-semibold text-grafite">Nascimento</dt>
           <dd>
             {props.nascimento === ""
               ? "—"
               : `${dataParaExibicao(props.nascimento)}${idade === null ? "" : ` · ${idade} anos`}`}
           </dd>
-          <dt className="text-muted">observações</dt>
-          <dd className="whitespace-pre-wrap">
+          <dt className="text-[13px] font-semibold text-grafite">Observações</dt>
+          <dd className="leading-relaxed whitespace-pre-wrap">
             {props.observacoes === "" ? "—" : props.observacoes}
           </dd>
         </dl>
 
-        <div className="mt-4 flex flex-wrap items-center gap-4">
+        <div className="mt-4 flex flex-wrap items-center gap-5">
           <button
+            type="button"
             onClick={() => setEditando(true)}
-            className="text-sm text-accent hover:underline"
+            className="botao-texto"
           >
-            editar ficha
+            <IconeEditar tamanho={16} />
+            Editar ficha
           </button>
 
           <button
+            type="button"
             onClick={() => void arquivar()}
             disabled={ocupado}
-            className={`text-sm ${
-              confirmandoArquivar
-                ? "font-medium text-red-500"
-                : "text-muted underline underline-offset-2 hover:text-ink"
-            }`}
+            className={`botao-texto ${confirmandoArquivar ? "perigo font-semibold" : ""}`}
           >
             {confirmandoArquivar
               ? `Confirmar: arquivar ${props.nome}`
-              : "arquivar paciente"}
+              : "Arquivar paciente"}
           </button>
 
           {confirmandoArquivar && (
             <button
+              type="button"
               onClick={() => setConfirmandoArquivar(false)}
-              className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+              className="botao-texto"
             >
-              cancelar
+              Cancelar
             </button>
           )}
         </div>
 
         {confirmandoArquivar && (
-          <p className="mt-2 text-xs text-muted">
+          <p className="legenda mt-2">
             O paciente sai da lista.{" "}
             {props.sessoes === 0
               ? "Não há consultas gravadas."
@@ -151,7 +153,7 @@ export function PatientDetails(props: PatientDetailsProps) {
         )}
 
         {erro !== null && (
-          <p role="alert" className="mt-2 text-sm text-red-500">
+          <p role="alert" className="alerta alerta-erro mt-3">
             {erro}
           </p>
         )}
@@ -162,14 +164,12 @@ export function PatientDetails(props: PatientDetailsProps) {
   return (
     <form
       onSubmit={salvar}
-      className="space-y-4 rounded-lg border border-line px-5 py-4"
+      className="space-y-4 rounded-[20px] border border-white/85 bg-white/50 px-5 py-5"
     >
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Nome
-        </span>
+        <span className="rotulo">Nome</span>
         <input
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+          className="campo"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           maxLength={200}
@@ -178,39 +178,35 @@ export function PatientDetails(props: PatientDetailsProps) {
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Nascimento
-        </span>
+        <span className="rotulo">Nascimento</span>
         <input
           type="date"
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+          className="campo"
           value={nascimento}
           onChange={(e) => setNascimento(e.target.value)}
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Observações
-        </span>
+        <span className="rotulo">Observações</span>
         <textarea
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+          className="campo"
           rows={3}
           value={observacoes}
           onChange={(e) => setObservacoes(e.target.value)}
           maxLength={5000}
         />
-        <span className="mt-1 block text-xs text-muted">
+        <span className="legenda mt-1.5 block">
           Contexto permanente do paciente — alergias, preferências, o que você quer ter
           à mão em toda consulta. Não substitui a nota clínica.
         </span>
       </label>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <button
           type="submit"
           disabled={ocupado}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
+          className="botao-principal botao-pequeno"
         >
           {ocupado ? "Salvando…" : "Salvar"}
         </button>
@@ -223,14 +219,14 @@ export function PatientDetails(props: PatientDetailsProps) {
             setObservacoes(props.observacoes);
             setErro(null);
           }}
-          className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+          className="botao-texto"
         >
-          cancelar
+          Cancelar
         </button>
       </div>
 
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}

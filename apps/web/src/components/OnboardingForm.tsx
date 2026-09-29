@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { IconeSeta } from "./Icones";
 import { SignaturePad } from "./SignaturePad";
 
 /**
@@ -96,29 +97,25 @@ export function OnboardingForm({
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-6">
+    <form onSubmit={enviar} className="flex flex-col gap-6">
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Como você assina
-        </span>
+        <span className="rotulo">Como você assina</span>
         <input
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+          className="campo"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           maxLength={200}
           required
         />
-        <span className="mt-1 block text-xs text-muted">
+        <span className="legenda mt-1.5 block">
           É o nome que aparece nos documentos exportados.
         </span>
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Especialidade
-        </span>
+        <span className="rotulo">Especialidade</span>
         <select
-          className="w-full rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+          className="campo"
           value={especialidade}
           onChange={(e) => setEspecialidade(e.target.value)}
           required
@@ -130,18 +127,14 @@ export function OnboardingForm({
             </option>
           ))}
         </select>
-        <span className="mt-1 block text-xs text-muted">
-          Define o modelo da nota clínica.
-        </span>
+        <span className="legenda mt-1.5 block">Define o modelo da nota clínica.</span>
       </label>
 
       <div>
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Registro profissional (opcional)
-        </span>
+        <span className="rotulo">Registro profissional (opcional)</span>
         <div className="flex gap-2">
           <select
-            className="w-32 rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+            className="campo w-36 shrink-0"
             value={conselho}
             onChange={(e) => setConselho(e.target.value)}
             aria-label="Conselho"
@@ -154,7 +147,7 @@ export function OnboardingForm({
             ))}
           </select>
           <input
-            className="min-w-0 flex-1 rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm"
+            className="campo min-w-0 flex-1"
             placeholder="número e UF"
             value={registro}
             onChange={(e) => setRegistro(e.target.value)}
@@ -165,29 +158,26 @@ export function OnboardingForm({
       </div>
 
       <div>
-        <span className="mb-1 block text-xs font-medium tracking-widest text-muted uppercase">
-          Assinatura (opcional)
-        </span>
+        <span className="rotulo">Assinatura (opcional)</span>
         <SignaturePad onChange={setAssinatura} />
-        <span className="mt-1 block text-xs text-muted">
+        <span className="legenda mt-1.5 block">
           Aparece no rodapé do PDF. Não substitui assinatura digital ICP-Brasil — o
           produto exporta para o prontuário que você já usa.
         </span>
       </div>
 
-      <button
-        type="submit"
-        disabled={enviando}
-        className="w-full rounded-lg bg-accent px-5 py-2.5 font-medium text-surface disabled:opacity-40"
-      >
-        {enviando ? "Salvando…" : "Começar a usar"}
-      </button>
-
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}
+
+      <button type="submit" disabled={enviando} className="botao-principal self-start">
+        {enviando ? "Salvando…" : primeiraVez ? "Continuar" : "Salvar perfil"}
+        <span className="botao-icone" aria-hidden="true">
+          <IconeSeta tamanho={18} />
+        </span>
+      </button>
     </form>
   );
 }

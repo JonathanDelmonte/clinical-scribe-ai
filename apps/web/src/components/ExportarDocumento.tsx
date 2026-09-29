@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { IconeCheck, IconeCopiar, IconeDocumento, IconeExportar } from "./Icones";
+
 export interface DocumentoExportavel {
   /** `"nota"` ou o ID de um documento de objetivo. */
   readonly chave: string;
@@ -85,35 +87,59 @@ export function ExportarDocumento({
 
   if (documentos.length === 0) {
     return (
-      <p className="text-sm text-muted">
+      <p className="vidro rounded-[22px] px-5 py-5 text-[15px] text-grafite">
         Esta consulta ainda não tem documentos gerados.
       </p>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {documentos.map((doc) => (
         <div
           key={doc.chave}
-          className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-4 py-3"
+          className="vidro flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[24px] px-5 py-4"
         >
-          <span className="min-w-0 flex-1">
-            <span className="block font-medium">{doc.titulo}</span>
-            <span className="block text-xs text-muted">
-              {doc.aprovado ? "aprovado" : "rascunho — revise antes de usar"} ·{" "}
+          <span
+            aria-hidden="true"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-viva-claro text-viva-texto"
+          >
+            <IconeDocumento tamanho={20} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[16px] font-semibold">{doc.titulo}</span>
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-nevoa">
+              <span className={`ficha ${doc.aprovado ? "ficha-ok" : "ficha-aviso"}`}>
+                <span aria-hidden="true" className="ficha__ponto" />
+                {doc.aprovado ? "Aprovado" : "Rascunho"}
+              </span>
+              {doc.aprovado ? "" : "revise antes de usar · "}
               {new Date(doc.criadoEm).toLocaleString("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
+                // Fuso fixo: o servidor roda em UTC e o navegador no fuso de
+                // quem abre; sem isto, a hora do servidor e a do navegador
+                // divergem e a hidratação do React falha.
+                timeZone: "America/Sao_Paulo",
               })}
             </span>
           </span>
 
           <button
             onClick={() => void copiar(doc)}
-            className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-accent"
+            className="botao-vidro botao-pequeno"
           >
-            {copiado === doc.chave ? "copiado ✓" : "copiar para o prontuário"}
+            {copiado === doc.chave ? (
+              <>
+                <IconeCheck tamanho={16} />
+                Copiado
+              </>
+            ) : (
+              <>
+                <IconeCopiar tamanho={16} />
+                Copiar para o prontuário
+              </>
+            )}
           </button>
 
           {/*
@@ -124,15 +150,16 @@ export function ExportarDocumento({
            */}
           <a
             href={`/api/sessions/${sessionId}/exportar?formato=pdf&documento=${encodeURIComponent(doc.chave)}`}
-            className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-surface"
+            className="botao-vidro botao-pequeno"
           >
-            baixar PDF
+            <IconeExportar tamanho={16} />
+            Baixar PDF
           </a>
         </div>
       ))}
 
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}

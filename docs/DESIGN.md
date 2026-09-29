@@ -1,7 +1,7 @@
 # Design — conceito "Respiro"
 
-> **Status:** conceito para aprovação · 29/09/2026 · nenhuma tela do código mudou ainda
-> **Protótipo navegável:** [canvas "Consulta Viva — Conceito"](https://claude.ai/artifact/9oUpFoYkXSKS6xRXWH9VJ6) (privado até ser compartilhado pelo menu *Share*)
+> **Status:** aplicado no código · 29/09/2026 · ver *O que foi aplicado* no fim
+> **Protótipo navegável:** [canvas "Consulta Viva — Conceito"](https://claude.ai/artifact/9oUpFoYkXSKS6xRXWH9VJ6) (privado até ser compartilhado pelo menu *Share*). O canvas é a primeira versão do conceito: ainda usa a fonte antiga e o Orbe na tela de entrada. Onde ele e este arquivo divergirem, vale este arquivo.
 
 Este documento guarda as decisões do conceito visual, para que a aplicação no
 código siga uma régua só. O protótipo mostra; este arquivo explica e dá os
@@ -18,7 +18,8 @@ palavra vira três coisas ao mesmo tempo:
 2. **A IA que respira** — a Viva tem um corpo, o *Orbe*, que respira devagar
    quando está em repouso e reage quando ouve, pensa e fala.
 3. **A promessa do produto** — o profissional volta a olhar para o paciente.
-   Na tela de entrada: *"Olhe para o paciente. A gente escreve."*
+   Na tela de entrada: *"Olhe para o paciente. A gente escreve."*, sobre um
+   vídeo de fundo.
 
 Premium pela calma; artístico pelos detalhes. Vidro sobre luz, nenhuma palavra
 a mais.
@@ -31,7 +32,7 @@ a mais.
 | Uma ação principal por tela | *Fluência de processamento*: o que é fácil de processar parece mais bonito, mais familiar e menos arriscado. Tela carregada cansa a memória de trabalho e piora a impressão estética. |
 | Base fria (azul-petróleo, menta, névoa) + um toque quente (pêssego) | Paletas frias passam confiança e calma em saúde; o quente acolhe e marca o humano (a voz do paciente). |
 | Vidro com contraste garantido | O risco do vidro é o texto ilegível. Regra: texto ≥ 4,5:1, borda de 1 px sempre, nada "movimentado" atrás de texto. |
-| Serifa nos momentos humanos, sans no resto | Serifa comunica autoridade e atemporalidade; em itálico, calor. A sans cuida de tudo o que se lê e se toca. |
+| Uma família só, com o peso fazendo a hierarquia | Menos ruído que um par de fontes; o contraste entre o fino (títulos grandes) e o semibold (o que se toca) já separa o que é para sentir do que é para usar. |
 | Estados sempre em palavras | "Pronta para revisar" é entendido por qualquer pessoa; um ícone sozinho, não. |
 
 ## As regras que mantêm o premium
@@ -43,7 +44,8 @@ a mais.
 3. **Nada de jargão na tela.** "cargo professional · plano free · motor local"
    sai da tela inicial; plano e uso vão para a navegação e para *Uso e plano*.
 4. **A IA só aparece onde está trabalhando.** O Orbe grande é reservado à
-   consulta ao vivo, à Viva e ao cartão "Pronta para ouvir".
+   consulta ao vivo, à Viva e ao cartão "Pronta para ouvir" do Início. **Não
+   aparece na tela de entrada** — lá o protagonista é o vídeo.
 5. **Movimento lento e com propósito** — respiração de 6,5 s, uma entrada
    orquestrada por tela. Tudo desliga com *reduzir movimento* do sistema.
 6. **Toque ≥ 44 px**, sempre `<button>`, `<a>` e `<label>` de verdade.
@@ -81,9 +83,16 @@ depois da aprovação.
 
 ## Tipografia
 
-- **Instrument Serif** — títulos e momentos humanos: saudação, nomes, o
-  cronômetro da consulta. Itálico para o toque pessoal (*Ana*, *Viva*).
-- **Instrument Sans** — interface, textos, números.
+- **Host Grotesk** (Google Fonts, licença OFL), a única família. Servida pelo
+  próprio app via `next/font` — nenhum pedido ao Google no navegador de quem
+  usa.
+- **Por que ela.** A primeira versão usava o par Instrument Serif + Instrument
+  Sans, e a leitura foi certeira: é a cara de "site gerado", o par que aparece
+  em todo projeto de saúde feito às pressas. A Host Grotesk é uma grotesca
+  contemporânea, de desenho mais humano que as geométricas, e aguenta do
+  corpo de 13 px ao título de 80 px sem trocar de família.
+- **Pesos:** 300 nos números grandes (cronômetro, minutos), 400 nos títulos,
+  500–600 no que se toca e nos rótulos. Nada de itálico.
 - Escala: 80 · 52 · 32 · 24 · 16 · 13 px. Corpo em 15–16 px, legenda em 12,5–13 px.
 
 ## Vidro — dois acabamentos, nunca mais
@@ -116,8 +125,8 @@ botões.
 (pulsa com a voz), *pausado* (perde a cor). É o rosto da Viva.
 
 **A Linha Viva.** Uma linha só que começa como batimento, vira onda de voz e
-termina em escrita cursiva: a consulta virando texto. Aparece na entrada, em
-estados vazios e enquanto a nota é escrita — nunca em tela de trabalho.
+termina em escrita cursiva: a consulta virando texto. Aparece em estados
+vazios — nunca em tela de trabalho.
 
 **A Hélice da conversa.** Cada consulta ganha uma assinatura visual: duas fitas
 entrelaçadas, uma turquesa (você) e uma pêssego (paciente), que engrossam quando
@@ -137,27 +146,49 @@ citações da nota já apontam para os trechos.
 - **Barra da Viva:** no rodapé do Início, "Pergunte à Viva" leva direto ao
   assistente, digitando ou falando.
 
-## As telas e o que elas mudam no código
+## A tela de entrada e o vídeo de fundo
 
-| Tela do conceito | Hoje | O que muda |
+`/entrar` e `/cadastrar` dividem um layout (`app/(acesso)/layout.tsx`): a
+frase do produto à esquerda, o cartão de vidro à direita, e atrás de tudo um
+vídeo.
+
+- **O vídeo não mora no repositório.** Ele vem de um endereço na variável
+  `VIDEO_DE_ENTRADA` (e a imagem de capa, de `VIDEO_DE_ENTRADA_CAPA`), lidas
+  no servidor. O Git guardaria cada versão de um arquivo de megabytes para
+  sempre.
+- **Onde hospedar:** qualquer endereço público servido com HTTPS e cache —
+  um bucket público de storage ou uma CDN. Para testar no próprio app, um
+  arquivo em `apps/web/public/video/` responde em `/video/…` (o `proxy.ts`
+  deixa esse caminho passar sem login).
+- **Como preparar:** MP4 (H.264) ou WebM, 720p ou 1080p, 10–20 s em loop, sem
+  áudio, idealmente abaixo de 5 MB. Tons claros e sem texto dentro do vídeo:
+  por cima vai um véu claro, mais denso atrás da frase, e o texto em Tinta
+  precisa continuar legível em qualquer quadro.
+- **Quando não toca:** com *reduzir movimento* ou *economia de dados* ligados
+  o vídeo fica parado na capa; sem a variável, ou se o arquivo falhar, a tela
+  usa a luz da atmosfera. Nada quebra.
+
+## O que foi aplicado
+
+| Tela | Onde | Estado |
 |---|---|---|
-| Entrar / Criar conta | `/entrar`, `/cadastrar` (`AuthForm`) | Uma tela com duas abas, arte à esquerda, cartão de vidro à direita. |
-| Início | `/` lista pacientes | Vira o painel: saudação, "Pronta para ouvir", "Para revisar", vistos por último, barra da Viva. |
-| Pacientes | `/` + `/pacientes/[id]` | Lista e pasta lado a lado (busca, filtros "Para revisar" e "Sem consulta"). No celular, a pasta abre por cima da lista. |
-| Consulta ao vivo | `SessionRecorder` dentro da página do paciente | Modo foco em tela cheia: Orbe, cronômetro, quem está falando, rascunho ao vivo (`LiveDraft`), documentos extras (`SessionObjectives`), ciência da gravação antes de começar. |
-| Revisão da nota | `/sessoes/[id]` (`SessionView`, `ClinicalNote`) | Hélice no topo; nota e conversa lado a lado; frase sem fonte bloqueia a aprovação até ser removida ou confirmada — a mesma regra de `checkApproval`, agora visível. |
-| Viva | não existe | Tela nova, texto e voz. **Depende de backend:** o assistente sobre o histórico (RAG, §6.3-A da documentação; a coluna `embedding` ainda está comentada no schema). |
-| Uso e plano, Ajustes | `/uso`, `/configuracoes` | Mesmas peças (vidro, fichas, botões); sem tela própria no conceito. |
+| Entrar / Criar conta | `app/(acesso)/` | Pronta. Duas abas, cartão de vidro, vídeo de fundo opcional. Sem Orbe. |
+| Início | `app/(app)/page.tsx` | Pronta. Saudação pela hora, "Pronta para ouvir" com o Orbe, "Para revisar" com mini-hélices, vistos por último, barra da Viva. |
+| Pacientes | `app/(app)/pacientes/` | Pronta. Lista e pasta lado a lado; busca sem acento que fica na URL; filtros. No celular, uma de cada vez. |
+| Consulta ao vivo | `SessionRecorder` (modo foco) | Pronta. Tela cheia num portal no `body`, Orbe ouvindo, cronômetro, rascunho ao vivo. *Pausar* e *quem está falando agora* ficaram de fora: o gravador ainda não tem esses recursos. |
+| Revisão da nota | `app/(app)/sessoes/[id]` | Pronta. Hélice no topo, nota e conversa lado a lado, horário da fonte em cada frase. |
+| Viva | `app/(app)/viva` | **Em breve.** A tela explica o que vem e não finge responder: o assistente depende do RAG (§6.3-A; a coluna `embedding` ainda está comentada no schema). |
+| Uso e plano, Ajustes, Seus dados, Auditoria, Exportar, Boas-vindas, Privacidade e Termos | — | Prontas, com as mesmas peças. `/configuracoes` agora se chama *Ajustes* na tela; os endereços não mudaram. |
 
-## Ordem sugerida para aplicar
+Nas falas da transcrição, o profissional aparece como **"Você"** — é assim que
+ele se reconhece na tela, e é a mesma palavra da legenda da hélice.
 
-1. **Base:** tokens no `@theme` do `globals.css`, fontes com `next/font`,
-   peças comuns (vidro, botão, ficha de estado, avatar, Orbe).
-2. **Casca:** layout com a barra lateral e a barra inferior do celular.
-3. **Telas:** Entrar → Início → Pacientes → Consulta ao vivo → Revisão →
-   Uso e Ajustes.
-4. **Viva:** quando o assistente existir no backend; até lá, o item pode ficar
-   escondido ou como "em breve".
+**Onde mora cada peça:** tokens e classes (`vidro`, `botao-*`, `campo`,
+`ficha-*`, `alerta-*`, `orbe`, `atmosfera`) em `app/globals.css`; componentes
+em `components/` (`Orbe`, `Helice`, `LinhaViva`, `Atmosfera`, `BarraLateral`,
+`BarraInferior`, `FichaDeEstado`, `Avatar`, `Icones`); a matemática da hélice,
+das iniciais, da saudação e dos estados em `lib/` (`helice.ts`, `avatar.ts`,
+`saudacao.ts`, `estados.ts`), com testes.
 
 ## Fontes
 

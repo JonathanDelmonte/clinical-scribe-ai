@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { IconeTocar } from "./Icones";
 import { ROLE_LABEL } from "./SpeakerRoles";
 
 export interface TrechoCorrigivel {
@@ -89,22 +90,26 @@ export function TrechoEditavel({
     onCorrigido(oQue);
   }
 
+  /** A cor de quem fala — a mesma da fita na hélice. */
+  const corDoPapel =
+    trecho.role === "professional"
+      ? "text-viva-texto"
+      : trecho.role === "patient"
+        ? "text-pessego-texto"
+        : trecho.role === "unknown"
+          ? "text-nevoa italic"
+          : "text-grafite";
+
   return (
     <li
       id={`trecho-${trecho.id}`}
-      className={`group rounded-md text-sm transition-colors ${
-        destacado ? "-mx-2 bg-accent/15 px-2 py-1" : ""
+      className={`group scroll-mt-24 rounded-2xl border px-3 py-2.5 transition-colors ${
+        destacado
+          ? "border-viva/35 bg-viva-claro/75"
+          : "border-transparent hover:bg-white/60"
       }`}
     >
-      <div className="flex gap-3">
-        <button
-          onClick={onOuvir}
-          title="ouvir este trecho"
-          className="w-12 shrink-0 cursor-pointer text-left font-mono text-xs text-muted tabular-nums hover:text-accent"
-        >
-          {timestamp}
-        </button>
-
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
         {/*
          * O papel é um botão, não um rótulo.
          *
@@ -113,97 +118,102 @@ export function TrechoEditavel({
          * onde ninguém vai: quem percebe o erro está lendo a transcrição,
          * nesta linha, agora.
          */}
-        <div className="w-24 shrink-0">
-          {escolhendoPapel ? (
-            <div className="flex flex-col gap-0.5">
-              {PAPEIS.filter((p) => p !== trecho.role).map((p) => (
-                <button
-                  key={p}
-                  disabled={salvando}
-                  onClick={() => void enviar({ role: p }, "falante corrigido")}
-                  className="rounded bg-accent/15 px-1.5 py-0.5 text-left text-xs text-accent hover:bg-accent/25 disabled:opacity-40"
-                >
-                  {ROLE_LABEL[p]}
-                </button>
-              ))}
+        {escolhendoPapel ? (
+          <span className="flex flex-wrap items-center gap-1.5">
+            {PAPEIS.filter((p) => p !== trecho.role).map((p) => (
               <button
-                onClick={() => setEscolhendoPapel(false)}
-                className="px-1.5 text-left text-xs text-muted hover:text-ink"
+                key={p}
+                type="button"
+                disabled={salvando}
+                onClick={() => void enviar({ role: p }, "falante corrigido")}
+                className="rounded-full bg-viva/15 px-2.5 py-1 font-semibold text-viva-texto hover:bg-viva/25 disabled:opacity-40"
               >
-                cancelar
+                {ROLE_LABEL[p]}
               </button>
-            </div>
-          ) : (
+            ))}
             <button
-              onClick={() => setEscolhendoPapel(true)}
-              title={`${trecho.speakerLabel} — clique para corrigir quem falou`}
-              className={`text-left text-xs underline-offset-2 hover:underline ${
-                trecho.role === "professional"
-                  ? "font-medium text-accent"
-                  : trecho.role === "unknown"
-                    ? "text-muted/60 italic"
-                    : "text-muted"
-              }`}
+              type="button"
+              onClick={() => setEscolhendoPapel(false)}
+              className="botao-texto text-[12.5px]"
             >
-              {ROLE_LABEL[trecho.role] ?? trecho.speakerLabel}
-              {corrigido && <span className="ml-1 text-accent">✓</span>}
+              cancelar
             </button>
-          )}
-        </div>
-
-        {editando ? (
-          <div className="min-w-0 flex-1 space-y-2">
-            <textarea
-              value={rascunho}
-              onChange={(e) => setRascunho(e.target.value)}
-              rows={2}
-              autoFocus
-              className="w-full rounded-md border border-accent bg-transparent px-2 py-1 text-sm"
-            />
-            <div className="flex items-center gap-2">
-              <button
-                disabled={salvando || rascunho.trim() === ""}
-                onClick={() => void enviar({ text: rascunho }, "correção salva")}
-                className="rounded bg-accent px-3 py-1 text-xs font-medium text-surface disabled:opacity-40"
-              >
-                {salvando ? "salvando…" : "Salvar correção"}
-              </button>
-              <button
-                onClick={() => {
-                  setRascunho(trecho.text);
-                  setEditando(false);
-                  setErro(null);
-                }}
-                className="text-xs text-muted hover:text-ink"
-              >
-                cancelar
-              </button>
-              {trecho.textOriginal != null && (
-                <span
-                  title={trecho.textOriginal}
-                  className="truncate text-xs text-muted"
-                >
-                  a máquina ouviu: &ldquo;{trecho.textOriginal}&rdquo;
-                </span>
-              )}
-            </div>
-          </div>
+          </span>
         ) : (
           <button
-            onClick={() => {
-              setRascunho(trecho.text);
-              setEditando(true);
-            }}
-            title="clique para corrigir o texto"
-            className="min-w-0 flex-1 cursor-text rounded px-1 text-left hover:bg-accent/5"
+            type="button"
+            onClick={() => setEscolhendoPapel(true)}
+            title={`${trecho.speakerLabel} — clique para corrigir quem falou`}
+            className={`font-semibold underline-offset-2 hover:underline ${corDoPapel}`}
           >
-            {trecho.text}
+            {ROLE_LABEL[trecho.role] ?? trecho.speakerLabel}
+            {corrigido && <span className="ml-1 text-viva-texto">✓</span>}
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={onOuvir}
+          title="ouvir este trecho"
+          className="inline-flex items-center gap-1 text-nevoa tabular-nums hover:text-viva-texto"
+        >
+          <IconeTocar tamanho={10} />
+          {timestamp}
+        </button>
       </div>
 
+      {editando ? (
+        <div className="mt-2 space-y-2">
+          <textarea
+            value={rascunho}
+            onChange={(e) => setRascunho(e.target.value)}
+            rows={2}
+            autoFocus
+            className="campo text-[14.5px]"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={salvando || rascunho.trim() === ""}
+              onClick={() => void enviar({ text: rascunho }, "correção salva")}
+              className="botao-principal botao-pequeno"
+            >
+              {salvando ? "Salvando…" : "Salvar correção"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRascunho(trecho.text);
+                setEditando(false);
+                setErro(null);
+              }}
+              className="botao-texto"
+            >
+              cancelar
+            </button>
+            {trecho.textOriginal != null && (
+              <span title={trecho.textOriginal} className="legenda truncate">
+                a máquina ouviu: &ldquo;{trecho.textOriginal}&rdquo;
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setRascunho(trecho.text);
+            setEditando(true);
+          }}
+          title="clique para corrigir o texto"
+          className="mt-0.5 w-full cursor-text text-left text-[14.5px] leading-relaxed text-tinta"
+        >
+          {trecho.text}
+        </button>
+      )}
+
       {erro !== null && (
-        <p role="alert" className="mt-1 pl-[5.5rem] text-xs text-red-500">
+        <p role="alert" className="mt-1 text-[12.5px] text-erro">
           {erro}
         </p>
       )}

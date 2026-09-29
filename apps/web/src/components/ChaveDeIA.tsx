@@ -93,30 +93,27 @@ export function ChaveDeIA({
   }
 
   return (
-    <section className="mt-6 space-y-4 rounded-lg border border-line px-5 py-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-medium">Sua chave de IA</h2>
+    <section className="vidro flex flex-col gap-4 rounded-[26px] px-6 py-6">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 className="titulo-secao">Sua chave de IA</h2>
         {configurada ? (
-          <span className="rounded bg-accent/15 px-2 py-0.5 text-xs text-accent">
+          <span className="ficha ficha-ok">
             {atual.provider} · {atual.hint}
           </span>
         ) : (
-          <span className="text-xs text-muted">usando o modelo do sistema</span>
+          <span className="ficha">Usando o modelo do sistema</span>
         )}
       </div>
 
-      <p className="text-sm text-muted">
-        As notas são geradas com <code className="text-ink">{modeloDoSistema}</code>,
+      <p className="text-[15px] leading-relaxed text-grafite">
+        As notas são geradas com <code className="text-tinta">{modeloDoSistema}</code>,
         que é nosso. Você pode ligar a sua própria chave — do Claude, do ChatGPT, do
         Gemini ou de qualquer serviço compatível — e aí o consumo vai para a sua conta,
         com os termos que você contratou.
       </p>
 
       {!cofreDisponivel && (
-        <p
-          role="alert"
-          className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-500"
-        >
+        <p role="alert" className="alerta alerta-erro">
           Este servidor não está preparado para guardar chaves com segurança (
           <code>SEGREDO_MESTRE</code> ausente). Sem isso não pedimos a sua chave —
           guardá-la sem cifra seria pior que não ter o recurso.
@@ -124,38 +121,33 @@ export function ChaveDeIA({
       )}
 
       {cofreDisponivel && !aberto && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => setAberto(true)}
-            className="rounded-lg border border-line px-4 py-2 text-sm hover:border-accent hover:text-accent"
-          >
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <button onClick={() => setAberto(true)} className="botao-vidro botao-pequeno">
             {configurada ? "Trocar a chave" : "Usar minha própria chave"}
           </button>
           {configurada && (
             <button
               onClick={() => void remover()}
               disabled={salvando}
-              className="text-xs text-muted underline underline-offset-2 hover:text-ink"
+              className="botao-texto"
             >
-              remover e voltar ao modelo do sistema
+              Remover e voltar ao modelo do sistema
             </button>
           )}
         </div>
       )}
 
       {cofreDisponivel && aberto && (
-        <div className="space-y-3">
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs tracking-widest text-muted uppercase">
-              Fornecedor
-            </span>
+        <div className="flex flex-col gap-4">
+          <label className="block">
+            <span className="rotulo">Fornecedor</span>
             <select
               value={fornecedor}
               onChange={(e) => {
                 setFornecedor(e.target.value);
                 setErro(null);
               }}
-              className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+              className="campo"
             >
               {fornecedores.map((f) => (
                 <option key={f.id} value={f.id}>
@@ -164,16 +156,14 @@ export function ChaveDeIA({
               ))}
             </select>
             {spec !== undefined && (
-              <span className="mt-1 block text-xs text-muted">
-                onde conseguir: {spec.ondeConseguir}
+              <span className="legenda mt-1.5 block">
+                Onde conseguir: {spec.ondeConseguir}
               </span>
             )}
           </label>
 
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs tracking-widest text-muted uppercase">
-              Chave
-            </span>
+          <label className="block">
+            <span className="rotulo">Chave</span>
             <input
               type="password"
               value={chave}
@@ -184,40 +174,36 @@ export function ChaveDeIA({
               autoComplete="off"
               spellCheck={false}
               placeholder={configurada ? `atual: ${atual.hint}` : "cole aqui"}
-              className="w-full rounded-lg border border-line bg-transparent px-3 py-2 font-mono text-sm"
+              className="campo font-mono"
             />
-            <span className="mt-1 block text-xs text-muted">
+            <span className="legenda mt-1.5 block">
               Guardada cifrada. Depois de salva ela não volta para esta tela — só os
               quatro últimos caracteres.
             </span>
           </label>
 
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs tracking-widest text-muted uppercase">
-              Modelo
-            </span>
+          <label className="block">
+            <span className="rotulo">Modelo</span>
             <input
               value={modelo}
               onChange={(e) => setModelo(e.target.value)}
               placeholder={spec?.exemploModelo ?? ""}
               spellCheck={false}
-              className="w-full rounded-lg border border-line bg-transparent px-3 py-2 font-mono text-sm"
+              className="campo font-mono"
             />
           </label>
 
           {spec?.aceitaBaseUrl === true && (
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs tracking-widest text-muted uppercase">
-                Endereço do serviço
-              </span>
+            <label className="block">
+              <span className="rotulo">Endereço do serviço</span>
               <input
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
                 placeholder="https://api.groq.com/openai"
                 spellCheck={false}
-                className="w-full rounded-lg border border-line bg-transparent px-3 py-2 font-mono text-sm"
+                className="campo font-mono"
               />
-              <span className="mt-1 block text-xs text-muted">
+              <span className="legenda mt-1.5 block">
                 Precisa ser https — por http a chave e a consulta iriam em texto puro.
               </span>
             </label>
@@ -234,16 +220,17 @@ export function ChaveDeIA({
            * consulta de paciente real. O profissional pode aceitar que os
            * dados DELE treinem um modelo; não pode aceitar isso pelo paciente.
            */}
-          <label className="flex cursor-pointer gap-3 rounded-md bg-accent/5 px-3 py-2 text-sm">
+          <label className="flex cursor-pointer gap-3 rounded-[18px] border border-white/90 bg-viva-claro/60 px-4 py-3.5 text-[15px] text-tinta">
             <input
               type="checkbox"
               checked={semTreino}
               onChange={(e) => setSemTreino(e.target.checked)}
-              className="mt-0.5 accent-current"
+              className="caixa mt-0.5"
             />
             <span>
-              Tenho termos de <strong>não-treinamento</strong> com este fornecedor.
-              <span className="mt-0.5 block text-xs text-muted">
+              Tenho termos de <strong className="font-semibold">não-treinamento</strong>{" "}
+              com este fornecedor.
+              <span className="legenda mt-1 block text-grafite">
                 Sem isto, a chave só vale para áudio de teste. Transcrição de consulta é
                 dado sensível de saúde (LGPD Art. 11) e não pode ir para um serviço que
                 treina com ela.
@@ -252,18 +239,18 @@ export function ChaveDeIA({
           </label>
 
           {erro !== null && (
-            <p role="alert" className="text-sm text-red-500">
+            <p role="alert" className="alerta alerta-erro">
               {erro}
             </p>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
             <button
               onClick={() => void salvar()}
               disabled={salvando || chave.trim() === "" || modelo.trim() === ""}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
+              className="botao-principal botao-pequeno"
             >
-              {salvando ? "conferindo com o fornecedor…" : "Salvar chave"}
+              {salvando ? "Conferindo com o fornecedor…" : "Salvar chave"}
             </button>
             <button
               onClick={() => {
@@ -271,9 +258,9 @@ export function ChaveDeIA({
                 setAberto(false);
                 setErro(null);
               }}
-              className="text-sm text-muted hover:text-ink"
+              className="botao-texto"
             >
-              cancelar
+              Cancelar
             </button>
           </div>
         </div>

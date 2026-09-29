@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { IconeSair } from "./Icones";
+
 /**
  * Sair.
  *
@@ -30,11 +32,14 @@ export function SairButton() {
 
   return (
     <button
+      type="button"
       onClick={() => void sair()}
       disabled={saindo}
-      className="text-xs text-muted hover:text-ink disabled:opacity-50"
+      aria-label="Sair da conta"
+      title="Sair da conta"
+      className="botao-redondo disabled:opacity-50"
     >
-      sair
+      <IconeSair />
     </button>
   );
 }

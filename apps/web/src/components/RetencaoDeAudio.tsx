@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { IconeCheck } from "./Icones";
+
 /**
  * As opções, do mais privado ao mais conservador.
  *
@@ -70,21 +72,23 @@ export function RetencaoDeAudio({ atual, padraoDoServidor, afetadasPorOpcao }: P
   }
 
   return (
-    <section className="mt-6 space-y-4 rounded-lg border border-line px-5 py-4">
-      <h2 className="font-medium">Por quanto tempo guardar o áudio</h2>
+    <section className="vidro flex flex-col gap-4 rounded-[26px] px-6 py-6">
+      <h2 className="titulo-secao">Por quanto tempo guardar o áudio</h2>
 
-      <p className="text-sm text-muted">
+      <p className="text-[15px] leading-relaxed text-grafite">
         A transcrição e a nota ficam para sempre. O que é apagado é a{" "}
-        <strong className="text-ink">gravação</strong> — e com ela some a possibilidade
-        de clicar numa frase da nota e ouvir o trecho que a sustenta.
+        <strong className="font-semibold text-tinta">gravação</strong> — e com ela some
+        a possibilidade de clicar numa frase da nota e ouvir o trecho que a sustenta.
       </p>
 
-      <div className="space-y-1.5">
+      <div className="flex flex-col gap-1">
         {OPCOES.map((o) => (
           <label
             key={o.dias}
-            className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm ${
-              efetivo === o.dias ? "bg-accent/15" : "hover:bg-accent/5"
+            className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-[16px] border px-4 py-2.5 text-[15px] transition-colors ${
+              efetivo === o.dias
+                ? "vidro-polido border-white/95 font-medium"
+                : "border-transparent hover:bg-white/60"
             }`}
           >
             <input
@@ -95,16 +99,16 @@ export function RetencaoDeAudio({ atual, padraoDoServidor, afetadasPorOpcao }: P
                 setEscolhido(o.dias);
                 setSalvo(false);
               }}
-              className="accent-current"
+              className="caixa"
             />
             <span className="flex-1">
               {o.titulo}
               {o.dias === padraoDoServidor && atual === null && (
-                <span className="ml-2 text-xs text-muted">padrão</span>
+                <span className="ficha ml-2.5 min-h-6 px-2.5 text-[12px]">padrão</span>
               )}
             </span>
             {(afetadasPorOpcao[o.dias] ?? 0) > 0 && (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
+              <span className="text-[13px] font-semibold text-aviso">
                 apaga {afetadasPorOpcao[o.dias]} agora
               </span>
             )}
@@ -120,11 +124,8 @@ export function RetencaoDeAudio({ atual, padraoDoServidor, afetadasPorOpcao }: P
        * gravação — e diz quantas.
        */}
       {mudou && perdem > 0 && (
-        <p
-          role="alert"
-          className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
-        >
-          <strong>
+        <p role="alert" className="alerta alerta-aviso">
+          <strong className="font-semibold">
             {perdem} {perdem === 1 ? "consulta perde" : "consultas perdem"} o áudio na
             próxima varredura.
           </strong>{" "}
@@ -133,29 +134,34 @@ export function RetencaoDeAudio({ atual, padraoDoServidor, afetadasPorOpcao }: P
       )}
 
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         <button
           onClick={() => void salvar()}
           disabled={salvando || !mudou}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
+          className="botao-principal botao-pequeno"
         >
-          {salvando ? "salvando…" : "Salvar"}
+          {salvando ? "Salvando…" : "Salvar"}
         </button>
-        {salvo && !mudou && <span className="text-xs text-accent">✓ guardado</span>}
+        {salvo && !mudou && (
+          <span className="ficha ficha-ok">
+            <IconeCheck tamanho={14} />
+            Guardado
+          </span>
+        )}
         {atual !== null && (
           <button
             onClick={() => {
               setEscolhido(null);
               setSalvo(false);
             }}
-            className="text-xs text-muted underline underline-offset-2 hover:text-ink"
+            className="botao-texto"
           >
-            voltar ao padrão ({padraoDoServidor} dias)
+            Voltar ao padrão ({padraoDoServidor} dias)
           </button>
         )}
       </div>

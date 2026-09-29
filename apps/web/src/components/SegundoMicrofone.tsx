@@ -277,24 +277,26 @@ export function SegundoMicrofone({
     notaGeradaEm < estado.processadoEm;
 
   return (
-    <section className="rounded-lg border border-line px-4 py-3">
+    <section className="vidro rounded-[26px] px-5 py-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-xs font-medium tracking-widest text-muted uppercase">
-          Segundo microfone
-        </h2>
+        <h2 className="titulo-secao">Segundo microfone</h2>
 
         {processando ? (
-          <span className="inline-flex items-center gap-2 text-sm text-accent">
-            <span className="size-2 animate-pulse rounded-full bg-current" />
+          <span className="ficha ficha-processando min-h-6 px-2.5 text-[12px]">
+            <span aria-hidden="true" className="ficha__ponto" />
             comparando os dois microfones…
           </span>
         ) : estado?.estado === "aplicado" ? (
-          <span className="text-sm text-accent">quem falou foi refeito pelos dois</span>
+          <span className="ficha ficha-ok min-h-6 px-2.5 text-[12px]">
+            quem falou foi refeito pelos dois
+          </span>
         ) : estado?.estado === "recusado" ? (
-          <span className="text-sm text-amber-500">não aplicado — nada mudou</span>
+          <span className="ficha ficha-aviso min-h-6 px-2.5 text-[12px]">
+            não aplicado — nada mudou
+          </span>
         ) : (
-          <span className="text-sm text-muted">
-            separa quem falou pelo volume de dois celulares
+          <span className="legenda basis-full">
+            Separa quem falou pelo volume de dois celulares.
           </span>
         )}
 
@@ -304,7 +306,7 @@ export function SegundoMicrofone({
               setAberto(true);
               if (fase.tipo === "erro") setFase({ tipo: "parado" });
             }}
-            className="ml-auto rounded-md border border-line px-3 py-1 text-xs hover:border-accent"
+            className="botao-vidro botao-pequeno ml-auto"
           >
             {estado === null ? "usar" : "enviar outra gravação"}
           </button>
@@ -312,7 +314,7 @@ export function SegundoMicrofone({
       </div>
 
       {estado?.estado === "aplicado" && !processando && (
-        <div className="mt-2 space-y-1.5 text-xs">
+        <div className="mt-3 space-y-1.5 text-[13px]">
           <p>
             <strong className="font-medium">{estado.medidos ?? 0}</strong>{" "}
             {(estado.medidos ?? 0) === 1 ? "trecho decidido" : "trechos decididos"}{" "}
@@ -333,7 +335,7 @@ export function SegundoMicrofone({
             )}
             .
           </p>
-          <p className="text-muted">
+          <p className="text-nevoa">
             segundo celular perto{" "}
             {estado.segundoPerto === "patient" ? "do paciente" : "do profissional"}
             {estado.deslocamentoS !== undefined && (
@@ -355,14 +357,14 @@ export function SegundoMicrofone({
             )}
           </p>
           {estado.conteudoDiscorda === true && (
-            <p className="text-amber-500">
+            <p className="font-medium text-aviso">
               O que foi dito na consulta sugere o contrário da posição informada —
               talvez o segundo celular estivesse perto de você. Confira a transcrição;
               se os papéis estiverem invertidos, use “trocar” em Quem é quem.
             </p>
           )}
           {notaVelha && (
-            <p className="text-amber-500">
+            <p className="font-medium text-aviso">
               A nota foi gerada antes desta correção. Gere de novo para que ela reflita
               quem falou.
             </p>
@@ -371,25 +373,25 @@ export function SegundoMicrofone({
       )}
 
       {estado?.estado === "recusado" && !processando && (
-        <p className="mt-2 text-xs text-amber-500">
+        <p className="alerta alerta-aviso mt-3 text-[13px]">
           Os dois microfones não bastaram para separar as pessoas: {estado.motivo}. A
           transcrição ficou como estava.
         </p>
       )}
 
       {fase.tipo === "erro" && (
-        <p role="alert" className="mt-2 text-xs text-red-500">
+        <p role="alert" className="alerta alerta-erro mt-3 text-[13px]">
           {fase.mensagem}
         </p>
       )}
 
       {bloqueio !== null && estado === null && (
-        <p className="mt-2 text-xs text-muted">{bloqueio}</p>
+        <p className="legenda mt-2">{bloqueio}</p>
       )}
 
       {aberto && (
-        <div className="mt-3 space-y-3 border-t border-line pt-3">
-          <ol className="list-decimal space-y-1 pl-5 text-xs text-muted">
+        <div className="mt-4 space-y-3 border-t border-line pt-4">
+          <ol className="list-decimal space-y-1 pl-5 text-[13px] text-grafite">
             <li>
               Deixe um segundo celular gravando perto do paciente, com o gravador do
               próprio celular, do começo ao fim da consulta. Pode começar até 2 minutos
@@ -397,19 +399,18 @@ export function SegundoMicrofone({
             </li>
             <li>Depois, escolha aqui o arquivo que o celular gravou.</li>
           </ol>
-          <p className="text-xs text-muted">
+          <p className="legenda">
             A gravação não sai deste computador: o navegador mede só o volume dela a
             cada 5 milésimos de segundo e envia essa medida, que não contém nenhuma
             palavra. Se o navegador não conseguir ler o formato do arquivo, ele vai ao
             servidor só para ser medido, e é apagado em seguida.
           </p>
 
-          <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            <legend className="mb-1 text-xs text-muted">
-              Onde ficou o segundo celular?
-            </legend>
+          <fieldset className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[14.5px]">
+            <legend className="rotulo">Onde ficou o segundo celular?</legend>
             <label className="inline-flex items-center gap-2">
               <input
+                className="caixa"
                 type="radio"
                 name={`lado-${sessionId}`}
                 checked={lado === "patient"}
@@ -419,6 +420,7 @@ export function SegundoMicrofone({
             </label>
             <label className="inline-flex items-center gap-2">
               <input
+                className="caixa"
                 type="radio"
                 name={`lado-${sessionId}`}
                 checked={lado === "professional"}
@@ -433,14 +435,14 @@ export function SegundoMicrofone({
             accept={ACCEPT_DE_AUDIO}
             aria-label="Gravação do segundo celular"
             onChange={(e) => setArquivo(e.currentTarget.files?.[0] ?? null)}
-            className="block w-full text-xs"
+            className="block w-full text-[13px] file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-tinta"
           />
 
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => void enviar()}
               disabled={arquivo === null || ocupado}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
+              className="botao-principal botao-pequeno"
             >
               {fase.tipo === "medindo"
                 ? "Medindo o volume…"
@@ -457,13 +459,13 @@ export function SegundoMicrofone({
                 if (fase.tipo === "erro") setFase({ tipo: "parado" });
               }}
               disabled={ocupado}
-              className="text-xs text-muted underline underline-offset-2 hover:text-ink disabled:opacity-40"
+              className="botao-texto"
             >
               cancelar
             </button>
           </div>
           {fase.tipo === "subindo" && (
-            <p className="text-xs text-muted">
+            <p className="legenda">
               O navegador não lê este formato, então o arquivo vai ao servidor para ser
               medido — e é apagado assim que a medida sai. Nada para você fazer.
             </p>

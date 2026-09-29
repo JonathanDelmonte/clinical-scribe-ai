@@ -82,10 +82,7 @@ export default function Privacidade() {
             registro afetado, endereço de IP e navegador.{" "}
             <strong>Nunca o conteúdo</strong> das consultas — a trilha registra que você
             abriu uma ficha, não o que estava escrito nela.{" "}
-            <Link href="/auditoria" className="text-accent hover:underline">
-              Você pode ler a sua
-            </Link>
-            .
+            <Link href="/auditoria">Você pode ler a sua</Link>.
           </Item>
         </Lista>
       </Secao>
@@ -227,9 +224,7 @@ export default function Privacidade() {
           </Item>
         </Lista>
         <p>
-          <Link href="/configuracoes/dados" className="text-accent hover:underline">
-            Exercer esses direitos →
-          </Link>
+          <Link href="/configuracoes/dados">Exercer esses direitos</Link>
         </p>
       </Secao>
 

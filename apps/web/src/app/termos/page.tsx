@@ -112,10 +112,8 @@ export default function Termos() {
           <Item>
             <strong>Cuidar da sua conta.</strong> A senha é sua; quem entrar com ela
             enxerga os prontuários dos seus pacientes.{" "}
-            <Link href="/auditoria" className="text-accent hover:underline">
-              A trilha de auditoria
-            </Link>{" "}
-            mostra todos os acessos.
+            <Link href="/auditoria">A trilha de auditoria</Link> mostra todos os
+            acessos.
           </Item>
         </Lista>
       </Secao>
@@ -133,10 +131,8 @@ export default function Termos() {
             o seu trabalho.
           </Item>
           <Item>
-            <Link href="/uso" className="text-accent hover:underline">
-              O seu consumo e o custo de cada consulta
-            </Link>{" "}
-            ficam visíveis o tempo todo.
+            <Link href="/uso">O seu consumo e o custo de cada consulta</Link> ficam
+            visíveis o tempo todo.
           </Item>
         </Lista>
       </Secao>
@@ -159,9 +155,7 @@ export default function Termos() {
       <Secao titulo="Encerramento">
         <p>
           Você pode{" "}
-          <Link href="/configuracoes/dados" className="text-accent hover:underline">
-            exportar seus dados e excluir a conta
-          </Link>{" "}
+          <Link href="/configuracoes/dados">exportar seus dados e excluir a conta</Link>{" "}
           a qualquer momento, sem pedir autorização a ninguém. A exclusão é imediata e
           não tem desfazer.
         </p>
@@ -170,10 +164,8 @@ export default function Termos() {
       <Secao titulo="Privacidade">
         <p>
           O que guardamos, por quê e por quanto tempo está na{" "}
-          <Link href="/privacidade" className="text-accent hover:underline">
-            política de privacidade
-          </Link>
-          , que faz parte destes termos.
+          <Link href="/privacidade">política de privacidade</Link>, que faz parte destes
+          termos.
         </p>
       </Secao>
     </PaginaLegal>

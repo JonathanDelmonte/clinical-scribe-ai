@@ -130,17 +130,13 @@ export function AcoesDaSessao({
 
   const ocupadoAgora = ocupado !== null;
 
-  const botaoCancelar = compacto
-    ? "text-sm text-muted underline underline-offset-2 hover:text-ink disabled:opacity-40"
-    : "rounded-lg border border-line px-4 py-2 text-sm hover:border-accent disabled:opacity-40";
+  const botaoCancelar = compacto ? "botao-texto" : "botao-vidro botao-pequeno";
 
   const botaoApagar = confirmando
     ? compacto
-      ? "text-sm font-medium text-red-500 underline underline-offset-2 disabled:opacity-40"
-      : "rounded-lg bg-red-500/15 px-4 py-2 text-sm font-medium text-red-500 disabled:opacity-40"
-    : compacto
-      ? "text-sm text-muted underline underline-offset-2 hover:text-red-500 disabled:opacity-40"
-      : "rounded-lg px-4 py-2 text-sm text-muted underline underline-offset-2 hover:text-red-500 disabled:opacity-40";
+      ? "botao-texto perigo font-semibold"
+      : "botao-fantasma botao-pequeno border-erro/30 bg-erro-fundo text-erro"
+    : "botao-texto";
 
   return (
     <div className={compacto ? "contents" : "space-y-2"}>
@@ -178,8 +174,9 @@ export function AcoesDaSessao({
 
         {confirmando && ocupado === null && (
           <button
+            type="button"
             onClick={() => setConfirmando(false)}
-            className="text-sm text-muted underline underline-offset-2 hover:text-ink"
+            className="botao-texto"
           >
             não apagar
           </button>
@@ -193,7 +190,7 @@ export function AcoesDaSessao({
        * também não deixa a decisão acontecer sem a informação.
        */}
       {confirmando && !compacto && (
-        <p className="text-xs text-muted">
+        <p className="legenda">
           {clinica
             ? "A gravação, a transcrição e a nota são apagadas e não há como desfazer. " +
               "Se precisa guardar o registro do atendimento, exporte antes."
@@ -201,13 +198,9 @@ export function AcoesDaSessao({
         </p>
       )}
 
-      {aviso !== null && (
-        <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
-          {aviso}
-        </p>
-      )}
+      {aviso !== null && <p className="alerta alerta-aviso">{aviso}</p>}
       {erro !== null && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="alerta alerta-erro">
           {erro}
         </p>
       )}
