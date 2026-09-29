@@ -202,7 +202,7 @@ export function makeTranscribeHandler(
         // guardar ainda. A fila tenta de novo — os pedaços continuam sendo a
         // consulta até lá.
         throw new Error(
-          "motor indisponível para juntar a consulta — nova tentativa em breve",
+          "Motor indisponível para juntar a consulta. Nova tentativa em breve.",
         );
       }
 
@@ -452,7 +452,7 @@ export function makeTranscribeHandler(
       const seconds = Math.round(result.uncoveredMs / 1000);
       const reason =
         `Transcrição incompleta: os últimos ${seconds}s do áudio não foram ` +
-        `transcritos. A gravação está preservada — reprocesse antes de usar.`;
+        `transcritos. A gravação está preservada: reprocesse antes de usar.`;
 
       await db
         .update(sessions)

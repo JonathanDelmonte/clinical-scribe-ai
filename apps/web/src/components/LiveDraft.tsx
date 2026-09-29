@@ -74,7 +74,7 @@ export function LiveDraft({ estado, trechos }: Props) {
       {estado.fase === "indisponivel" ? (
         <p className="legenda">
           Rascunho ao vivo indisponível neste navegador ({estado.motivo}).{" "}
-          <strong className="text-tinta">A gravação continua normalmente</strong> — ela
+          <strong className="text-tinta">A gravação continua normalmente</strong>: ela
           não depende deste recurso.
         </p>
       ) : trechos.length === 0 ? (

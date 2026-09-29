@@ -74,7 +74,7 @@ describe("nota como texto", () => {
 
   it("abre com paciente, profissional e registro", () => {
     expect(texto).toContain("Paciente: Ana Beatriz (nasc. 15/03/1990)");
-    expect(texto).toContain("Profissional: Dra. Ana Ribeiro — CRN-3 12345 · nutrição");
+    expect(texto).toContain("Profissional: Dra. Ana Ribeiro, CRN-3 12345 · nutrição");
   });
 
   it("marca cada afirmação com os tempos do áudio", () => {

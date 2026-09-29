@@ -68,7 +68,7 @@ export function makeChannelsHandler(
       // Sem saber onde o segundo aparelho ficou, não há como dizer quem é quem.
       // Adivinhar trocaria os papéis da transcrição inteira metade das vezes.
       throw new Error(
-        "pedido do segundo microfone ilegível — falta onde o aparelho ficou",
+        "Pedido do segundo microfone ilegível: falta onde o aparelho ficou.",
       );
     }
 
@@ -113,7 +113,7 @@ export function makeChannelsHandler(
     // isto cobre a aprovação que acontece entre o envio e o processamento.
     if (sessao.status === "approved") {
       await recusar(
-        "a nota foi aprovada antes do processamento — quem falou não muda debaixo de um registro assinado",
+        "a nota foi aprovada antes do processamento, e quem falou não muda debaixo de um registro assinado",
       );
       return;
     }

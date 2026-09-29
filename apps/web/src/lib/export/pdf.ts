@@ -129,7 +129,7 @@ export async function gerarPdf(doc: DocumentoParaPdf): Promise<Uint8Array> {
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const negrito = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-  pdf.setTitle(paraWinAnsi(`${doc.titulo} — ${doc.cabecalho.paciente}`));
+  pdf.setTitle(paraWinAnsi(`${doc.titulo} · ${doc.cabecalho.paciente}`));
   pdf.setCreator("Consulta Viva");
   pdf.setProducer("Consulta Viva");
 
@@ -186,7 +186,7 @@ export async function gerarPdf(doc: DocumentoParaPdf): Promise<Uint8Array> {
   );
   escrever(
     `Profissional: ${c.profissional}` +
-      (c.registro === null ? "" : ` — ${c.registro}`) +
+      (c.registro === null ? "" : `, ${c.registro}`) +
       (c.especialidade === null ? "" : ` · ${c.especialidade}`),
   );
   escrever(

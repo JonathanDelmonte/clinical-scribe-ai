@@ -136,7 +136,7 @@ export default async function Auditoria() {
           </strong>{" "}
           Registrar o que mudou transformaria esta tabela numa segunda cópia do
           prontuário, sem as proteções que a primeira tem. Aqui ficam a ação, o
-          identificador do registro afetado, o horário e a origem do acesso — o
+          identificador do registro afetado, o horário e a origem do acesso: o
           suficiente para reconstruir o que aconteceu, sem duplicar o que foi dito.
         </p>
       </div>

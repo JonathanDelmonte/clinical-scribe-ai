@@ -143,7 +143,7 @@ export function TrechoEditavel({
           <button
             type="button"
             onClick={() => setEscolhendoPapel(true)}
-            title={`${trecho.speakerLabel} — clique para corrigir quem falou`}
+            title={`${trecho.speakerLabel}: clique para corrigir quem falou`}
             className={`font-semibold underline-offset-2 hover:underline ${corDoPapel}`}
           >
             {ROLE_LABEL[trecho.role] ?? trecho.speakerLabel}

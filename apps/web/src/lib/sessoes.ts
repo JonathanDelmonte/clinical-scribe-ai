@@ -157,7 +157,7 @@ export async function cancelarProcessamento(
       .set({
         status: "failed",
         failureReason:
-          "Processamento cancelado por você. A gravação continua guardada — " +
+          "Processamento cancelado por você. A gravação continua guardada: " +
           "dá para processar de novo, ou apagar a consulta.",
         progressPercent: null,
         progressPhase: null,

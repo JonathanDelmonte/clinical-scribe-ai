@@ -72,7 +72,7 @@ export function makeObjectiveHandler(
       .orderBy(asc(transcriptSegments.startMs));
 
     if (linhas.length === 0) {
-      throw new Error("sessão sem transcrição — nada de onde gerar o documento");
+      throw new Error("Consulta sem transcrição: não há de onde gerar o documento.");
     }
 
     const segments: TranscriptSegment[] = linhas.map((l) => ({

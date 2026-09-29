@@ -161,7 +161,7 @@ export function OnboardingForm({
         <span className="rotulo">Assinatura (opcional)</span>
         <SignaturePad onChange={setAssinatura} />
         <span className="legenda mt-1.5 block">
-          Aparece no rodapé do PDF. Não substitui assinatura digital ICP-Brasil — o
+          Aparece no rodapé do PDF. Não substitui assinatura digital ICP-Brasil: o
           produto exporta para o prontuário que você já usa.
         </span>
       </div>

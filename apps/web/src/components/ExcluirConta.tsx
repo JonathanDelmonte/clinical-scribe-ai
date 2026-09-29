@@ -83,12 +83,12 @@ export function ExcluirConta({ consultas }: { consultas: number }) {
       <p className="alerta alerta-aviso">
         <strong className="font-semibold">Antes de continuar:</strong> a documentação
         clínica que você produziu aqui pode estar sujeita a prazo de guarda (Resolução
-        CFM 1.821/2007). Baixe seus dados e arquive o que precisar — depois desta ação
+        CFM 1.821/2007). Baixe seus dados e arquive o que precisar: depois desta ação
         não há como recuperar.
       </p>
 
       <p className="legenda text-[13.5px]">
-        A trilha de auditoria é preservada — é o registro de que a conta existiu e foi
+        A trilha de auditoria é preservada: é o registro de que a conta existiu e foi
         apagada. O que identificava você nela (endereço de IP e navegador) é anulado no
         mesmo instante; sobram as ações e seus horários.
       </p>

@@ -77,8 +77,8 @@ export function RetencaoDeAudio({ atual, padraoDoServidor, afetadasPorOpcao }: P
 
       <p className="text-[15px] leading-relaxed text-grafite">
         A transcrição e a nota ficam para sempre. O que é apagado é a{" "}
-        <strong className="font-semibold text-tinta">gravação</strong> — e com ela some
-        a possibilidade de clicar numa frase da nota e ouvir o trecho que a sustenta.
+        <strong className="font-semibold text-tinta">gravação</strong>, e com ela some a
+        possibilidade de clicar numa frase da nota e ouvir o trecho que a sustenta.
       </p>
 
       <div className="flex flex-col gap-1">

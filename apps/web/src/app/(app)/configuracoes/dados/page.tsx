@@ -57,8 +57,8 @@ export default async function Dados() {
           por gente.
         </p>
         <p className="legenda">
-          O áudio das consultas não vai junto — são megabytes por consulta. Para levar
-          um áudio específico, abra a consulta e baixe de lá.
+          O áudio das consultas não vai junto: são megabytes por consulta. Para levar um
+          áudio específico, abra a consulta e baixe de lá.
         </p>
 
         {/*
@@ -105,8 +105,8 @@ export default async function Dados() {
               className="mt-2.5 size-1.5 shrink-0 rounded-full bg-viva"
             />
             <span>
-              O áudio é apagado automaticamente depois do prazo de retenção configurado
-              — minimização, LGPD Art. 6º.
+              O áudio é apagado automaticamente depois do prazo de retenção configurado,
+              por minimização (LGPD, Art. 6º).
             </span>
           </li>
           <li className="flex gap-3">

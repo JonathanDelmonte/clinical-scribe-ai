@@ -82,7 +82,7 @@ export async function registrarAudio(
         status: "failed",
         failureReason:
           `${quota.motivo} A gravação está guardada e será processada ` +
-          `quando houver quota — no próximo mês, ou mudando de plano.`,
+          `quando houver quota: no próximo mês, ou mudando de plano.`,
       })
       .where(eq(sessions.id, sessionId));
 

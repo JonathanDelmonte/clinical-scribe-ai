@@ -83,7 +83,7 @@ export async function sessaoQueAceita(
     return {
       status: 409,
       error:
-        "a nota desta consulta já foi aprovada — quem falou não muda depois da assinatura",
+        "A nota desta consulta já foi aprovada: quem falou não muda depois da assinatura.",
     };
   }
   if (!completa) return { sessao };

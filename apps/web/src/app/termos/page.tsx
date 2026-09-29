@@ -5,7 +5,7 @@ import { Item, Lista, PaginaLegal, Secao } from "@/components/PaginaLegal";
 export const dynamic = "force-static";
 
 export const metadata = {
-  title: "Termos de uso — Consulta Viva",
+  title: "Termos de uso · Consulta Viva",
 };
 
 /**
@@ -42,7 +42,7 @@ export default function Termos() {
       <Secao titulo="A nota nasce rascunho, e é você quem a transforma em documento">
         <p>
           Esta é a cláusula mais importante do documento, e ela não é formalidade
-          jurídica — é como o produto funciona.
+          jurídica: é como o produto funciona.
         </p>
         <Lista>
           <Item>
@@ -56,7 +56,7 @@ export default function Termos() {
             Medicação que ninguém mencionou, achado de exame que não houve, ordem dos
             fatos trocada. Por isso cada afirmação aponta o segundo do áudio que a
             sustenta, e por isso o sistema <strong>recusa</strong> aprovar uma nota com
-            afirmação sem âncora — a menos que você assuma aquela afirmação
+            afirmação sem âncora, a menos que você assuma aquela afirmação
             explicitamente, o que fica registrado.
           </Item>
           <Item>
@@ -71,8 +71,8 @@ export default function Termos() {
           <Item>
             <strong>Não é prontuário eletrônico certificado.</strong> Não temos
             certificação SBIS/CFM (NGS1 ou NGS2). O produto é um assistente de
-            documentação que <strong>exporta</strong> para o prontuário que você já usa
-            — e é assim de propósito, não por omissão.
+            documentação que <strong>exporta</strong> para o prontuário que você já usa,
+            e é assim de propósito, não por omissão.
           </Item>
           <Item>
             <strong>A assinatura no PDF não é assinatura digital ICP-Brasil.</strong> É
@@ -106,7 +106,7 @@ export default function Termos() {
           <Item>
             <strong>Guardar o que precisa ser guardado.</strong> A documentação clínica
             que você produz aqui pode estar sujeita a prazo de guarda (Resolução CFM
-            1.821/2007). Exportar e arquivar é decisão sua — e a exclusão da conta apaga
+            1.821/2007). Exportar e arquivar é decisão sua, e a exclusão da conta apaga
             tudo, sem desfazer.
           </Item>
           <Item>
@@ -141,7 +141,7 @@ export default function Termos() {
         <p>
           O serviço é oferecido no estado em que se encontra. Transcrição automática
           erra, principalmente com áudio ruim, sotaque, jargão e várias pessoas falando
-          ao mesmo tempo — é por isso que a transcrição fica visível e editável, e é por
+          ao mesmo tempo. É por isso que a transcrição fica visível e editável, e é por
           isso que a nota aponta o áudio.
         </p>
         <p>

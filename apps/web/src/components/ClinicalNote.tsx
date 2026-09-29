@@ -160,7 +160,7 @@ export function ClinicalNote({
             Gerada com modelo de nível gratuito.
           </strong>{" "}
           O fornecedor pode registrar e treinar com a transcrição enviada. Use apenas
-          com áudio de teste — nunca com consulta de paciente real.
+          com áudio de teste, nunca com consulta de paciente real.
         </p>
       )}
 

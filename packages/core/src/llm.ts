@@ -102,6 +102,6 @@ export function checkDataPolicy(
 /** Texto curto para marcar visivelmente uma nota gerada no nível grátis. */
 export function dataPolicyLabel(policy: LlmDataPolicy): string {
   return policy === "training"
-    ? "gerada com modelo de nível gratuito — não use com paciente real"
+    ? "gerada com modelo de nível gratuito; não use com paciente real"
     : "gerada com modelo sob termos de não-treinamento";
 }

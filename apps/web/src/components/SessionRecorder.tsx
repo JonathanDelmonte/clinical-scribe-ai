@@ -255,7 +255,7 @@ export function SessionRecorder({
     if (permissao === "negada") {
       return (
         "O microfone está bloqueado para este site. Libere nas permissões do " +
-        "navegador — no celular, no cadeado ao lado do endereço."
+        "navegador (no celular, no cadeado ao lado do endereço)."
       );
     }
 
@@ -263,7 +263,7 @@ export function SessionRecorder({
     if (energia !== null && !energia.carregando && energia.nivel < BATERIA_BAIXA) {
       setAviso(
         `Bateria em ${Math.round(energia.nivel * 100)}%. Uma consulta longa pode ` +
-          `não caber — vale ligar na tomada antes de começar.`,
+          `não caber. Vale ligar na tomada antes de começar.`,
       );
     } else if (!bufferDisponivel()) {
       setAviso(
@@ -423,7 +423,7 @@ export function SessionRecorder({
       setStatus(null);
       setError(
         err instanceof DOMException && err.name === "NotAllowedError"
-          ? "permissão de microfone negada — libere no navegador e tente de novo"
+          ? "Permissão de microfone negada. Libere no navegador e tente de novo."
           : "não foi possível acessar o microfone",
       );
     }
@@ -438,7 +438,7 @@ export function SessionRecorder({
       setSoNaMemoria(true);
       setAviso(
         "O aparelho não conseguiu guardar parte da gravação (pouco espaço livre?). " +
-          "Ela continua sendo gravada na memória desta aba — não feche a aba até " +
+          "Ela continua sendo gravada na memória desta aba. Não feche a aba até " +
           "o envio terminar.",
       );
     }
@@ -602,7 +602,7 @@ export function SessionRecorder({
         setStatus(null);
         setError(
           `${fim.erro ?? "falha ao concluir o envio"}. A gravação continua no ` +
-            `aparelho — tente enviar de novo.`,
+            `aparelho. Tente enviar de novo.`,
         );
         recarregarPendentes();
         return;
@@ -615,7 +615,7 @@ export function SessionRecorder({
       setStatus(null);
       setError(
         `${erro instanceof Error ? erro.message : "falha no envio"}. A gravação ` +
-          `continua no aparelho — tente enviar de novo.`,
+          `continua no aparelho. Tente enviar de novo.`,
       );
       recarregarPendentes();
     }
@@ -677,8 +677,8 @@ export function SessionRecorder({
       setStatus(null);
       setError(
         extensao === ""
-          ? "não dá para saber o formato deste arquivo — ele precisa ter extensão."
-          : `arquivos .${extensao} não são de áudio. Envie a gravação da consulta — ` +
+          ? "Não dá para saber o formato deste arquivo: ele precisa ter extensão."
+          : `Arquivos .${extensao} não são de áudio. Envie a gravação da consulta: ` +
               `MP3, M4A, WAV, AMR, WMA, vídeo do celular e quase qualquer outro formato servem.`,
       );
       return;
@@ -763,7 +763,7 @@ export function SessionRecorder({
       setStatus(null);
       setError(
         `${erro instanceof Error ? erro.message : "falha no envio"}. O arquivo ` +
-          `continua no seu aparelho — pode tentar de novo.`,
+          `continua no seu aparelho. Pode tentar de novo.`,
       );
     }
   }
@@ -917,8 +917,8 @@ export function SessionRecorder({
             disabled={busy || recording}
           >
             <option value="">padrão do plano ({defaultEngine})</option>
-            <option value="local">local — Whisper no servidor</option>
-            <option value="cloud">cloud — API comercial</option>
+            <option value="local">local (Whisper no servidor)</option>
+            <option value="cloud">cloud (API comercial)</option>
           </select>
           <span className="legenda mt-1.5 block">
             Disponível porque seu cargo é <code>developer</code>.
@@ -1011,7 +1011,7 @@ export function SessionRecorder({
                     limite.minutosRestantes === 1
                       ? "1 minuto"
                       : `${limite.minutosRestantes} minutos`
-                  }. Nesse momento ela é encerrada e enviada sozinha — nada do que foi gravado se perde.`
+                  }. Nesse momento ela é encerrada e enviada sozinha, sem perder nada do que foi gravado.`
                 : null
             }
             confirmandoDescarte={confirmandoCancelamento}

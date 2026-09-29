@@ -108,7 +108,7 @@ describe("qual modelo gera o documento", () => {
       aceita: "training",
     });
     const escolha = await escolher("prof-1");
-    expect(!escolha.ok && escolha.motivo).toMatch(/Configurações → IA/);
+    expect(!escolha.ok && escolha.motivo).toMatch(/Ajustes/);
   });
 });
 

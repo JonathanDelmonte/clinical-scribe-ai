@@ -128,7 +128,7 @@ export async function GET(
 
   const nascimento = patient?.birthDate ?? null;
   const cabecalho: CabecalhoDeExportacao = {
-    paciente: patient?.name ?? "—",
+    paciente: patient?.name ?? "paciente removido",
     nascimento:
       nascimento === null ? null : dataParaExibicao(dataParaFormulario(nascimento)),
     profissional: me.name,

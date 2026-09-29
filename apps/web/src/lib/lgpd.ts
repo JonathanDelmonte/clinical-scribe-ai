@@ -95,7 +95,7 @@ export async function exportarDados(
     observacoes: [
       "O áudio das consultas não está neste arquivo: são megabytes por consulta. " +
         "O campo audioPath indica onde cada um estava.",
-      "A impressão vocal do profissional não é exportada — é um vetor numérico " +
+      "A impressão vocal do profissional não é exportada: é um vetor numérico " +
         "sem uso fora deste sistema.",
       "O hash da senha não é exportado.",
     ],

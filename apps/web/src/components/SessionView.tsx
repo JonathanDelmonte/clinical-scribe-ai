@@ -465,7 +465,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               {speakers.length === 1 && (
                 <p className="alerta alerta-aviso mx-2 text-[13px]">
                   Um único falante detectado. A separação de vozes depende do pyannote,
-                  que exige um token do Hugging Face — sem ele o serviço transcreve
+                  que exige um token do Hugging Face. Sem ele, o serviço transcreve
                   normalmente e rotula tudo como{" "}
                   <code className="text-tinta">SPEAKER_00</code>.
                 </p>

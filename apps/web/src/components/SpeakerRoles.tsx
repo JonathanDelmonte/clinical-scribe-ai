@@ -113,7 +113,7 @@ export function SpeakerRoles({
       setTrocado(true);
       onChanged();
     } catch {
-      setErro("sem resposta do servidor — confira a conexão e tente de novo");
+      setErro("Sem resposta do servidor. Confira a conexão e tente de novo.");
     } finally {
       setBusy(false);
     }
@@ -160,7 +160,7 @@ export function SpeakerRoles({
 
       {indefinido ? (
         <span className="text-[14px] font-medium text-aviso">
-          não foi possível identificar — confira a transcrição
+          não foi possível identificar; confira a transcrição
         </span>
       ) : (
         <span className="text-[14.5px]">
@@ -188,8 +188,8 @@ export function SpeakerRoles({
 
       {baixa && !indefinido && (
         <p className="alerta alerta-aviso text-[13px]">
-          Confiança baixa. Confira antes de gerar a nota — uma troca invertida
-          atribuiria a queixa ao profissional e a conduta ao paciente.
+          Confiança baixa. Confira antes de gerar a nota: uma troca invertida atribuiria
+          a queixa ao profissional e a conduta ao paciente.
         </p>
       )}
 
@@ -204,7 +204,7 @@ export function SpeakerRoles({
        */}
       {trocado && (
         <p className="alerta alerta-ok text-[13px]">
-          Pronto — os papéis foram trocados, e a transcrição inteira foi reetiquetada.
+          Pronto. Os papéis foram trocados, e a transcrição inteira foi reetiquetada.
         </p>
       )}
 
@@ -234,7 +234,7 @@ export function SpeakerRoles({
             {(profissional.evidence ?? []).map((e, i) => (
               <li key={i} className="text-[13px]">
                 <span className="font-semibold text-viva-texto">{e.signal}</span>
-                <span className="text-grafite"> — “{e.excerpt}”</span>
+                <span className="text-grafite">: “{e.excerpt}”</span>
               </li>
             ))}
           </ul>

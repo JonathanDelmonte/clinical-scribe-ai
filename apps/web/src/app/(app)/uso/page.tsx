@@ -233,8 +233,8 @@ export default async function Uso() {
       )}
 
       <p className="legenda px-1">
-        Os números vêm do que foi realmente processado, medido pelo worker sobre o áudio
-        — não do que o dispositivo declarou no envio.
+        Os números vêm do que foi realmente processado, medido pelo worker sobre o
+        áudio, e não do que o dispositivo declarou no envio.
       </p>
     </div>
   );

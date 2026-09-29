@@ -36,6 +36,6 @@ export function GET() {
 function descreverArmazenamento(): string {
   const pedido = armazenamentoPedido(process.env);
   if (pedido.tipo === "incompleto")
-    return `s3 incompleto — faltam ${pedido.faltando.join(", ")}`;
+    return `s3 incompleto: faltam ${pedido.faltando.join(", ")}`;
   return pedido.tipo === "s3" ? "s3" : "disco local";
 }
