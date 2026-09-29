@@ -23,7 +23,15 @@ import { VoiceEnrollment } from "./VoiceEnrollment";
  * Exigir também cobraria permissão de microfone antes de a pessoa ter visto o
  * produto funcionar, que é o pior momento possível para pedir.
  */
-export function PassoDeVoz({ enrolledAt }: { enrolledAt: string | null }) {
+export function PassoDeVoz({
+  enrolledAt,
+  nome,
+  especialidade,
+}: {
+  enrolledAt: string | null;
+  nome: string;
+  especialidade: string | null;
+}) {
   const router = useRouter();
 
   function seguir() {
@@ -33,24 +41,28 @@ export function PassoDeVoz({ enrolledAt }: { enrolledAt: string | null }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <VoiceEnrollment enrolledAt={enrolledAt} aoConcluir={seguir} />
+      <VoiceEnrollment
+        enrolledAt={enrolledAt}
+        aoConcluir={seguir}
+        aoPular={seguir}
+        nome={nome}
+        especialidade={especialidade}
+        compacto
+      />
 
       {/*
        * "Pular" tem o mesmo peso visual de um link, não de um botão apagado.
        *
        * Um pular escondido ou cinza-claro transforma "opcional" em "opcional
        * no papel": a pessoa procura a saída, não acha, e grava a voz contra a
-       * vontade. Quem tem motivo para pular — sala compartilhada, microfone
-       * ruim, pressa — precisa achar a saída na primeira olhada.
+       * vontade. Quem tem motivo para pular (sala compartilhada, microfone
+       * ruim, pressa) precisa achar a saída na primeira olhada.
        */}
-      <div className="flex flex-col items-center gap-2 text-center">
+      <div className="flex flex-col items-center gap-1.5 text-center">
         <button onClick={seguir} className="botao-texto text-[15px] text-tinta">
           Pular por enquanto
         </button>
-        <span className="legenda max-w-sm">
-          Dá para cadastrar depois em Ajustes, quando quiser. Sem a voz, a separação
-          entre profissional e paciente continua funcionando pelo conteúdo da conversa.
-        </span>
+        <span className="legenda">Dá para cadastrar depois, em Ajustes.</span>
       </div>
     </div>
   );

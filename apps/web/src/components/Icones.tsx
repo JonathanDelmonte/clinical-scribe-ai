@@ -269,3 +269,27 @@ export function IconeEditar(p: PropsDoIcone) {
     </Svg>
   );
 }
+
+export function IconeRefazer(p: PropsDoIcone) {
+  return (
+    <Svg {...p}>
+      <path d="M4.5 12a7.5 7.5 0 1 0 2.3-5.4" />
+      <path d="M4.5 4.5v4h4" />
+    </Svg>
+  );
+}
+
+export function IconePausa({ tamanho = 14, className }: PropsDoIcone) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width={tamanho}
+      height={tamanho}
+      className={className}
+    >
+      <rect x="6.5" y="5.5" width="4" height="13" rx="1.2" fill="currentColor" />
+      <rect x="13.5" y="5.5" width="4" height="13" rx="1.2" fill="currentColor" />
+    </svg>
+  );
+}

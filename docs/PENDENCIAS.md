@@ -6,6 +6,34 @@
 >
 > Ao resolver um item, risque-o aqui e registre onde está a solução.
 
+## Não funciona no site publicado (ainda)
+
+1. **Cadastro da voz.** No site da Vercel aparece "motor de transcrição
+   indisponível". O motivo: `POST /api/voice` chama o motor local
+   (`ASR_LOCAL_URL`, padrão `http://localhost:8001`) direto, durante a
+   requisição. Na Vercel não existe motor em `localhost`, e o motor da estação
+   (o computador que roda o `iniciar.bat`) não tem endereço público. Ligar o
+   Docker no computador **não resolve** este caso.
+
+   As consultas não sofrem disso porque passam por fila: o site guarda a
+   gravação e cria um job; a estação, quando ligada, busca o job no banco,
+   transcreve e devolve o resultado. O cadastro da voz precisa seguir o mesmo
+   caminho:
+   - o site guarda a amostra no bucket privado e cria um job
+     `voice_enrollment`;
+   - o worker da estação calcula a impressão vocal no motor, grava os 256
+     números no perfil e apaga a amostra na hora;
+   - a tela mostra "Analisando sua voz" até o job terminar, e avisa quando a
+     estação está desligada.
+
+   É também o embrião do "ajudante" que já foi conversado: um programa
+   instalável que faz o papel da estação no computador do profissional, sem
+   Docker nem terminal.
+
+   Enquanto isso não existe, a tela de voz consulta `GET /api/voice` antes de
+   gravar e, com o motor fora do alcance, avisa e oferece pular, em vez de
+   deixar a pessoa gravar à toa.
+
 ## Antes do primeiro paciente real
 
 1. **Nota clínica num provedor que não treina com os dados.** Hoje a produção
