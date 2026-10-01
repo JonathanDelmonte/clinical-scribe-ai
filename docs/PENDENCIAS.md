@@ -1,6 +1,6 @@
 # Pendências — o que foi adiado, de propósito
 
-> Estado em 27/09/2026. O projeto está **em fase de teste, sem paciente real**,
+> Estado em 01/10/2026. O projeto está **em fase de teste, sem paciente real**,
 > e nada aqui atrapalha os testes. A primeira lista, porém, **bloqueia o
 > primeiro paciente real**: nenhum item dela pode ficar para depois disso.
 >
@@ -26,9 +26,9 @@
    - a tela mostra "Analisando sua voz" até o job terminar, e avisa quando a
      estação está desligada.
 
-   É também o embrião do "ajudante" que já foi conversado: um programa
-   instalável que faz o papel da estação no computador do profissional, sem
-   Docker nem terminal.
+   É também o caminho do ajudante ([ADR-0005](./adr/0005-ajudante.md)), o
+   programa que faz o papel da estação no computador do profissional, sem
+   Docker nem terminal: a etapa 2 dele leva o cadastro da voz para a fila.
 
    Enquanto isso não existe, a tela de voz consulta `GET /api/voice` antes de
    gravar e, com o motor fora do alcance, avisa e oferece pular, em vez de
@@ -94,6 +94,19 @@ Detalhes e justificativas em [REVISAO-DE-SEGURANCA.md](./REVISAO-DE-SEGURANCA.md
   IA com a dele; a estação abre com a dela. Diferentes, a chave própria de
   ninguém abre — a sessão avisa, e nada é enviado. Na Vercel ela é "Secret" e
   não se lê de volta: na dúvida, cole de novo o valor do `.env.producao`.
+
+## O ajudante
+
+Detalhes em [ADR-0005](./adr/0005-ajudante.md#o-que-falta).
+
+- **Executável sem assinatura digital.** Na primeira vez o SmartScreen avisa
+  "O Windows protegeu o computador", e a pessoa precisa clicar em "Mais
+  informações" → "Executar assim mesmo". Some com um certificado de
+  assinatura de código (pago, por ano). Antes de distribuir para quem não é
+  da equipe.
+- **Atualização manual.** Uma versão nova entra baixando o arquivo e
+  escolhendo Reinstalar. Atualização automática exige onde publicar as
+  versões e, de novo, a assinatura.
 
 ## Limites do plano gratuito, para não esquecer
 

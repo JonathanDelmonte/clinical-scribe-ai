@@ -98,11 +98,16 @@ export default tseslint.config(
     },
   },
 
-  // Scripts de geração rodam em Node, pela linha de comando.
+  // Scripts de geração e de empacotamento rodam em Node, pela linha de comando.
   {
-    files: ["apps/web/scripts/*.mjs"],
+    files: ["apps/web/scripts/*.mjs", "apps/ajudante/scripts/*.mjs"],
     languageOptions: {
-      globals: { Buffer: "readonly", console: "readonly", process: "readonly" },
+      globals: {
+        Buffer: "readonly",
+        console: "readonly",
+        process: "readonly",
+        fetch: "readonly",
+      },
     },
     rules: { "no-console": "off" },
   },

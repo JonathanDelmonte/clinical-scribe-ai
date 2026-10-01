@@ -55,3 +55,8 @@ Thumbs.db
 
 # Armazenamento local de audio das consultas — dado de saude, jamais no Git
 .storage/
+
+# Ajudante: o que o build baixa ou gera (uv, motor, modelos, fonte) e o pacote
+# final. Nada disso é código: vem de fora, a cada build.
+apps/ajudante/recursos/
+apps/ajudante/release/

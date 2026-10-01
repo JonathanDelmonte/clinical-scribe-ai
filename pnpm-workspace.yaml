@@ -12,6 +12,14 @@ packages:
 # executa — e faria o `pnpm install` de todo mundo, e o CI, pagarem por isso.
 allowBuilds:
   esbuild: true
+  # Os dois abaixo vêm do ajudante (apps/ajudante) e são DESLIGADOS de
+  # propósito. O do Electron baixaria o executável dele (~100 MB) em todo
+  # `pnpm install` — inclusive no build do site, na Vercel, que nunca o usa.
+  # Desligado, o Electron baixa o executável sozinho na primeira vez que roda
+  # (ver `index.js` do pacote). O do electron-winstaller serve ao formato
+  # Squirrel, e o ajudante sai como executável portátil.
+  electron: false
+  electron-winstaller: false
   onnxruntime-node: false
   protobufjs: false
   sharp: false

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:"
+    />
+    <title>Consulta Viva Ajudante</title>
+    <link rel="stylesheet" href="estilo.css" />
+  </head>
+  <body>
+    <div class="luz" aria-hidden="true"></div>
+    <header class="barra">
+      <span class="marca"
+        ><span class="marca-ponto" aria-hidden="true"></span>Consulta Viva
+        <span class="marca-sub">Ajudante</span></span
+      >
+    </header>
+
+    <!-- 1. Escolha: antes de qualquer coisa, a pessoa escolhe. -->
+    <main class="tela" data-tela="escolha" hidden>
+      <h1>Transcreva as consultas aqui, no seu computador.</h1>
+      <p class="lead">
+        O ajudante instala o motor de transcrição e de separação de vozes neste
+        computador. Depois, ele fica ao lado do relógio, pronto para processar as suas
+        consultas.
+      </p>
+
+      <div class="ficha" id="maquina">
+        <span class="ficha-icone" aria-hidden="true"></span>
+        <div>
+          <p id="maquina-placa">Conferindo este computador…</p>
+          <p class="legenda" id="maquina-espaco"></p>
+        </div>
+      </div>
+
+      <fieldset class="opcoes" aria-label="O que fazer">
+        <label class="opcao">
+          <input type="radio" name="opcao" value="instalar" />
+          <span class="opcao-marca" aria-hidden="true"></span>
+          <span class="opcao-texto">
+            <strong>Instalar</strong>
+            <span>Primeira vez neste computador.</span>
+          </span>
+        </label>
+        <label class="opcao">
+          <input type="radio" name="opcao" value="reinstalar" />
+          <span class="opcao-marca" aria-hidden="true"></span>
+          <span class="opcao-texto">
+            <strong>Reinstalar <span class="suave">(reparar)</span></strong>
+            <span
+              >Instala por cima e corrige o que estiver faltando. Use também para
+              atualizar.</span
+            >
+          </span>
+        </label>
+        <label class="opcao">
+          <input type="radio" name="opcao" value="desinstalar" />
+          <span class="opcao-marca" aria-hidden="true"></span>
+          <span class="opcao-texto">
+            <strong>Desinstalar</strong>
+            <span id="desinstalar-texto"
+              >Remove o ajudante, o motor e os modelos baixados.</span
+            >
+          </span>
+        </label>
+      </fieldset>
+
+      <div class="acoes">
+        <button class="principal" id="continuar" type="button">
+          Continuar <span class="principal-circulo" aria-hidden="true"></span>
+        </button>
+      </div>
+    </main>
+
+    <!-- 2. Progresso: a mesma tela para instalar, reinstalar e desinstalar. -->
+    <main class="tela" data-tela="progresso" hidden>
+      <div class="orbe pensando" aria-hidden="true"><span></span></div>
+      <h2 id="progresso-titulo" aria-live="polite">Preparando</h2>
+      <p class="detalhe" id="progresso-detalhe"></p>
+      <div
+        class="trilho"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        id="progresso-barra"
+      >
+        <div class="trilho-cheio" id="progresso-cheio"></div>
+      </div>
+      <p class="percentual" id="progresso-percentual">0%</p>
+      <ol class="etapas" id="etapas"></ol>
+      <p class="legenda nota" id="progresso-nota">
+        Pode continuar usando o computador. Na primeira vez são uns 6 GB de download, de
+        10 a 30 minutos.
+      </p>
+    </main>
+
+    <!-- 3. Pronto. -->
+    <main class="tela centro" data-tela="pronto" hidden>
+      <div class="selo" aria-hidden="true"></div>
+      <h2>Tudo pronto.</h2>
+      <p class="lead">
+        O ajudante fica ao lado do relógio, na setinha do Windows, e liga sozinho quando
+        o computador liga.
+      </p>
+      <p class="legenda" id="pronto-placa"></p>
+      <div class="acoes">
+        <button class="principal" id="concluir" type="button">
+          Concluir <span class="principal-circulo" aria-hidden="true"></span>
+        </button>
+      </div>
+    </main>
+
+    <!-- 4. Desinstalar: a única ação destrutiva pergunta antes. -->
+    <main class="tela centro" data-tela="confirmar-desinstalar" hidden>
+      <h2>Desinstalar o ajudante?</h2>
+      <p class="lead">
+        Saem o programa, o motor e os modelos baixados. As suas consultas continuam
+        guardadas no site.
+      </p>
+      <div class="acoes">
+        <button class="secundario" id="voltar" type="button">Voltar</button>
+        <button class="principal" id="confirmar-desinstalar" type="button">
+          Desinstalar <span class="principal-circulo" aria-hidden="true"></span>
+        </button>
+      </div>
+    </main>
+
+    <!-- 5. Removido. -->
+    <main class="tela centro" data-tela="desinstalado" hidden>
+      <h2>O ajudante foi removido.</h2>
+      <p class="lead">Se precisar dele de novo, é só baixar e instalar.</p>
+      <div class="acoes">
+        <button class="principal" id="fechar" type="button">
+          Fechar <span class="principal-circulo" aria-hidden="true"></span>
+        </button>
+      </div>
+    </main>
+
+    <!-- 6. Erro: o que aconteceu em palavras, e o caminho de volta. -->
+    <main class="tela centro" data-tela="erro" hidden>
+      <h2>Não deu certo desta vez.</h2>
+      <p class="lead" id="erro-mensagem"></p>
+      <div class="acoes">
+        <button class="secundario" id="copiar" type="button">Copiar detalhes</button>
+        <button class="principal" id="tentar-de-novo" type="button">
+          Tentar de novo <span class="principal-circulo" aria-hidden="true"></span>
+        </button>
+      </div>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

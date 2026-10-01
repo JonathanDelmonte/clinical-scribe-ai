@@ -68,7 +68,15 @@ ordem:
    é ele que faz o computador de cada pessoa processar as consultas dela; a
    nuvem não entra no caminho. Fica parado enquanto o motor do Docker responde
    no mesmo computador, e assume quando ele para — dois motores disputariam a
-   mesma placa de vídeo.
+   mesma placa de vídeo. Ver [ADR-0005](./adr/0005-ajudante.md).
+   - ✅ **Etapa 1, em 01/10:** o programa (`apps/ajudante`). Instalar,
+     Reinstalar (reparar) e Desinstalar; Python, motor e modelos instalados
+     com tela de progresso, sem janela de comando; o motor testado na placa ao
+     fim; bandeja, início com o Windows, pausa com o Docker.
+   - **Etapa 2:** o site manda as consultas de cada pessoa para o ajudante
+     dela, e o cadastro da voz passa pela fila.
+   - **Etapa 3:** a nota feita pelo site, com a chave de IA de cada pessoa,
+     sem depender de computador ligado.
 
 "Gravar agora" e "processar na nuvem" saíram da lista: o fluxo atual
 (paciente → gravar) atende, e o processamento é sempre num computador.

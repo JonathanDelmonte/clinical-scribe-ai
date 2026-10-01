@@ -1,0 +1,22 @@
+{
+  "name": "@scribe/ajudante",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Consulta Viva Ajudante: o motor de transcrição no computador de quem atende.",
+  "author": "Consulta Viva",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "recursos": "node --env-file-if-exists=../../.env scripts/recursos.mjs",
+    "dev": "node scripts/build.mjs && electron .",
+    "pacote": "node scripts/build.mjs && node --env-file-if-exists=../../.env scripts/recursos.mjs && electron-builder --win portable",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -37,6 +37,10 @@ log = logging.getLogger("asr-local")
 SAMPLE_RATE = 16000
 
 MODEL_SIZE = os.getenv("WHISPER_MODEL", "medium")
+# O nome que o motor informa (no /health e em cada transcrição, que o site
+# guarda). O ajudante carrega o modelo de uma pasta no disco, e o caminho tem o
+# usuário do Windows: lá, o nome vem à parte, e o caminho não sai daqui.
+MODEL_NAME = os.getenv("WHISPER_MODEL_NAME") or MODEL_SIZE
 LANGUAGE = os.getenv("WHISPER_LANGUAGE", "pt")
 
 # "auto" resolve para cuda quando houver GPU visível. Um valor fixo permite
@@ -75,6 +79,7 @@ MAX_UNCOVERED_S = float(os.getenv("MAX_UNCOVERED_SECONDS", "5"))
 EMBEDDING_MODEL = os.getenv(
     "EMBEDDING_MODEL", "pyannote/wespeaker-voxceleb-resnet34-LM"
 )
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME") or EMBEDDING_MODEL
 EMBEDDING_DIMENSIONS = 256
 
 # Trechos curtos não dão impressão vocal confiável: meio segundo de "sim" não
@@ -169,11 +174,45 @@ def _esvaziar_pasta_temporaria() -> int:
     return sobras
 
 
+def _seguir_o_ajudante() -> None:
+    """
+    No ajudante, o motor sai junto com ele.
+
+    O ajudante do Windows liga o motor como processo filho, e no Windows um
+    filho não morre com o pai. Encerrado à força (Gerenciador de Tarefas,
+    queda), o ajudante deixaria o motor órfão, segurando a porta e a memória da
+    placa de vídeo até a próxima partida. Com `AJUDANTE_PID`, uma linha de
+    execução espera o processo do ajudante terminar e encerra o motor. No
+    Docker a variável não existe, e nada muda.
+    """
+    pid = os.getenv("AJUDANTE_PID", "").strip()
+    if os.name != "nt" or not pid.isdigit():
+        return
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    sincronizar = 0x00100000  # SYNCHRONIZE: só o direito de esperar
+    processo = kernel32.OpenProcess(sincronizar, False, int(pid))
+    if not processo:
+        log.warning("o ajudante (pid %s) já não existe: encerrando o motor", pid)
+        os._exit(0)
+
+    def esperar() -> None:
+        kernel32.WaitForSingleObject(processo, 0xFFFFFFFF)
+        log.warning("o ajudante fechou: encerrando o motor")
+        os._exit(0)
+
+    threading.Thread(target=esperar, name="seguir-o-ajudante", daemon=True).start()
+
+
 @asynccontextmanager
 async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
     # Na partida do SERVIDOR, e não na importação do módulo: um script de teste
     # que importe este arquivo dentro do contêiner em uso apagaria o upload de
     # uma consulta que está sendo transcrita agora.
+    _seguir_o_ajudante()
     sobras = await asyncio.to_thread(_esvaziar_pasta_temporaria)
     if sobras:
         log.warning("%d temporário(s) de uma execução interrompida apagado(s)", sobras)
@@ -253,19 +292,25 @@ def get_transcriber() -> Any:
     return _batched
 
 
+def _modelo_local(nome: str) -> bool:
+    """O modelo é um arquivo no disco, e não um nome no Hugging Face."""
+    return os.path.exists(nome)
+
+
 def get_diarizer() -> Any | None:
     """
-    Carrega o pyannote, se houver token.
+    Carrega o pyannote, se houver token — ou o modelo no disco.
 
-    A diarização exige aceitar os termos do modelo no Hugging Face e um token.
-    Sem isso o serviço continua funcionando — só devolve tudo como um falante
-    só. Transcrição sem separação de vozes ainda é útil; serviço que não sobe
-    não é.
+    Do Hugging Face, a diarização exige aceitar os termos do modelo e um token.
+    O ajudante não depende disso: ele leva o modelo (MIT) consigo e aponta
+    `DIARIZATION_MODEL` para o `config.yaml` local. Sem nenhum dos dois, o
+    serviço continua funcionando — só devolve tudo como um falante só.
+    Transcrição sem separação de vozes ainda é útil; serviço que não sobe não é.
     """
     global _diarizer, _diarizer_error
     if _diarizer is not None or _diarizer_error is not None:
         return _diarizer
-    if not HF_TOKEN:
+    if not HF_TOKEN and not _modelo_local(DIARIZATION_MODEL):
         _diarizer_error = (
             "HF_TOKEN ausente — defina-o e aceite os termos de "
             f"{DIARIZATION_MODEL} no Hugging Face para habilitar diarização"
@@ -277,7 +322,9 @@ def get_diarizer() -> Any | None:
 
         log.info("carregando diarização %s", DIARIZATION_MODEL)
         started = time.time()
-        _diarizer = Pipeline.from_pretrained(DIARIZATION_MODEL, use_auth_token=HF_TOKEN)
+        _diarizer = Pipeline.from_pretrained(
+            DIARIZATION_MODEL, use_auth_token=HF_TOKEN or None
+        )
         if DEVICE == "cuda":
             import torch
 
@@ -295,9 +342,14 @@ def get_diarizer() -> Any | None:
 
 
 def get_embedder() -> Any | None:
-    """Modelo que transforma um pedaço de fala num vetor de 256 números."""
+    """
+    Modelo que transforma um pedaço de fala num vetor de 256 números.
+
+    Sem exigir token: o wespeaker não é fechado no Hugging Face, e o ajudante o
+    carrega de uma pasta no disco, sem internet.
+    """
     global _embedder
-    if _embedder is None and HF_TOKEN:
+    if _embedder is None:
         try:
             import torch
             from pyannote.audio.pipelines.speaker_verification import (
@@ -308,7 +360,7 @@ def get_embedder() -> Any | None:
             _embedder = PretrainedSpeakerEmbedding(
                 EMBEDDING_MODEL,
                 device=torch.device(DEVICE if DEVICE == "cuda" else "cpu"),
-                use_auth_token=HF_TOKEN,
+                use_auth_token=HF_TOKEN or None,
             )
         except Exception as exc:  # noqa: BLE001
             log.error("falha ao carregar impressão vocal: %s", exc)
@@ -565,13 +617,63 @@ def diarize(
     ]
 
 
+@app.post("/autoteste")
+def autoteste() -> dict[str, Any]:
+    """
+    Carrega os três modelos e roda cada um num sinal curto.
+
+    É o "testando o motor" do ajudante, ao instalar e ao reparar: um modelo que
+    não carrega aqui — DLL da placa de vídeo faltando, arquivo corrompido —
+    falharia na primeira consulta, com a pessoa esperando. O sinal é ruído
+    baixo: o teste é de carregar e rodar, não de reconhecer.
+    """
+    ruido = (np.random.default_rng(0).standard_normal(SAMPLE_RATE * 6) * 0.01).astype(
+        np.float32
+    )
+    partes: dict[str, Any] = {}
+
+    def medir(nome: str, passo: Any) -> None:
+        inicio = time.time()
+        try:
+            passo()
+            partes[nome] = {"ok": True, "segundos": round(time.time() - inicio, 1)}
+        except Exception as exc:  # noqa: BLE001 — o teste RELATA a falha
+            partes[nome] = {"ok": False, "erro": str(exc)[:300]}
+
+    def transcrever() -> None:
+        trechos, _ = get_transcriber().transcribe(
+            ruido, language=LANGUAGE, vad_filter=False, beam_size=1
+        )
+        list(trechos)
+
+    def separar() -> None:
+        if get_diarizer() is None:
+            raise RuntimeError(_diarizer_error or "separação de vozes indisponível")
+        diarize(ruido, None)
+
+    def impressao() -> None:
+        if get_embedder() is None:
+            raise RuntimeError("impressão vocal indisponível")
+        voice_embedding(ruido)
+
+    medir("transcricao", transcrever)
+    medir("separacao_de_vozes", separar)
+    medir("impressao_vocal", impressao)
+    return {
+        "ok": all(p["ok"] for p in partes.values()),
+        "dispositivo": DEVICE,
+        "modelo": MODEL_NAME,
+        **partes,
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     diarizer = get_diarizer()
     return {
         "status": "ok",
         "engine": "local",
-        "model": MODEL_SIZE,
+        "model": MODEL_NAME,
         "compute_type": COMPUTE_TYPE,
         "language": LANGUAGE,
         "device": DEVICE,
@@ -620,7 +722,7 @@ async def create_voice_embedding(file: UploadFile = File(...)) -> dict[str, Any]
             "embedding": vetor,
             "dimensions": len(vetor),
             "duration_s": round(duracao, 1),
-            "model": EMBEDDING_MODEL,
+            "model": EMBEDDING_MODEL_NAME,
         }
     finally:
         os.unlink(path)
@@ -1132,7 +1234,7 @@ def _processar(
 
         return {
             "engine": "local",
-            "model": MODEL_SIZE,
+            "model": MODEL_NAME,
             "language": info.language,
             "duration_ms": int(audio_seconds * 1000),
             "processing_ms": int(elapsed * 1000),

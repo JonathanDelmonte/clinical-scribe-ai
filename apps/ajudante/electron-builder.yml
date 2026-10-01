@@ -1,0 +1,32 @@
+# O ajudante sai como UM executável portátil: abrir o arquivo baixado já mostra
+# a tela de escolha (Instalar, Reinstalar, Desinstalar) — quem instala de
+# verdade é o próprio programa, com a nossa interface, e não um assistente de
+# instalação genérico.
+appId: br.com.consultaviva.ajudante
+productName: Consulta Viva Ajudante
+copyright: Consulta Viva
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: recursos
+    to: recursos
+    filter:
+      - uv/**
+      - motor/**
+      - modelos/**
+      - icones/**
+asar: true
+npmRebuild: false
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: recursos/icones/icone.png
+  executableName: Consulta Viva Ajudante
+portable:
+  artifactName: ConsultaViva-Ajudante-${version}.exe
+  unpackDirName: ConsultaVivaAjudante
