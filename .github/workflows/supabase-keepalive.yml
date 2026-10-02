@@ -2,7 +2,9 @@ name: Supabase keep-alive
 
 # O plano gratuito do Supabase pausa projetos sem atividade por 7 dias.
 # Este workflow faz uma consulta leve ao banco a cada 3 dias para manter o projeto ativo.
-# Requer os secrets SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no repositório.
+# Requer o secret SUPABASE_DATABASE_URL no repositório, com a connection string do
+# Supabase via pooler (aws-0-sa-east-1.pooler.supabase.com). A conexão direta
+# (db.<ref>.supabase.co) só tem IPv6 e não funciona nos runners do GitHub.
 
 on:
   schedule:
@@ -16,10 +18,5 @@ jobs:
     steps:
       - name: Consulta objective_templates
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          curl --fail-with-body -sS \
-            "$SUPABASE_URL/rest/v1/objective_templates?select=id&limit=1" \
-            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select count(*) from objective_templates;"
