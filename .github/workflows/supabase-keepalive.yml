@@ -1,0 +1,54 @@
+name: Supabase keep-alive
+
+# O plano gratuito do Supabase pausa projetos sem atividade por 7 dias.
+# Este workflow faz uma consulta leve ao banco duas vezes por dia, então várias
+# execuções seguidas podem falhar (instabilidade do GitHub ou do Supabase) sem
+# chegar perto do limite. Cada execução ainda tenta até 5 vezes antes de falhar.
+#
+# Requer o secret SUPABASE_DATABASE_URL no repositório, com a connection string do
+# Supabase via pooler (aws-0-sa-east-1.pooler.supabase.com). A conexão direta
+# (db.<ref>.supabase.co) só tem IPv6 e não funciona nos runners do GitHub.
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+    - cron: "47 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+concurrency:
+  group: supabase-keepalive
+
+jobs:
+  ping:
+    name: Consulta ao banco
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Instala o psql se necessário
+        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+
+      - name: Consulta objective_templates
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          PGCONNECT_TIMEOUT: 20
+        run: |
+          for tentativa in 1 2 3 4 5; do
+            if psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select count(*) from objective_templates;"; then
+              exit 0
+            fi
+            echo "Tentativa $tentativa falhou, aguardando $((tentativa * 30))s"
+            sleep $((tentativa * 30))
+          done
+          echo "::error::Não foi possível consultar o Supabase após 5 tentativas"
+          exit 1
+
+      # O GitHub desativa workflows agendados após 60 dias sem atividade no
+      # repositório. Reativar o workflow pela API a cada execução evita isso.
+      - name: Mantém o workflow ativo
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"
