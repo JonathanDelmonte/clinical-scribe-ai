@@ -172,4 +172,13 @@ export const POLITICAS = {
 
   /** Exportar TODOS os dados: lê seis tabelas inteiras. */
   exportacaoTotal: { capacidade: 5, recargaMs: HORA },
+
+  /**
+   * Conectar um ajudante: 10 por hora por IP.
+   *
+   * Uma pessoa conecta um computador e pronto; reconecta quando reinstala.
+   * O convite já é assinado e vale cinco minutos — isto barra quem tenta
+   * adivinhar verificadores em laço.
+   */
+  conexaoDoAjudante: { capacidade: 10, recargaMs: HORA },
 } as const satisfies Record<string, Politica>;

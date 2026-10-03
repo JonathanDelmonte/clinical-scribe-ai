@@ -16,10 +16,11 @@
     "@scribe/auth": "workspace:*",
     "@scribe/core": "workspace:*",
     "@scribe/db": "workspace:*",
+    "@scribe/motor": "workspace:*",
+    "@scribe/processamento": "workspace:*",
     "@scribe/storage": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pino": "^10.3.1",
-    "undici": "^7.30.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

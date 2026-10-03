@@ -2,7 +2,7 @@ import type { Engine, TranscriptionProvider } from "@scribe/core";
 
 import { config } from "../config.js";
 import { CloudTranscriptionProvider } from "./cloud.js";
-import { LocalTranscriptionProvider } from "./local.js";
+import { LocalTranscriptionProvider } from "@scribe/motor";
 
 /**
  * Entrega o provedor de um motor.

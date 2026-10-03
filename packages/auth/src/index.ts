@@ -24,6 +24,17 @@ export {
 export type { SessionClaims } from "./token";
 export { shouldRenew, signSessionToken, verifySessionToken } from "./token";
 
+export type { Convite } from "./ajudante";
+export {
+  assinarConvite,
+  desafioDoVerificador,
+  hashDoTokenDoAjudante,
+  lerConvite,
+  novoTokenDoAjudante,
+  pareceTokenDoAjudante,
+  VALIDADE_DO_CONVITE_SEGUNDOS,
+} from "./ajudante";
+
 export { SegredoIndisponivel } from "./segredos";
 export {
   cifrar,

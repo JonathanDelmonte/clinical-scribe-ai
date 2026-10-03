@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -131,22 +132,28 @@ export function VoiceEnrollment({
         <div className="alerta alerta-info flex flex-col items-start gap-2">
           <p>
             <strong className="font-semibold text-tinta">
-              O cadastro de voz não está disponível agora.
+              Para cadastrar a voz, ligue o ajudante.
             </strong>{" "}
-            O serviço que analisa a voz não está ligado neste servidor. Você pode seguir
-            sem ele: a separação de quem falou continua funcionando pelo conteúdo da
-            conversa.
+            É ele que analisa a gravação, aqui no seu computador: o ícone ao lado do
+            relógio do Windows. Ainda não tem? Baixe nos ajustes. Você também pode
+            seguir sem a voz: a separação de quem falou continua funcionando pelo
+            conteúdo da conversa.
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              setDisponivel(null);
-              setVerificacao((v) => v + 1);
-            }}
-            className="botao-texto"
-          >
-            Verificar de novo
-          </button>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDisponivel(null);
+                setVerificacao((v) => v + 1);
+              }}
+              className="botao-texto"
+            >
+              Verificar de novo
+            </button>
+            <Link href="/configuracoes#ajudante" className="botao-texto">
+              O ajudante, nos ajustes
+            </Link>
+          </div>
         </div>
       )}
 

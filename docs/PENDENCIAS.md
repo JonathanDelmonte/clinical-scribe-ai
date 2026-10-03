@@ -8,31 +8,13 @@
 
 ## Não funciona no site publicado (ainda)
 
-1. **Cadastro da voz.** No site da Vercel aparece "motor de transcrição
-   indisponível". O motivo: `POST /api/voice` chama o motor local
-   (`ASR_LOCAL_URL`, padrão `http://localhost:8001`) direto, durante a
-   requisição. Na Vercel não existe motor em `localhost`, e o motor da estação
-   (o computador que roda o `iniciar.bat`) não tem endereço público. Ligar o
-   Docker no computador **não resolve** este caso.
-
-   As consultas não sofrem disso porque passam por fila: o site guarda a
-   gravação e cria um job; a estação, quando ligada, busca o job no banco,
-   transcreve e devolve o resultado. O cadastro da voz precisa seguir o mesmo
-   caminho:
-   - o site guarda a amostra no bucket privado e cria um job
-     `voice_enrollment`;
-   - o worker da estação calcula a impressão vocal no motor, grava os 256
-     números no perfil e apaga a amostra na hora;
-   - a tela mostra "Analisando sua voz" até o job terminar, e avisa quando a
-     estação está desligada.
-
-   É também o caminho do ajudante ([ADR-0005](./adr/0005-ajudante.md)), o
-   programa que faz o papel da estação no computador do profissional, sem
-   Docker nem terminal: a etapa 2 dele leva o cadastro da voz para a fila.
-
-   Enquanto isso não existe, a tela de voz consulta `GET /api/voice` antes de
-   gravar e, com o motor fora do alcance, avisa e oferece pular, em vez de
-   deixar a pessoa gravar à toa.
+1. **Cadastro da voz** — resolvido no código em 02/10, falta implantar. O
+   site chamava o motor no meio da requisição, e na Vercel não há motor ao
+   alcance. Agora a amostra vai para a fila (`voice_embedding`), como as
+   consultas, e quem processa — o ajudante da pessoa, ou a estação — grava a
+   impressão vocal e apaga a amostra. Ver
+   [ADR-0005, etapa 2](./adr/0005-ajudante.md#etapa-2-o-site-manda-o-trabalho-para-o-ajudante),
+   inclusive a ordem da implantação: banco, estação, site.
 
 ## Antes do primeiro paciente real
 

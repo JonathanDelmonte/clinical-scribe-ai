@@ -1,16 +1,23 @@
 import { PLAN_DEFAULT_ENGINE, resolveEngine, type Account } from "@scribe/core";
 import { cofreDisponivel } from "@scribe/auth";
-import { sessions } from "@scribe/db";
-import { and, isNotNull, isNull } from "drizzle-orm";
+import { helpers, sessions } from "@scribe/db";
+import { AJUDANTE_LIGADO_SEGUNDOS } from "@scribe/processamento";
+import { and, desc, isNotNull, isNull } from "drizzle-orm";
 import Link from "next/link";
 
+import {
+  AjudanteDoComputador,
+  type ComputadorConectado,
+} from "@/components/AjudanteDoComputador";
 import { ChaveDeIA } from "@/components/ChaveDeIA";
 import { IconeAvancar } from "@/components/Icones";
 import { RetencaoDeAudio } from "@/components/RetencaoDeAudio";
 import { VoiceEnrollment } from "@/components/VoiceEnrollment";
+import { linkDoAjudante } from "@/lib/ajudante/download";
 import { asCurrentProfessional, exigirProfissional } from "@/lib/auth";
 import { FORNECEDORES } from "@/lib/ia/fornecedores";
 import { NOME_DO_PLANO } from "@/lib/plano";
+import { haQuanto } from "@/lib/saudacao";
 
 export const dynamic = "force-dynamic";
 
@@ -54,12 +61,42 @@ export default async function Configuracoes() {
     );
   }).catch(() => ({}));
 
+  /**
+   * Os computadores conectados, com a situação já em palavras. "Ligado" é o
+   * mesmo critério da fila: visto há pouco E com o motor pronto — em pausa
+   * pelo Docker, ele não processa.
+   */
+  const agora = new Date();
+  const computadores: ComputadorConectado[] =
+    (await asCurrentProfessional(async (tx) => {
+      const linhas = await tx.select().from(helpers).orderBy(desc(helpers.lastSeenAt));
+      return linhas.map((h) => {
+        const recente =
+          h.lastSeenAt !== null &&
+          agora.getTime() - h.lastSeenAt.getTime() < AJUDANTE_LIGADO_SEGUNDOS * 1000;
+        return {
+          id: h.id,
+          nome: h.name,
+          motor: h.device === "cuda" ? "Placa de vídeo" : "Processador",
+          ligado: recente && h.ready,
+          situacao: recente
+            ? h.ready
+              ? "Ligado agora"
+              : "Em pausa (o Docker está ligado nele)"
+            : h.lastSeenAt === null
+              ? "Ainda não ligou"
+              : `Visto ${haQuanto(h.lastSeenAt, agora)}`,
+        };
+      });
+    }).catch(() => [])) ?? [];
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <header className="flex flex-col gap-2">
         <h1 className="titulo-pagina">Ajustes</h1>
         <p className="text-[15.5px] text-grafite">
-          Sua voz, a IA que escreve as notas, o tempo de guarda do áudio e a sua conta.
+          Sua voz, o ajudante, a IA que escreve as notas, o tempo de guarda do áudio e a
+          sua conta.
         </p>
       </header>
 
@@ -67,6 +104,11 @@ export default async function Configuracoes() {
         enrolledAt={me.voiceEnrolledAt?.toISOString() ?? null}
         nome={me.name}
         especialidade={me.specialty}
+      />
+
+      <AjudanteDoComputador
+        computadores={computadores}
+        linkDeDownload={linkDoAjudante()}
       />
 
       {/*

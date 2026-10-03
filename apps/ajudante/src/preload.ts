@@ -24,6 +24,7 @@ const api: ApiDoAjudante = {
     );
   },
   concluir: () => ipcRenderer.send("concluir"),
+  conectar: () => ipcRenderer.send("conectar"),
   sair: () => ipcRenderer.send("sair"),
   copiar: (texto: string) => ipcRenderer.send("copiar", texto),
 };

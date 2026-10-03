@@ -9,10 +9,11 @@ import { join } from "node:path";
 
 import { Menu, nativeImage, shell, Tray, type NativeImage } from "electron";
 
-import { caminhos, recursos, SITE } from "./caminhos";
+import { caminhos, enderecoDoSite, recursos } from "./caminhos";
 import type { EstadoDoMotor, Motor } from "./motor";
 import { registrar } from "./registro";
 import { iniciaComOWindows, iniciarComOWindows } from "./sistema";
+import type { Trabalho } from "./trabalho";
 
 const FRASES: Record<EstadoDoMotor, string> = {
   pronto: "Pronto: as consultas são processadas aqui",
@@ -41,33 +42,66 @@ function icone(): NativeImage {
   return imagem;
 }
 
+/** A segunda linha: de quem são as consultas que este computador processa. */
+function fraseDaConta(trabalho: Trabalho): string {
+  switch (trabalho.estado) {
+    case "desconectado":
+      return "Não conectado a uma conta";
+    case "processando":
+      return "Processando uma consulta";
+    case "sem_site":
+      return "Sem conexão com o site";
+    case "esperando":
+      return trabalho.profissional === null || trabalho.profissional === ""
+        ? "Conectado"
+        : `Conectado como ${trabalho.profissional}`;
+  }
+}
+
 export class Bandeja {
   private readonly tray: Tray;
 
   constructor(
     private readonly motor: Motor,
-    private readonly abrirJanela: () => void,
-    private readonly sair: () => void,
+    private readonly trabalho: Trabalho,
+    private readonly acoes: {
+      readonly abrirJanela: () => void;
+      readonly conectar: () => void;
+      readonly sair: () => void;
+    },
   ) {
     this.tray = new Tray(icone());
     this.tray.on("click", () => this.tray.popUpContextMenu());
     motor.on("mudou", () => this.atualizar());
+    trabalho.on("mudou", () => this.atualizar());
     this.atualizar();
   }
 
   atualizar(): void {
     const estado = this.motor.estado;
+    const conta = fraseDaConta(this.trabalho);
+    const conectado = this.trabalho.estado !== "desconectado";
     const exe = caminhos().executavelInstalado;
-    this.tray.setToolTip(`Consulta Viva Ajudante\n${FRASES[estado]}`);
+    this.tray.setToolTip(`Consulta Viva Ajudante\n${FRASES[estado]}\n${conta}`);
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: FRASES[estado], enabled: false },
+        { label: conta, enabled: false },
         ...(estado === "falhou"
           ? [{ label: "Tentar de novo", click: () => void this.motor.tentarDeNovo() }]
           : []),
         { type: "separator" },
-        { label: "Abrir o Consulta Viva", click: () => void shell.openExternal(SITE) },
-        { label: "Reinstalar ou desinstalar…", click: () => this.abrirJanela() },
+        conectado
+          ? {
+              label: "Desconectar desta conta",
+              click: () => void this.trabalho.desconectar(),
+            }
+          : { label: "Conectar à sua conta…", click: () => this.acoes.conectar() },
+        {
+          label: "Abrir o Consulta Viva",
+          click: () => void shell.openExternal(enderecoDoSite()),
+        },
+        { label: "Reinstalar ou desinstalar…", click: () => this.acoes.abrirJanela() },
         {
           label: "Iniciar com o Windows",
           type: "checkbox",
@@ -75,7 +109,7 @@ export class Bandeja {
           click: (item) => iniciarComOWindows(item.checked, exe),
         },
         { type: "separator" },
-        { label: "Sair do ajudante", click: () => this.sair() },
+        { label: "Sair do ajudante", click: () => this.acoes.sair() },
       ]),
     );
   }
@@ -88,10 +122,20 @@ export class Bandeja {
     const titulo = jaEstavaLigado
       ? "O ajudante já está ligado"
       : "O ajudante está ligado";
+    this.mostrar(
+      titulo,
+      this.trabalho.estado === "desconectado"
+        ? 'Falta conectar este computador à sua conta: clique no ícone ao lado do relógio e escolha "Conectar à sua conta".'
+        : `${FRASES[this.motor.estado]}. Para ver as opções, clique no ícone ao lado do relógio.`,
+    );
+  }
+
+  /** Um aviso ao lado do relógio — o resultado de uma conexão, por exemplo. */
+  mostrar(titulo: string, texto: string): void {
     registrar(`aviso ao lado do relógio: ${titulo}`);
     this.tray.displayBalloon({
       title: titulo,
-      content: `${FRASES[this.motor.estado]}. Para ver as opções, clique no ícone ao lado do relógio.`,
+      content: texto,
       icon: iconeOriginal().resize({ width: 64, height: 64, quality: "best" }),
       noSound: true,
       respectQuietTime: true,

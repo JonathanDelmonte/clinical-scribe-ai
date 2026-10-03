@@ -89,6 +89,26 @@ call apply_tenant_isolation('public.sessions');
 call apply_tenant_isolation('public.transcript_segments');
 call apply_tenant_isolation('public.documents');
 
+-- Os computadores conectados de cada profissional (ADR-0005): ele vê e
+-- desconecta os seus, e nada além. Encontrar um ajudante PELO TOKEN, antes de
+-- saber de quem ele é, é feito com `service_role` — como o login.
+call apply_tenant_isolation('public.helpers');
+
+-- -----------------------------------------------------------------------------
+-- stations — o sinal de vida das estações
+--
+-- Nenhum dado de paciente: o nome da máquina e a hora em que foi vista. Todo
+-- profissional pode LER (é o que responde "há quem processe agora?"); só o
+-- worker, com `service_role`, escreve.
+-- -----------------------------------------------------------------------------
+alter table public.stations enable row level security;
+alter table public.stations force row level security;
+
+drop policy if exists stations_read on public.stations;
+create policy stations_read on public.stations
+  for select to authenticated
+  using (true);
+
 -- -----------------------------------------------------------------------------
 -- objective_templates — professional_id NULO significa template global
 --
@@ -209,6 +229,12 @@ grant execute on function public.audit_append(text, text, uuid, jsonb, text, tex
 --   UPDATE  ✘ mudar status é do worker; permitir aqui deixaria o cliente
 --             marcar job como concluído sem nada ter sido processado
 --   DELETE  ✘ apagar job da fila é sabotar o próprio processamento
+--
+-- O ajudante (ADR-0005) também processa, e não tem conexão com o banco: quem
+-- muda o status dos jobs DELE é o site, em nome dele, com `service_role` — e
+-- só depois de conferir o token, o dono do job e quem o pegou
+-- (`jobs.helper_id`). A regra acima continua valendo para a sessão do
+-- navegador.
 alter table public.jobs enable row level security;
 alter table public.jobs force row level security;
 

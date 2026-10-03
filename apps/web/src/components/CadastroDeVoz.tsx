@@ -80,6 +80,8 @@ export function CadastroDeVoz({
   aoPular?: (() => void) | undefined;
 }) {
   const [fase, setFase] = useState<Fase>({ tipo: "preparando" });
+  /** O cadastro está na fila há muito tempo: ninguém processando agora. */
+  const [esperandoMuito, setEsperandoMuito] = useState(false);
   const [segundos, setSegundos] = useState(0);
   const [gravacao, setGravacao] = useState<Gravacao | null>(null);
   const [tocando, setTocando] = useState(false);
@@ -267,27 +269,67 @@ export function CadastroDeVoz({
     aoFechar();
   }
 
+  /**
+   * Envia a amostra e acompanha o cadastro até o fim.
+   *
+   * O site só guarda e enfileira (ADR-0005): quem analisa a voz é o ajudante
+   * deste computador, ou a estação da equipe. A tela pergunta pela tarefa a
+   * cada segundo e meio; fechar a tela não cancela nada — a voz é cadastrada
+   * do mesmo jeito quando alguém processar.
+   */
   async function enviar() {
     if (gravacao === null) return;
     setFase({ tipo: "enviando" });
+    setEsperandoMuito(false);
     const form = new FormData();
     form.append("file", gravacao.arquivo);
+
+    let tarefa: string;
     try {
       const res = await fetch("/api/voice", { method: "POST", body: form });
-      if (!res.ok) {
-        const corpo = (await res.json().catch(() => null)) as { error?: string } | null;
+      const corpo = (await res.json().catch(() => null)) as {
+        tarefa?: unknown;
+        error?: string;
+      } | null;
+      if (!res.ok || typeof corpo?.tarefa !== "string") {
         setFase({
           tipo: "falhou",
           mensagem: corpo?.error ?? "Não foi possível cadastrar a sua voz agora.",
         });
         return;
       }
-      setFase({ tipo: "pronto" });
+      tarefa = corpo.tarefa;
     } catch {
       setFase({
         tipo: "falhou",
         mensagem: "Sem conexão com o servidor. Confira a internet e tente de novo.",
       });
+      return;
+    }
+
+    const minha = sessaoRef.current;
+    const inicio = Date.now();
+    while (sessaoRef.current === minha) {
+      await new Promise((r) => window.setTimeout(r, 1500));
+      if (sessaoRef.current !== minha) return;
+      const estado = (await fetch(`/api/voice?tarefa=${tarefa}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)) as { estado?: string; mensagem?: string } | null;
+      if (estado?.estado === "pronta") {
+        setFase({ tipo: "pronto" });
+        return;
+      }
+      if (estado?.estado === "falhou" || estado?.estado === "desconhecida") {
+        setFase({
+          tipo: "falhou",
+          mensagem: estado.mensagem ?? "Não foi possível cadastrar a sua voz agora.",
+        });
+        return;
+      }
+      // Na fila há muito tempo: ninguém está processando agora.
+      if (estado?.estado === "na_fila" && Date.now() - inicio > 45_000) {
+        setEsperandoMuito(true);
+      }
     }
   }
 
@@ -374,6 +416,13 @@ export function CadastroDeVoz({
           Gravar de novo
         </button>
       </div>
+      {fase.tipo === "enviando" && esperandoMuito && (
+        <p className="alerta alerta-info text-[14px]" role="status">
+          Esperando o ajudante deste computador. Confira se ele está ligado, no ícone ao
+          lado do relógio do Windows. Pode fechar esta tela: a gravação fica guardada e
+          a sua voz é cadastrada assim que ele processar.
+        </p>
+      )}
     </div>
   );
 

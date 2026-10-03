@@ -105,7 +105,19 @@
         o computador liga.
       </p>
       <p class="legenda" id="pronto-placa"></p>
+      <p class="legenda" id="pronto-conta"></p>
       <div class="acoes">
+        <!--
+          Sem conta conectada, o passo que falta é conectar: o botão principal
+          abre o site no navegador, onde a pessoa confirma. Com conta, concluir.
+        -->
+        <button class="secundario" id="concluir-sem-conta" type="button" hidden>
+          Agora não
+        </button>
+        <button class="principal" id="conectar" type="button" hidden>
+          Conectar à sua conta
+          <span class="principal-circulo" aria-hidden="true"></span>
+        </button>
         <button class="principal" id="concluir" type="button">
           Concluir <span class="principal-circulo" aria-hidden="true"></span>
         </button>

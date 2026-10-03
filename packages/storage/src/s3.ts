@@ -57,6 +57,8 @@ export interface PedidoAssinavel {
   readonly hashDoCorpo: string;
 }
 
+type Credenciais = Pick<ConfiguracaoS3, "accessKeyId" | "secretAccessKey" | "region">;
+
 /**
  * Assina um pedido com AWS Signature V4 e devolve o cabeçalho Authorization.
  *
@@ -65,11 +67,76 @@ export interface PedidoAssinavel {
  */
 export function assinar(
   pedido: PedidoAssinavel,
-  credenciais: Pick<ConfiguracaoS3, "accessKeyId" | "secretAccessKey" | "region">,
+  credenciais: Credenciais,
   servico = "s3",
 ): string {
   const data = pedido.cabecalhos["x-amz-date"];
   if (data === undefined) throw new Error("x-amz-date ausente");
+  const { escopo, assinados, assinatura } = calcularAssinatura(
+    pedido,
+    data,
+    credenciais,
+    servico,
+  );
+  return `AWS4-HMAC-SHA256 Credential=${credenciais.accessKeyId}/${escopo},SignedHeaders=${assinados},Signature=${assinatura}`;
+}
+
+/**
+ * Um link que abre UM arquivo, para UM método, por pouco tempo — sem levar a
+ * credencial junto. É assim que o ajudante, no computador de cada pessoa,
+ * baixa o áudio de uma consulta e envia a cópia guardada: ele nunca recebe a
+ * chave do armazenamento, e um link vazado expira sozinho.
+ *
+ * A assinatura vai na própria URL (AWS Signature V4 por parâmetros), e só o
+ * `host` entra nela: quem usa o link manda o corpo que quiser, do tamanho que
+ * quiser — o limite de cada arquivo é do próprio armazenamento.
+ */
+export function urlAssinada(
+  pedido: {
+    readonly metodo: "GET" | "PUT";
+    readonly url: URL;
+    readonly segundos: number;
+    readonly agora: Date;
+  },
+  credenciais: Credenciais,
+  servico = "s3",
+): string {
+  const data = dataAmz(pedido.agora);
+  const url = new URL(pedido.url);
+  url.searchParams.set("X-Amz-Algorithm", "AWS4-HMAC-SHA256");
+  url.searchParams.set(
+    "X-Amz-Credential",
+    `${credenciais.accessKeyId}/${data.slice(0, 8)}/${credenciais.region}/${servico}/aws4_request`,
+  );
+  url.searchParams.set("X-Amz-Date", data);
+  url.searchParams.set("X-Amz-Expires", String(pedido.segundos));
+  url.searchParams.set("X-Amz-SignedHeaders", "host");
+  const { assinatura } = calcularAssinatura(
+    {
+      metodo: pedido.metodo,
+      url,
+      cabecalhos: { host: url.host },
+      hashDoCorpo: "UNSIGNED-PAYLOAD",
+    },
+    data,
+    credenciais,
+    servico,
+  );
+  url.searchParams.set("X-Amz-Signature", assinatura);
+  return url.toString();
+}
+
+/** O miolo da Signature V4, comum ao cabeçalho e ao link assinado. */
+function calcularAssinatura(
+  pedido: PedidoAssinavel,
+  data: string,
+  credenciais: Credenciais,
+  servico: string,
+): {
+  readonly escopo: string;
+  readonly assinados: string;
+  readonly assinatura: string;
+} {
   const dia = data.slice(0, 8);
 
   const nomes = Object.keys(pedido.cabecalhos)
@@ -121,7 +188,7 @@ export function assinar(
     .update(textoParaAssinar, "utf8")
     .digest("hex");
 
-  return `AWS4-HMAC-SHA256 Credential=${credenciais.accessKeyId}/${escopo},SignedHeaders=${assinados},Signature=${assinatura}`;
+  return { escopo, assinados, assinatura };
 }
 
 /** `20260924T123456Z` */
@@ -219,6 +286,14 @@ export function createS3Storage(
 
   return {
     kind: "s3",
+
+    urlAssinada(chave, metodo, segundos) {
+      conferirChave(chave);
+      return urlAssinada(
+        { metodo, url: urlDe(chave), segundos, agora: relogio() },
+        cfg,
+      );
+    },
 
     async put(chave, dados) {
       conferirChave(chave);

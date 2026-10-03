@@ -1,0 +1,26 @@
+{
+  "name": "@scribe/processamento",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A fila e as etapas do processamento de uma consulta — as mesmas na estação e no ajudante",
+  "exports": {
+    ".": "./src/index.ts",
+    "./puro": "./src/puro.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@scribe/core": "workspace:*",
+    "@scribe/db": "workspace:*",
+    "@scribe/storage": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "vitest": "^5.0.0"
+  }
+}

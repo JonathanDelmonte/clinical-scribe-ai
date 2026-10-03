@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { armazenamentoPedido, createStorageFromEnv } from "./index";
-import { assinar, createS3Storage } from "./s3";
+import { assinar, createS3Storage, urlAssinada } from "./s3";
 
 /**
  * Os exemplos publicados pela AWS na documentação da Signature V4 para S3.
@@ -83,6 +83,30 @@ describe("assinatura AWS V4 — exemplos oficiais", () => {
     expect(assinatura(auth)).toBe(
       "34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7",
     );
+  });
+
+  it("link assinado (a assinatura na URL), o exemplo da documentação", () => {
+    const link = new URL(
+      urlAssinada(
+        {
+          metodo: "GET",
+          url: new URL("https://examplebucket.s3.amazonaws.com/test.txt"),
+          segundos: 86400,
+          agora: new Date("2013-05-24T00:00:00Z"),
+        },
+        AWS,
+      ),
+    );
+    expect(link.searchParams.get("X-Amz-Signature")).toBe(
+      "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404",
+    );
+    expect(link.searchParams.get("X-Amz-Credential")).toBe(
+      "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request",
+    );
+    expect(link.searchParams.get("X-Amz-Expires")).toBe("86400");
+    expect(link.searchParams.get("X-Amz-SignedHeaders")).toBe("host");
+    // A credencial secreta nunca vai na URL.
+    expect(link.toString()).not.toContain(AWS.secretAccessKey);
   });
 });
 

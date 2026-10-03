@@ -73,8 +73,12 @@ ordem:
      Reinstalar (reparar) e Desinstalar; Python, motor e modelos instalados
      com tela de progresso, sem janela de comando; o motor testado na placa ao
      fim; bandeja, início com o Windows, pausa com o Docker.
-   - **Etapa 2:** o site manda as consultas de cada pessoa para o ajudante
-     dela, e o cadastro da voz passa pela fila.
+   - ✅ **Etapa 2, em 02/10:** o site manda as consultas de cada pessoa para
+     o ajudante dela, e o cadastro da voz passa pela fila. O ajudante se
+     conecta pela conta, no navegador, sem senha no programa; as etapas da
+     transcrição saíram do worker para um pacote que a estação e o site
+     usam iguais (`@scribe/processamento`). Falta o teste de ponta a ponta e
+     a implantação.
    - **Etapa 3:** a nota feita pelo site, com a chave de IA de cada pessoa,
      sem depender de computador ligado.
 

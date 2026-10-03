@@ -24,6 +24,19 @@ export const NOME_DO_PROGRAMA = "Consulta Viva Ajudante";
 export const ID_DO_APLICATIVO = "br.com.consultaviva.ajudante";
 export const SITE = "https://clinical-scribe-ai-web.vercel.app";
 
+/**
+ * O site com que o ajudante conversa. `AJUDANTE_SITE` troca — para testar
+ * contra o site rodando no próprio computador (`http://localhost:3005`).
+ */
+export function enderecoDoSite(): string {
+  return (process.env["AJUDANTE_SITE"]?.trim() || SITE).replace(/\/+$/, "");
+}
+
+/** O motor deste ajudante, no próprio computador. */
+export function enderecoDoMotor(): string {
+  return `http://127.0.0.1:${PORTA_DO_MOTOR}`;
+}
+
 export function caminhos() {
   const local = process.env["LOCALAPPDATA"] ?? join(homedir(), "AppData", "Local");
   const programa = join(local, "Programs", NOME_DO_PROGRAMA);
@@ -50,6 +63,8 @@ export function caminhos() {
     temp: join(dados, "temp"),
     logs: join(dados, "logs"),
     estado: join(dados, "estado.json"),
+    /** O token da conta conectada, cifrado pelo Windows (DPAPI). */
+    conta: join(dados, "conta.bin"),
     pidDoMotor: join(dados, "motor.pid"),
     pidDoAjudante: join(dados, "ajudante.pid"),
   };

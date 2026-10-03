@@ -19,6 +19,8 @@ export interface Situacao {
   readonly espacoNecessario: number;
   /** A janela abriu para escolher, ou direto na desinstalação (Configurações do Windows). */
   readonly abertaPara: "escolher" | "desinstalar";
+  /** De quem é a conta a que este computador está conectado, se estiver. */
+  readonly conta: string | null;
 }
 
 export interface Progresso {
@@ -42,6 +44,8 @@ export interface ApiDoAjudante {
   aoPedido(ouvinte: (opcao: ModoDaInstalacao | "desinstalar") => void): void;
   /** Fecha a janela; o ajudante segue na bandeja. */
   concluir(): void;
+  /** Conclui e conecta este computador a uma conta, pelo navegador. */
+  conectar(): void;
   /** Encerra de vez (depois de desinstalar). */
   sair(): void;
   copiar(texto: string): void;

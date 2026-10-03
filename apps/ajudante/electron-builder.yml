@@ -28,5 +28,7 @@ win:
   icon: recursos/icones/icone.png
   executableName: Consulta Viva Ajudante
 portable:
-  artifactName: ConsultaViva-Ajudante-${version}.exe
+  # Nome fixo, sem a versão: o site aponta para a versão mais recente pelo
+  # mesmo endereço (`releases/latest/download/ConsultaViva-Ajudante.exe`).
+  artifactName: ConsultaViva-Ajudante.exe
   unpackDirName: ConsultaVivaAjudante

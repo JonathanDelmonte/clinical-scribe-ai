@@ -44,6 +44,9 @@ export const ACOES = {
   perfilAtualizado: "perfil.atualizado",
   retencaoAlterada: "perfil.retencao_alterada",
   chaveIaAlterada: "perfil.chave_ia_alterada",
+  /** Um computador passou a processar as consultas desta conta (ADR-0005). */
+  ajudanteConectado: "perfil.ajudante_conectado",
+  ajudanteDesconectado: "perfil.ajudante_desconectado",
 
   pacienteCriado: "paciente.criado",
   pacienteAberto: "paciente.aberto",

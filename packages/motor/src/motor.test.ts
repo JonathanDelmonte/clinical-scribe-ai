@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { agente, semCorteDoUndici } from "./local.js";
+import { agente, semCorteDoUndici } from "./index";
 
 /**
  * Um motor que demora a responder — como a transcrição de uma consulta longa,
@@ -25,12 +25,12 @@ describe("as chamadas ao motor e o corte do undici", () => {
   // corte de 300 ms não aconteceria — e o agente sem corte não provaria nada.
   it("o fetch do Node obedece ao agente do pacote undici", async () => {
     await expect(
-      fetch(url, { dispatcher: agente({ headersTimeout: 300 }) }),
+      fetch(url, { dispatcher: agente({ headersTimeout: 300 }) } as RequestInit),
     ).rejects.toThrow(/fetch failed/);
   });
 
   it("sem o corte, espera o motor responder", async () => {
-    const res = await fetch(url, { dispatcher: semCorteDoUndici });
+    const res = await fetch(url, { dispatcher: semCorteDoUndici } as RequestInit);
     expect(await res.text()).toBe("pronto");
   });
 });

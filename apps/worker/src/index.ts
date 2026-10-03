@@ -12,7 +12,21 @@
  * fornecedor que talvez não passe no portão de qualidade.
  */
 
+import { hostname } from "node:os";
+
 import { createServiceClient } from "@scribe/db";
+import {
+  claimJob,
+  completeJob,
+  ErroDefinitivo,
+  failJob,
+  LEASE_RENEW_MS,
+  marcarEstacao,
+  reapAbandoned,
+  renewLease,
+  TIPO_IMPRESSAO_VOCAL,
+  type ClaimedJob,
+} from "@scribe/processamento";
 import { createStorageFromEnv } from "@scribe/storage";
 
 import { config, requireDatabaseUrl } from "./config.js";
@@ -22,17 +36,9 @@ import { makeNoteHandler } from "./handlers/note.js";
 import { makeDeleteAudioHandler, sweepRetention } from "./handlers/retention.js";
 import { makeObjectiveHandler } from "./handlers/objective.js";
 import { makeTranscribeHandler } from "./handlers/transcribe.js";
+import { makeVoiceHandler } from "./handlers/voice.js";
 import { criarEscolhaDeLlm, lerChaveDoBanco, resolveLlm } from "./llm/index.js";
-import {
-  claimJob,
-  completeJob,
-  ErroDefinitivo,
-  failJob,
-  LEASE_RENEW_MS,
-  reapAbandoned,
-  renewLease,
-  type ClaimedJob,
-} from "./queue.js";
+import { getProvider } from "./providers/index.js";
 
 const db = createServiceClient(requireDatabaseUrl());
 const storage = createStorageFromEnv({
@@ -76,7 +82,26 @@ const handlers: Record<string, JobHandler> = {
   // depende de LLM — o papel continua sendo decidido pelo conteúdo, que é
   // determinístico.
   diarize_channels: makeChannelsHandler(db, storage, logger),
+
+  // O cadastro da voz, pela fila: de quem não tem ajudante ligado.
+  [TIPO_IMPRESSAO_VOCAL]: makeVoiceHandler(db, storage, logger),
 };
+
+/**
+ * O sinal de vida desta estação, a cada 30 segundos — mas só com o motor de
+ * pé: uma estação com o motor fora do ar não processa nada, e dizer ao site
+ * que há quem processe seria pedir à pessoa que grave a voz à toa.
+ */
+const ESTACAO = `estacao:${hostname()}`;
+const motorLocal = getProvider("local");
+async function darSinal(): Promise<void> {
+  if (!(await motorLocal.healthy())) return;
+  await marcarEstacao(db, ESTACAO).catch((err: unknown) => {
+    logger.debug({ err }, "sinal da estação não gravado");
+  });
+}
+void darSinal();
+setInterval(() => void darSinal(), 30_000).unref();
 
 if (llm.blockedReason !== null) {
   logger.warn(

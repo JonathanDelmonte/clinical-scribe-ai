@@ -125,6 +125,16 @@ async function executar(opcao: Opcao): Promise<void> {
         situacao?.placa.dispositivo === "cuda"
           ? "O motor usa a placa de vídeo deste computador."
           : "O motor usa o processador deste computador.";
+      // Sem conta, falta o último passo: conectar. Com conta (um reparo), só
+      // concluir.
+      const conta = situacao?.conta ?? null;
+      el("pronto-conta").textContent =
+        conta === null
+          ? "Falta conectar este computador à sua conta do Consulta Viva."
+          : `Conectado à conta de ${conta}.`;
+      el("conectar").hidden = conta !== null;
+      el("concluir-sem-conta").hidden = conta !== null;
+      el("concluir").hidden = conta === null;
       mostrar("pronto");
     }
     return;
@@ -151,6 +161,8 @@ el("confirmar-desinstalar").addEventListener(
 );
 el("voltar").addEventListener("click", () => mostrar("escolha"));
 el("concluir").addEventListener("click", () => api.concluir());
+el("concluir-sem-conta").addEventListener("click", () => api.concluir());
+el("conectar").addEventListener("click", () => api.conectar());
 el("fechar").addEventListener("click", () => api.sair());
 el("tentar-de-novo").addEventListener("click", () => {
   void carregarSituacao().then(() => {

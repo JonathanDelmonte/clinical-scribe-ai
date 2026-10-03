@@ -8,7 +8,7 @@ import { and, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm
 
 import type { Logger } from "pino";
 
-import type { ClaimedJob } from "../queue.js";
+import type { ClaimedJob } from "@scribe/processamento";
 
 /**
  * Retenção mínima: apagar o áudio da consulta depois de `AUDIO_RETENTION_DAYS`.

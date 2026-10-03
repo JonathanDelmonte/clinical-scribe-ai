@@ -32,7 +32,7 @@ import { asc, eq } from "drizzle-orm";
 import type { Logger } from "pino";
 
 import type { EscolherLlm } from "../llm/index.js";
-import { ErroDefinitivo, type ClaimedJob } from "../queue.js";
+import { ErroDefinitivo, type ClaimedJob } from "@scribe/processamento";
 
 export function makeNoteHandler(
   db: Database,

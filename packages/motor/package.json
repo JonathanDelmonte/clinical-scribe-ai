@@ -1,0 +1,22 @@
+{
+  "name": "@scribe/motor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cliente do motor de transcrição (services/asr-local) — o mesmo na estação e no ajudante",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@scribe/core": "workspace:*",
+    "undici": "^7.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "vitest": "^5.0.0"
+  }
+}

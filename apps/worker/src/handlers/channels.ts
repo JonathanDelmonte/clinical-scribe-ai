@@ -33,9 +33,8 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 
 import { config } from "../config.js";
-import { juntarPedacos } from "../pedacos.js";
-import { diarizarPorCanais, medirSegundoMicrofoneNoMotor } from "../providers/local.js";
-import type { ClaimedJob } from "../queue.js";
+import { juntarPedacos, type ClaimedJob } from "@scribe/processamento";
+import { diarizarPorCanais, medirSegundoMicrofoneNoMotor } from "@scribe/motor";
 
 export function makeChannelsHandler(
   db: Database,

@@ -1,9 +1,12 @@
 /**
- * Motor LOCAL — cliente do serviço Whisper + pyannote em `services/asr-local`.
+ * Cliente do motor de transcrição — o serviço Whisper + pyannote de
+ * `services/asr-local`, no Docker da estação ou no ajudante do computador de
+ * cada pessoa. Um pacote só para os dois: o motor é o mesmo, e as conversas com
+ * ele (prazos, formatos, erros) também precisam ser.
  *
- * É o motor do plano grátis. O áudio vai para um container nosso e não sai
- * dele: nenhuma chamada externa, nenhuma transferência internacional de dado
- * de saúde, nenhum subprocessador para declarar na política de privacidade.
+ * O áudio vai para um motor nosso e não sai dele: nenhuma chamada externa,
+ * nenhuma transferência internacional de dado de saúde, nenhum subprocessador
+ * para declarar na política de privacidade.
  */
 
 import type {
@@ -28,16 +31,31 @@ import { Agent } from "undici";
 export const semCorteDoUndici = agente({ headersTimeout: 0, bodyTimeout: 0 });
 
 /**
- * Um `Agent` do pacote `undici` no formato que o `fetch` global aceita.
+ * Um `Agent` do pacote `undici`, para o `dispatcher` do `fetch` global.
  *
- * O tipo do `fetch` global vem do `undici-types` do @types/node, de outra
- * versão; em execução, o Node 24 traz o undici 7 — o mesmo major do pacote —,
- * e o teste confere que o `fetch` do Node obedece a este agente.
+ * Em execução, o `fetch` é sempre o do Node — o Node 24 da estação e o do
+ * Electron do ajudante trazem o undici 7, o mesmo major do pacote, e o teste
+ * confere que o `fetch` do Node obedece a este agente. Já o TIPO muda conforme
+ * quem compila: com os tipos do Node, `RequestInit` conhece `dispatcher`; com
+ * os do navegador (o ajudante compila a janela junto), não. Por isso o agente
+ * sai sem tipo, e as chamadas usam `PedidoAoMotor`.
  */
-export function agente(
-  opcoes: ConstructorParameters<typeof Agent>[0],
-): NonNullable<RequestInit["dispatcher"]> {
-  return new Agent(opcoes) as unknown as NonNullable<RequestInit["dispatcher"]>;
+export function agente(opcoes: ConstructorParameters<typeof Agent>[0]): unknown {
+  return new Agent(opcoes);
+}
+
+/** `RequestInit` mais o `dispatcher` do undici — ver `agente`. */
+type PedidoAoMotor = RequestInit & { readonly dispatcher?: unknown };
+
+/** O motor respondeu, e recusou: o código diz se tentar de novo adianta. */
+export class ErroDoMotor extends Error {
+  override readonly name = "ErroDoMotor";
+  constructor(
+    readonly status: number,
+    mensagem: string,
+  ) {
+    super(mensagem);
+  }
 }
 
 interface LocalResponse {
@@ -128,7 +146,13 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
     }
   }
 
-  /** Cadastra a voz do profissional a partir de uma amostra de fala. */
+  /**
+   * Cadastra a voz do profissional a partir de uma amostra de fala.
+   *
+   * Recusa vem como `ErroDoMotor`, com o código: 400 é amostra curta demais
+   * (gravar de novo resolve; tentar de novo, não), e 503 é o motor sem o
+   * modelo de impressão vocal.
+   */
   async enrollVoice(
     audio: Uint8Array<ArrayBuffer>,
     filename: string,
@@ -140,12 +164,15 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
       body: form,
       signal: AbortSignal.timeout(5 * 60 * 1000),
       dispatcher: semCorteDoUndici,
-    });
+    } as PedidoAoMotor);
     if (!res.ok) {
       const corpo = (await res.json().catch(() => null)) as {
         detail?: string;
       } | null;
-      throw new Error(corpo?.detail ?? `asr-local respondeu ${res.status}`);
+      throw new ErroDoMotor(
+        res.status,
+        corpo?.detail ?? `asr-local respondeu ${res.status}`,
+      );
     }
     const body = (await res.json()) as {
       embedding: number[];
@@ -185,7 +212,7 @@ export class LocalTranscriptionProvider implements TranscriptionProvider {
       body: form,
       signal: AbortSignal.timeout(prazoMs),
       dispatcher: semCorteDoUndici,
-    });
+    } as PedidoAoMotor);
 
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -278,7 +305,7 @@ export async function diarizarPorCanais(
     // folga, não expectativa.
     signal: AbortSignal.timeout(10 * 60 * 1000),
     dispatcher: semCorteDoUndici,
-  });
+  } as PedidoAoMotor);
   if (!res.ok) {
     const corpo = await res.text().catch(() => "");
     throw new Error(
@@ -326,7 +353,7 @@ async function converter(
     // Decodificar uma consulta longa leva segundos. Dez minutos é folga.
     signal: AbortSignal.timeout(10 * 60 * 1000),
     dispatcher: semCorteDoUndici,
-  });
+  } as PedidoAoMotor);
   if (res.status === 415 || res.status === 413) {
     const corpo = (await res.json().catch(() => null)) as { detail?: unknown } | null;
     return {

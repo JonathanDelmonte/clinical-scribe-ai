@@ -14,11 +14,13 @@
 export {
   auditLog,
   documents,
+  helpers,
   jobs,
   objectiveTemplates,
   patients,
   professionals,
   sessions,
+  stations,
   transcriptSegments,
   usageEvents,
 } from "./schema";

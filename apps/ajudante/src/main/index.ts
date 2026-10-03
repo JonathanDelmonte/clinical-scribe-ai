@@ -33,12 +33,17 @@ import {
   rodandoDoLugarInstalado,
   situacaoDaMaquina,
 } from "./instalacao";
+import { conectar, lerConta } from "./conta";
 import { lerConfiguracao, Motor, motorInstalado } from "./motor";
 import { registrar, ultimasLinhas } from "./registro";
+import { criarSite } from "./site";
+import { Trabalho } from "./trabalho";
 
 const argumentos = process.argv.slice(1);
 const naBandeja = argumentos.includes("--bandeja");
 const paraDesinstalar = argumentos.includes("--desinstalar");
+/** Aberto para conectar à conta (o botão do fim da instalação). */
+const paraConectar = argumentos.includes("--conectar");
 const instalado = rodandoDoLugarInstalado();
 // Instalado, o ajudante mora na bandeja — menos quando abre para desinstalar.
 // Em desenvolvimento, só com --bandeja; sem ele, a janela do instalador.
@@ -49,6 +54,7 @@ app.setAppUserModelId(ID_DO_APLICATIVO);
 let janela: BrowserWindow | null = null;
 let bandeja: Bandeja | null = null;
 let motor: Motor | null = null;
+let trabalho: Trabalho | null = null;
 let trabalhando = false;
 /** Desinstalado de dentro da própria pasta: ela é apagada na saída. */
 let apagarAoSair = false;
@@ -66,6 +72,7 @@ if (!ehAPrimeira) {
 } else if (copiaUnica) {
   app.on("second-instance", (_evento, argumentosNovos) => {
     if (argumentosNovos.includes("--desinstalar")) abrirJanela("desinstalar");
+    else if (argumentosNovos.includes("--conectar")) conectarConta();
     else if (argumentosNovos.includes("--bandeja")) return;
     else if (bandeja !== null) bandeja.avisar(true);
     else abrirJanela("escolher");
@@ -129,12 +136,39 @@ function abrirJanela(para: Situacao["abertaPara"] = "escolher"): void {
 function iniciarBandeja(): void {
   if (bandeja !== null || !motorInstalado()) return;
   motor ??= new Motor();
-  bandeja = new Bandeja(
-    motor,
-    () => abrirJanela("escolher"),
-    () => app.quit(),
-  );
+  trabalho ??= new Trabalho(motor);
+  bandeja = new Bandeja(motor, trabalho, {
+    abrirJanela: () => abrirJanela("escolher"),
+    conectar: () => conectarConta(),
+    sair: () => app.quit(),
+  });
   motor.vigiar();
+  trabalho.iniciar();
+}
+
+/**
+ * Conecta este computador a uma conta, pelo navegador (ver `conta.ts`). O
+ * resultado aparece ao lado do relógio — o navegador mostra o seu lado.
+ */
+function conectarConta(): void {
+  iniciarBandeja();
+  const dispositivo = lerConfiguracao()?.dispositivo ?? "cpu";
+  void conectar(app.getVersion(), dispositivo)
+    .then((conta) => {
+      trabalho?.conectado();
+      bandeja?.mostrar(
+        "Computador conectado",
+        `As consultas de ${conta.profissional} passam a ser processadas aqui, enquanto o ajudante estiver ligado.`,
+      );
+    })
+    .catch((erro: unknown) => {
+      bandeja?.mostrar(
+        "Não deu para conectar",
+        erro instanceof Error
+          ? erro.message
+          : "Tente de novo pelo ícone ao lado do relógio.",
+      );
+    });
 }
 
 async function situacao(): Promise<Situacao> {
@@ -149,6 +183,7 @@ async function situacao(): Promise<Situacao> {
     espacoLivre: livre,
     espacoNecessario: necessario,
     abertaPara,
+    conta: lerConta()?.profissional ?? null,
   };
 }
 
@@ -176,6 +211,7 @@ ipcMain.handle(
       // A bandeja desta cópia (se houver) solta o motor e o ícone: a instalação
       // vai recriar o ambiente debaixo deles.
       motor?.pararDeVigiar();
+      trabalho?.parar();
       bandeja?.destruir();
       bandeja = null;
       await instalar(modo, (p) => janela?.webContents.send("progresso", p), motor);
@@ -193,6 +229,15 @@ ipcMain.handle("desinstalar", async (): Promise<Resultado> => {
   try {
     bandeja?.destruir();
     bandeja = null;
+    // O token deixa de valer no site antes de o arquivo dele sumir daqui: um
+    // computador desinstalado não fica na lista de conectados da pessoa.
+    trabalho?.parar();
+    const conta = lerConta();
+    if (conta !== null) {
+      await criarSite(conta.token)
+        .desconectar()
+        .catch(() => undefined);
+    }
     apagarAoSair = await desinstalar(
       (p) => janela?.webContents.send("progresso", p),
       motor,
@@ -223,6 +268,21 @@ ipcMain.on("concluir", () => {
   bandeja?.avisar(false);
 });
 
+/** "Conectar à sua conta", no fim da instalação. */
+ipcMain.on("conectar", () => {
+  if (app.isPackaged && !instalado) {
+    // Quem conecta é o programa instalado, que guarda a conta e fica.
+    spawn(caminhos().executavelInstalado, ["--conectar"], {
+      detached: true,
+      stdio: "ignore",
+    }).unref();
+    app.quit();
+    return;
+  }
+  janela?.close();
+  conectarConta();
+});
+
 ipcMain.on("sair", () => app.quit());
 ipcMain.on("copiar", (_evento, texto: string) => clipboard.writeText(texto));
 
@@ -239,8 +299,9 @@ app.whenReady().then(() => {
   }
   if (moraNaBandeja && motorInstalado()) {
     iniciarBandeja();
+    if (paraConectar) conectarConta();
     // Aberto pelo Menu Iniciar não há janela: o aviso é a resposta visível.
-    if (!naBandeja) bandeja?.avisar(false);
+    else if (!naBandeja) bandeja?.avisar(false);
     return;
   }
   // O arquivo baixado; o instalado aberto para desinstalar; ou um instalado

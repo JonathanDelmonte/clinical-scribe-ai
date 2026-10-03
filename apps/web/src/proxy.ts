@@ -30,6 +30,9 @@ const PUBLICAS = [
   "/termos",
   "/api/auth/",
   "/api/health",
+  // O ajudante não tem cookie: cada rota dele confere o próprio token (ou a
+  // assinatura do link, ou — na criação do convite — a sessão do navegador).
+  "/api/ajudante/",
 ];
 
 export function proxy(request: NextRequest): NextResponse {
@@ -57,9 +60,13 @@ export function proxy(request: NextRequest): NextResponse {
     const destino = request.nextUrl.clone();
     destino.pathname = "/entrar";
     destino.search = "";
-    // Guarda para onde a pessoa queria ir. Um clique num link de sessão
-    // recebido fora do app não pode terminar no painel genérico.
-    if (pathname !== "/") destino.searchParams.set("de", pathname);
+    // Guarda para onde a pessoa queria ir — com os parâmetros. Um clique num
+    // link de sessão recebido fora do app não pode terminar no painel
+    // genérico, e a conexão do ajudante (`/ajudante/conectar?porta=...`)
+    // perderia no login o endereço de volta para o computador da pessoa.
+    if (pathname !== "/") {
+      destino.searchParams.set("de", pathname + request.nextUrl.search);
+    }
     return NextResponse.redirect(destino);
   }
 

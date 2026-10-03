@@ -16,6 +16,7 @@
  */
 
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -572,6 +573,66 @@ export const auditLog = pgTable(
 // Fila de processamento
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Quem processa: a estação e os ajudantes. Ver ADR-0005.
+// -----------------------------------------------------------------------------
+
+/**
+ * Um computador conectado à conta de um profissional pelo ajudante
+ * (`apps/ajudante`): enquanto ele estiver ligado e pronto, as consultas
+ * DESTE profissional são processadas lá, e a estação as deixa passar.
+ *
+ * O token do ajudante NÃO fica aqui — só o SHA-256 dele, como uma senha. Um
+ * dump do banco não conecta ninguém. Desconectar é apagar a linha.
+ */
+export const helpers = pgTable(
+  "helpers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    professionalId: uuid("professional_id")
+      .notNull()
+      .references(() => professionals.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    /**
+     * O código de conexão que criou esta linha. Único: o mesmo código, usado
+     * duas vezes (interceptado, ou um clique duplo), não conecta dois.
+     */
+    pairingNonce: text("pairing_nonce").notNull(),
+    /** O nome do computador, para a pessoa reconhecer qual é qual. */
+    name: text("name").notNull(),
+    version: text("version"),
+    /** "cuda" (placa de vídeo) ou "cpu". */
+    device: text("device"),
+    /**
+     * O motor está ligado e aceita trabalho — e não em pausa porque o Docker
+     * está ligado no mesmo computador. Um ajudante visto mas não pronto não
+     * tira trabalho da estação.
+     */
+    ready: boolean("ready").notNull().default(false),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("helpers_token_idx").on(t.tokenHash),
+    uniqueIndex("helpers_pairing_idx").on(t.pairingNonce),
+    index("helpers_professional_idx").on(t.professionalId),
+  ],
+);
+
+/**
+ * O sinal de vida de cada estação — o worker com Docker que atende as
+ * consultas de quem não tem ajudante ligado.
+ *
+ * Existe para o site responder "há quem processe agora?" antes de pedir à
+ * pessoa que grave a voz: descobrir no fim, depois de ler as frases em voz
+ * alta, que nada vai processar a gravação é o pior momento para descobrir.
+ * Nenhum dado de paciente: o nome da máquina e a hora.
+ */
+export const stations = pgTable("stations", {
+  id: text("id").primaryKey(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+});
+
 /**
  * Fila em tabela, consumida com `FOR UPDATE SKIP LOCKED`.
  *
@@ -596,6 +657,11 @@ export const jobs = pgTable(
     /** Backoff exponencial: o worker só pega jobs com runAfter <= now(). */
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
     lastError: text("last_error"),
+    /**
+     * Quem pegou o job: o ajudante (a linha dele), ou nulo para a estação.
+     * Só quem pegou renova a concessão e entrega o resultado.
+     */
+    helperId: uuid("helper_id").references(() => helpers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },

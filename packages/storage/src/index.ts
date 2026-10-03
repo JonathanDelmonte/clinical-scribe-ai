@@ -28,6 +28,15 @@ export interface AudioStorage {
    * não erro — "não há nada aqui" é uma resposta, não uma falha.
    */
   list(prefix: string): Promise<string[]>;
+  /**
+   * Um link para baixar (`GET`) ou enviar (`PUT`) UM arquivo, que expira em
+   * `segundos` — sem entregar a credencial a quem o usa. É como o ajudante,
+   * no computador de cada pessoa, lê e grava áudio.
+   *
+   * Só existe onde o próprio armazenamento sabe assinar links (o S3). No disco
+   * local de desenvolvimento quem assina é o site, com uma rota própria.
+   */
+  urlAssinada?(chave: string, metodo: "GET" | "PUT", segundos: number): string;
 }
 
 /**

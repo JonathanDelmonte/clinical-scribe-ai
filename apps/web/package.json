@@ -15,6 +15,7 @@
     "@scribe/auth": "workspace:*",
     "@scribe/core": "workspace:*",
     "@scribe/db": "workspace:*",
+    "@scribe/processamento": "workspace:*",
     "@scribe/storage": "workspace:*",
     "@supabase/supabase-js": "^2.116.0",
     "drizzle-orm": "^0.45.2",

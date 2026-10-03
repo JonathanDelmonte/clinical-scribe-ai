@@ -1,8 +1,9 @@
 # ADR-0005 — O ajudante: o motor no computador de cada pessoa, sem Docker
 
 > Status: **etapa 1 implementada** (instalador, motor, bandeja) · 01/10/2026.
-> A etapa 2 — o site mandando as consultas de cada pessoa para o ajudante
-> dela — é a próxima. Ver "O que falta", no fim.
+> **Etapa 2 implementada** (o site manda as consultas e o cadastro da voz de
+> cada pessoa para o ajudante dela) · 02/10/2026 — falta o teste de ponta a
+> ponta e a implantação, na ordem do fim desta seção. Ver "Etapa 2".
 
 ---
 
@@ -117,16 +118,97 @@ lá dentro não se resolvem (o item 5). Atalho, registro e início com o Windows
 também ficam invisíveis para o resto do sistema. Quem abre o ajudante com dois
 cliques não passa por isso. O teste que vale é o de dois cliques.
 
+## Etapa 2: o site manda o trabalho para o ajudante
+
+Com o ajudante da pessoa ligado, as consultas DELA são transcritas lá; com
+ele desligado, a estação (o Docker) atende, como sempre.
+
+### Quem processa o quê
+
+| | Estação | Ajudante |
+|---|---|---|
+| Transcrição (`transcribe`) | de quem não tem ajudante ligado | só as do próprio profissional |
+| Cadastro da voz (`voice_embedding`) | idem | idem |
+| Nota, objetivo, retenção, segundo microfone | sempre | — |
+
+"Ligado" é visto há menos de 45 segundos **e** com o motor pronto — em pausa
+pelo Docker, o ajudante não tira trabalho da estação. Quem pegou cada job fica
+em `jobs.helper_id`, e só quem pegou renova a concessão e entrega. Se o
+ajudante some no meio, a concessão (dois minutos) vence e a estação refaz.
+
+### O ajudante faz a parte pesada; o site decide
+
+O ajudante não tem conexão com o banco, nem chave nenhuma. Ele recebe uma
+**ordem de serviço** — links assinados para baixar o áudio e enviar a cópia
+guardada, e os parâmetros do motor — e devolve o que o motor respondeu. Quem
+confere a quota, identifica os papéis, grava os trechos e trava transcrição
+truncada é o **site**, chamando as mesmas etapas que a estação chama
+(`@scribe/processamento`, extraídas do handler do worker sem mudar o
+comportamento).
+
+O motivo é a versão. Um ajudante instalado num computador qualquer fica
+desatualizado; se as regras morassem nele, uma correção na identificação de
+papéis só valeria para quem reinstalasse. Morando no site, vale para todos no
+deploy seguinte. O que o ajudante faz — baixar, converter, transcrever — é
+estável como o próprio motor.
+
+Tudo o que chega do ajudante é conferido (`zod`) antes de tocar o banco, e o
+site só aponta a sessão para uma cópia que o armazenamento confirma ter.
+
+### Conectar sem senha no programa
+
+Como os aplicativos que "entram com o Google" (OAuth para aplicativos
+nativos, com PKCE): o ajudante abre o navegador em `/ajudante/conectar`; a
+pessoa, já dentro da conta, confirma; o site devolve um **convite** assinado
+(cinco minutos) pelo endereço local do computador (127.0.0.1); o ajudante o
+troca, com um verificador que nunca saiu dele, por um **token** próprio. O
+banco guarda só o SHA-256 do token; o ajudante o guarda cifrado pelo Windows
+(DPAPI). Desconecta-se pelo menu da bandeja ou pelos ajustes do site, e
+desinstalar também desconecta.
+
+Dois cuidados que os testes fixam (`packages/auth/src/ajudante.test.ts`): o
+convite é assinado com uma chave **derivada**, diferente da do cookie — senão
+um convite interceptado valeria como sessão por cinco minutos —, e cada
+convite conecta um computador só (nonce único no banco).
+
+### Os arquivos
+
+O áudio vai e volta por **links assinados** que expiram em uma hora: no S3
+(produção), a assinatura é do próprio armazenamento (`urlAssinada`, testada
+contra o exemplo publicado pela AWS), e o áudio não passa por função do site
+— que nem aceitaria corpos desse tamanho. No disco local de desenvolvimento,
+quem assina é o site, numa rota própria.
+
+### O cadastro da voz, pela fila
+
+O site guarda a amostra e enfileira `voice_embedding`; quem processa grava os
+256 números e apaga a amostra na hora (também na recusa por amostra curta e
+na última tentativa de uma falha). A tela acompanha a tarefa; antes de pedir a
+gravação, ela pergunta se há quem processe — um ajudante da pessoa, ou uma
+estação viva (`stations`, o sinal de vida que o worker grava a cada 30 s com
+o motor de pé).
+
+### Privilégios
+
+O site faz, em nome do ajudante, o que por desenho é só do worker: mudar o
+status de um job e registrar o uso. Isso roda com `service_role`, numa
+transação curta, sempre filtrada pelo job, pelo profissional e pelo ajudante
+já conferidos — a mesma disciplina do worker, e a regra do `rls.sql` (todo uso
+de `service_role` diz por quê, no próprio código: `lib/ajudante/conta.ts`).
+
+### A ordem da implantação
+
+1. **Migração no banco** (`helpers`, `stations`, `jobs.helper_id`) — só
+   acrescenta: o site e o worker antigos continuam funcionando.
+2. **A estação com o worker novo** (`--build`): o antigo não conhece
+   `voice_embedding` e marcaria como falha os cadastros de voz que pegasse.
+3. **O site** (o push no `main`).
+4. **O executável** publicado onde o site aponta
+   (`releases/latest/download/ConsultaViva-Ajudante.exe` no GitHub, ou
+   `AJUDANTE_DOWNLOAD_URL`).
+
 ## O que falta
 
-- **Etapa 2: o site manda as consultas para o ajudante.** Hoje o motor do
-  ajudante fica pronto, mas quem processa as consultas ainda é a estação (o
-  Docker), pela fila. Falta: o ajudante entrar com a conta da pessoa (pelo
-  navegador, sem senha no programa), uma chave por profissional, o sinal de
-  "ligado", o ajudante pegar na fila as consultas da pessoa dele e devolver o
-  resultado, e a estação deixar de pegar as consultas de quem está com o
-  ajudante ligado. O cadastro da voz passa a ir pela mesma fila
-  ([PENDENCIAS.md](../PENDENCIAS.md), primeiro item).
 - **Etapa 3: a nota sem depender de computador ligado.** O site gera a nota
   com a chave de IA de cada pessoa.
 - **Executável sem assinatura digital.** Na primeira vez, o SmartScreen
@@ -134,3 +216,5 @@ cliques não passa por isso. O teste que vale é o de dois cliques.
   informações" → "Executar assim mesmo". Some com um certificado de assinatura
   de código, que é pago.
 - **Atualização manual:** baixar a versão nova e escolher Reinstalar.
+- **Segundo microfone pelo ajudante.** A diarização por dois canais continua
+  só na estação: precisa do motor, mas só atende quem usa dois celulares.

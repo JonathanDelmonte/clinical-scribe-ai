@@ -1,5 +1,16 @@
+/**
+ * A fila de jobs — consumida pela estação (o worker) e pelos ajudantes, estes
+ * pelo site. Ver ADR-0005.
+ *
+ * Quem pega um job fica registrado em `jobs.helper_id` (nulo para a
+ * estação), e só quem pegou renova a concessão, conclui ou registra a falha.
+ */
+
 import type { Database } from "@scribe/db";
 import { sql } from "drizzle-orm";
+
+/** A conexão do worker, ou uma transação aberta pelo site. */
+export type Executor = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export interface ClaimedJob {
   readonly id: string;
@@ -9,18 +20,45 @@ export interface ClaimedJob {
   readonly professionalId: string;
   readonly attempts: number;
   readonly maxAttempts: number;
+  /** Quem pegou: o ajudante, ou nulo para a estação. */
+  readonly helperId: string | null;
 }
 
 /**
  * Por quanto tempo um job reivindicado é considerado vivo.
  *
  * Curto de propósito: é o tempo máximo que uma sessão fica pendurada depois de
- * o worker morrer. Jobs longos não são prejudicados porque a concessão é
+ * quem a pegou morrer. Jobs longos não são prejudicados porque a concessão é
  * RENOVADA enquanto o trabalho acontece — ver `renewLease`.
  */
 const LEASE_SECONDS = 120;
 /** Renova bem antes de expirar, para uma renovação perdida não soltar o job. */
 export const LEASE_RENEW_MS = 30_000;
+
+/**
+ * Os jobs que o ajudante processa: os que precisam do motor de transcrição.
+ * Nota e objetivo (modelo de IA) e retenção continuam com a estação.
+ */
+export const TIPOS_DO_AJUDANTE = ["transcribe", "voice_embedding"] as const;
+
+/**
+ * Por quanto tempo um ajudante sem dar sinal ainda conta como ligado. Ele dá
+ * sinal a cada 15 segundos: três sinais perdidos, e a estação assume.
+ */
+export const AJUDANTE_LIGADO_SEGUNDOS = 45;
+
+export type QuemPega =
+  | { readonly tipo: "estacao" }
+  | {
+      readonly tipo: "ajudante";
+      readonly helperId: string;
+      readonly professionalId: string;
+    };
+
+const tiposDoAjudante = sql.join(
+  TIPOS_DO_AJUDANTE.map((tipo) => sql`${tipo}`),
+  sql`, `,
+);
 
 /**
  * Reivindica um job de forma atômica.
@@ -33,6 +71,15 @@ export const LEASE_RENEW_MS = 30_000;
  * O `select` interno é essencial. Um `update ... limit 1` direto não existe em
  * Postgres, e sem o `skip locked` dois workers esperariam o mesmo lock —
  * transformando paralelismo em fila serial silenciosa.
+ *
+ * ## Estação e ajudante
+ *
+ * O AJUDANTE pega só os jobs do próprio profissional, e só os que precisam do
+ * motor. A ESTAÇÃO pega os de todo mundo, MENOS esses mesmos jobs de quem tem
+ * ajudante ligado e pronto: enquanto o computador da pessoa responde, as
+ * consultas dela são processadas lá. Quando ele para de dar sinal, a estação
+ * volta a pegá-las — inclusive um job que o ajudante largou no meio, assim que
+ * a concessão dele vence.
  *
  * ## Também recupera job abandonado
  *
@@ -54,34 +101,56 @@ export const LEASE_RENEW_MS = 30_000;
  * ele seria retomado para sempre, derrubando o processo a cada ciclo. Passado
  * o limite, quem o enterra é `reapAbandoned`.
  */
-export async function claimJob(db: Database): Promise<ClaimedJob | null> {
+export async function claimJob(
+  db: Executor,
+  quem: QuemPega = { tipo: "estacao" },
+): Promise<ClaimedJob | null> {
+  const helperId = quem.tipo === "ajudante" ? quem.helperId : null;
+  const filtro =
+    quem.tipo === "ajudante"
+      ? sql`j.professional_id = ${quem.professionalId}
+            and j.kind in (${tiposDoAjudante})`
+      : sql`not (
+              j.kind in (${tiposDoAjudante})
+              and exists (
+                select 1
+                  from helpers h
+                 where h.professional_id = j.professional_id
+                   and h.ready
+                   and h.last_seen_at > now() - make_interval(secs => ${AJUDANTE_LIGADO_SEGUNDOS})
+              )
+            )`;
+
   const rows = await db.execute(sql`
     update jobs
        set status = 'running',
            attempts = attempts + 1,
            run_after = now() + make_interval(secs => ${LEASE_SECONDS}),
+           helper_id = ${helperId},
            last_error = case
              when status = 'running'
-             then 'O worker foi interrompido no meio deste job. Retomado automaticamente.'
+             then 'Quem processava este job foi interrompido no meio. Retomado automaticamente.'
              else last_error
            end
      where id = (
-       select id
-         from jobs
-        where status in ('pending', 'running')
-          and run_after <= now()
-          and (status = 'pending' or attempts < max_attempts)
-        order by run_after
-          for update skip locked
+       select j.id
+         from jobs j
+        where j.status in ('pending', 'running')
+          and j.run_after <= now()
+          and (j.status = 'pending' or j.attempts < j.max_attempts)
+          and ${filtro}
+        order by j.run_after
+          for update of j skip locked
         limit 1
      )
     returning id,
               kind,
               payload,
-              session_id     as "sessionId",
+              session_id      as "sessionId",
               professional_id as "professionalId",
               attempts,
-              max_attempts   as "maxAttempts"
+              max_attempts    as "maxAttempts",
+              helper_id       as "helperId"
   `);
 
   const row = (rows as unknown as Record<string, unknown>[])[0];
@@ -95,6 +164,7 @@ export async function claimJob(db: Database): Promise<ClaimedJob | null> {
     professionalId: String(row["professionalId"]),
     attempts: Number(row["attempts"]),
     maxAttempts: Number(row["maxAttempts"]),
+    helperId: row["helperId"] === null ? null : String(row["helperId"]),
   };
 }
 
@@ -113,12 +183,12 @@ export async function claimJob(db: Database): Promise<ClaimedJob | null> {
  * Devolve quantos enterrou, porque um número diferente de zero aqui merece
  * investigação — significa que algo está matando o worker.
  */
-export async function reapAbandoned(db: Database): Promise<number> {
+export async function reapAbandoned(db: Executor): Promise<number> {
   const rows = await db.execute(sql`
     update jobs
        set status = 'failed',
            finished_at = now(),
-           last_error = 'O worker morreu durante este job em todas as ' ||
+           last_error = 'Quem processava este job parou no meio em todas as ' ||
                         max_attempts || ' tentativas. O processamento foi ' ||
                         'interrompido; os dados já gravados estão preservados.'
      where status = 'running'
@@ -137,28 +207,46 @@ export async function reapAbandoned(db: Database): Promise<number> {
  * de dez; sem renovação, a concessão teria que cobrir o pior caso, e aí toda
  * sessão órfã ficaria pendurada por esse mesmo tempo antes de ser retomada.
  *
- * O `status = 'running'` na cláusula importa: se outro worker já retomou este
- * job por concessão vencida, esta renovação não faz nada. Sem isso, um
- * processo lento e meio morto poderia retomar a posse de um trabalho que outro
- * já está refazendo.
+ * Só quem PEGOU o job renova (`helper_id`, ou nulo para a estação), e só
+ * enquanto ele está `running`: se outro já retomou este job por concessão
+ * vencida, esta renovação não faz nada. Sem isso, um processo lento e meio
+ * morto poderia retomar a posse de um trabalho que outro já está refazendo.
+ *
+ * Devolve se a concessão era mesmo de quem pediu.
  */
-export async function renewLease(db: Database, jobId: string): Promise<void> {
-  await db.execute(sql`
+export async function renewLease(
+  db: Executor,
+  jobId: string,
+  helperId: string | null = null,
+): Promise<boolean> {
+  const rows = await db.execute(sql`
     update jobs
        set run_after = now() + make_interval(secs => ${LEASE_SECONDS})
      where id = ${jobId}
        and status = 'running'
+       and helper_id is not distinct from ${helperId}::uuid
+    returning id
   `);
+  return (rows as unknown as unknown[]).length > 0;
 }
 
-export async function completeJob(db: Database, jobId: string): Promise<void> {
-  await db.execute(sql`
+/** Conclui o job — se ele ainda é de quem pede. Devolve se concluiu. */
+export async function completeJob(
+  db: Executor,
+  jobId: string,
+  helperId: string | null = null,
+): Promise<boolean> {
+  const rows = await db.execute(sql`
     update jobs
        set status = 'done',
            last_error = null,
            finished_at = now()
      where id = ${jobId}
+       and status = 'running'
+       and helper_id is not distinct from ${helperId}::uuid
+    returning id
   `);
+  return (rows as unknown as unknown[]).length > 0;
 }
 
 /**
@@ -181,10 +269,11 @@ export class ErroDefinitivo extends Error {
  * tempestade que prolonga exatamente o bloqueio que causou a falha.
  */
 export async function failJob(
-  db: Database,
-  job: ClaimedJob,
+  db: Executor,
+  job: Pick<ClaimedJob, "id" | "attempts" | "maxAttempts">,
   error: string,
   definitivo = false,
+  helperId: string | null = null,
 ): Promise<{ exhausted: boolean; retryInSeconds: number }> {
   const exhausted = definitivo || job.attempts >= job.maxAttempts;
   const retryInSeconds = Math.min(2 ** job.attempts * 5, 300);
@@ -196,7 +285,51 @@ export async function failJob(
            run_after = now() + make_interval(secs => ${retryInSeconds}),
            finished_at = ${exhausted ? sql`now()` : sql`null`}
      where id = ${job.id}
+       and status = 'running'
+       and helper_id is not distinct from ${helperId}::uuid
   `);
 
   return { exhausted, retryInSeconds };
+}
+
+/**
+ * A estação diz que está viva. O site lê isto para responder "há quem
+ * processe agora?" — ver `quemProcessa`.
+ */
+export async function marcarEstacao(db: Executor, id: string): Promise<void> {
+  await db.execute(sql`
+    insert into stations (id, last_seen_at) values (${id}, now())
+    on conflict (id) do update set last_seen_at = now()
+  `);
+}
+
+/** Uma estação conta como ligada se deu sinal neste intervalo. */
+export const ESTACAO_LIGADA_SEGUNDOS = 90;
+
+/**
+ * Há quem processe as consultas deste profissional agora? Um ajudante dele,
+ * ligado e pronto, ou uma estação viva.
+ *
+ * Funciona sob RLS, na conexão do site: `helpers` mostra só os do próprio
+ * profissional, e `stations` é legível por todos.
+ */
+export async function quemProcessa(
+  db: Executor,
+  professionalId: string,
+): Promise<{ readonly ajudante: boolean; readonly estacao: boolean }> {
+  const rows = await db.execute(sql`
+    select
+      exists (
+        select 1 from helpers
+         where professional_id = ${professionalId}
+           and ready
+           and last_seen_at > now() - make_interval(secs => ${AJUDANTE_LIGADO_SEGUNDOS})
+      ) as ajudante,
+      exists (
+        select 1 from stations
+         where last_seen_at > now() - make_interval(secs => ${ESTACAO_LIGADA_SEGUNDOS})
+      ) as estacao
+  `);
+  const row = (rows as unknown as Record<string, unknown>[])[0] ?? {};
+  return { ajudante: row["ajudante"] === true, estacao: row["estacao"] === true };
 }
