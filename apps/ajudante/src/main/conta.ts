@@ -165,6 +165,13 @@ function conectarDeVerdade(
       pagina.searchParams.set("estado", estado);
       pagina.searchParams.set("desafio", desafio);
       pagina.searchParams.set("nome", nome);
+      // Teste automatizado (`AJUDANTE_NAVEGADOR=nenhum`): o link vai só para o
+      // registro, e quem o abre é o teste, num navegador já dentro da conta de
+      // teste. Quem usa o ajudante nunca define isso.
+      if (process.env["AJUDANTE_NAVEGADOR"] === "nenhum") {
+        registrar(`conexão (teste): abra ${pagina.toString()}`);
+        return;
+      }
       registrar(`conexão: navegador aberto, esperando na porta ${porta}`);
       void shell.openExternal(pagina.toString());
     });
