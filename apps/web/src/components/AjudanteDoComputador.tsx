@@ -22,10 +22,11 @@ export interface ComputadorConectado {
  */
 export function AjudanteDoComputador({
   computadores,
-  linkDeDownload,
+  downloadIndisponivel,
 }: {
   computadores: readonly ComputadorConectado[];
-  linkDeDownload: string;
+  /** O download voltou sem arquivo publicado. */
+  downloadIndisponivel: boolean;
 }) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
@@ -71,10 +72,21 @@ export function AjudanteDoComputador({
         funciona a qualquer hora. Desligado, a estação da equipe processa, como sempre.
       </p>
 
-      <a href={linkDeDownload} className="botao-vidro no-underline">
+      {/*
+       * Um link para o site, e não para onde o arquivo está: quem decide o
+       * endereço é o servidor (`api/ajudante/baixar`), e ele pode mudar de
+       * lugar sem este link mudar.
+       */}
+      <a href="/api/ajudante/baixar" className="botao-vidro no-underline">
         <IconeExportar tamanho={18} />
         Baixar o ajudante para Windows
       </a>
+
+      {downloadIndisponivel && (
+        <p role="status" className="alerta alerta-info">
+          O download ainda não está disponível. Tente de novo mais tarde.
+        </p>
+      )}
 
       {computadores.length > 0 && (
         <ul className="flex w-full flex-col gap-2">

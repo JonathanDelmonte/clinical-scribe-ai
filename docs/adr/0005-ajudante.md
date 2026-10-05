@@ -203,9 +203,24 @@ de `service_role` diz por quê, no próprio código: `lib/ajudante/conta.ts`).
 2. **A estação com o worker novo** (`--build`): o antigo não conhece
    `voice_embedding` e marcaria como falha os cadastros de voz que pegasse.
 3. **O site** (o push no `main`).
-4. **O executável** publicado onde o site aponta
-   (`releases/latest/download/ConsultaViva-Ajudante.exe` no GitHub, ou
-   `AJUDANTE_DOWNLOAD_URL`).
+4. **O executável** publicado (ver "O download", abaixo).
+
+### O download
+
+O botão "Baixar o ajudante" aponta sempre para o site
+(`/api/ajudante/baixar`, só para quem tem conta), e é o servidor que decide
+para onde mandar — o link nunca muda quando o arquivo muda de lugar:
+
+- `AJUDANTE_DOWNLOAD_URL`, se definida: qualquer endereço.
+- Senão, a Release mais recente do GitHub, pela API, com o arquivo de nome
+  fixo `ConsultaViva-Ajudante.exe`. O repositório **não precisa ser
+  público**: privado, basta `GITHUB_TOKEN_RELEASES` na Vercel — um token de
+  leitura só deste repositório. A API devolve um link temporário do próprio
+  GitHub, e o arquivo vai direto de lá para o navegador.
+- Sem nada publicado, a pessoa volta aos ajustes com um aviso.
+
+O Supabase gratuito não serve aqui: o limite é 50 MB por arquivo, e o
+executável tem 116 MB (o Electron sozinho passa dos 50).
 
 ## O que falta
 

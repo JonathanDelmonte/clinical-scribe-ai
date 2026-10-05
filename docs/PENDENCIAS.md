@@ -87,7 +87,13 @@ Detalhes em [ADR-0005](./adr/0005-ajudante.md#o-que-falta).
   assinatura de código (pago, por ano). Antes de distribuir para quem não é
   da equipe.
 - **Atualização manual.** Uma versão nova entra baixando o arquivo e
-  escolhendo Reinstalar. Atualização automática exige onde publicar as
+  escolhendo Reinstalar.
+- **Repositório privado → token do download.** O botão "Baixar o ajudante"
+  busca a Release mais recente pela API do GitHub. Ao tornar o repositório
+  privado, crie um token de acesso refinado (*fine-grained*), só deste
+  repositório, com permissão de leitura em *Contents*, e cole-o na Vercel como
+  `GITHUB_TOKEN_RELEASES`. Sem ele, o download passa a dizer "ainda não está
+  disponível". Ver ADR-0005, "O download". Atualização automática exige onde publicar as
   versões e, de novo, a assinatura.
 
 ## Limites do plano gratuito, para não esquecer

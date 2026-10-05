@@ -13,7 +13,6 @@ import { ChaveDeIA } from "@/components/ChaveDeIA";
 import { IconeAvancar } from "@/components/Icones";
 import { RetencaoDeAudio } from "@/components/RetencaoDeAudio";
 import { VoiceEnrollment } from "@/components/VoiceEnrollment";
-import { linkDoAjudante } from "@/lib/ajudante/download";
 import { asCurrentProfessional, exigirProfissional } from "@/lib/auth";
 import { FORNECEDORES } from "@/lib/ia/fornecedores";
 import { NOME_DO_PLANO } from "@/lib/plano";
@@ -25,7 +24,13 @@ export const dynamic = "force-dynamic";
 const RETENCAO_PADRAO = Number(process.env["AUDIO_RETENTION_DAYS"] ?? 30);
 const MODELO_DO_SISTEMA = process.env["LLM_MODEL"] ?? "gemini-3.8-flash";
 
-export default async function Configuracoes() {
+export default async function Configuracoes({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // O download voltou sem arquivo publicado (ver `api/ajudante/baixar`).
+  const downloadIndisponivel = (await searchParams)["ajudante"] === "indisponivel";
   const me = await exigirProfissional();
 
   const account: Account = {
@@ -108,7 +113,7 @@ export default async function Configuracoes() {
 
       <AjudanteDoComputador
         computadores={computadores}
-        linkDeDownload={linkDoAjudante()}
+        downloadIndisponivel={downloadIndisponivel}
       />
 
       {/*
