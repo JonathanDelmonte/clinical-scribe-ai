@@ -1,9 +1,9 @@
 # ADR-0005 — O ajudante: o motor no computador de cada pessoa, sem Docker
 
 > Status: **etapa 1 implementada** (instalador, motor, bandeja) · 01/10/2026.
-> **Etapa 2 implementada** (o site manda as consultas e o cadastro da voz de
-> cada pessoa para o ajudante dela) · 02/10/2026 — falta o teste de ponta a
-> ponta e a implantação, na ordem do fim desta seção. Ver "Etapa 2".
+> **Etapa 2 implementada, testada e implantada** (o site manda as consultas e
+> o cadastro da voz de cada pessoa para o ajudante dela) · 06/10/2026. O
+> ajudante 0.2.0 está publicado. Ver "Etapa 2".
 
 ---
 
@@ -195,6 +195,26 @@ status de um job e registrar o uso. Isso roda com `service_role`, numa
 transação curta, sempre filtrada pelo job, pelo profissional e pelo ajudante
 já conferidos — a mesma disciplina do worker, e a regra do `rls.sql` (todo uso
 de `service_role` diz por quê, no próprio código: `lib/ajudante/conta.ts`).
+
+### Testado de ponta a ponta (06/10)
+
+Com o site, o banco e o armazenamento locais, a conta de teste e uma consulta
+fictícia de 50 s (duas vozes sintéticas do Windows, nenhum dado real):
+
+| | Resultado |
+|---|---|
+| Estação, consulta | pronta em 72 s; cópia M4A guardada; 13 trechos, papéis certos |
+| Estação, voz | na fila → processando → pronta; a amostra saiu do armazenamento |
+| Conexão do ajudante | entrar → voltar à página com os parâmetros → convite → token |
+| Ajudante, consulta | processada em 28 s, com o andamento na tela; job "pego por" o computador; uso `ajudante:large-v3`; a estação não tocou nela |
+| Ajudante, voz | 0,5 s; a amostra saiu do armazenamento |
+| Desconectar pelo site | o ajudante percebeu em 13 s e esqueceu a conta |
+| Links assinados no S3 de produção | envio 200, download 200 e idêntico, arquivo inexistente 404 |
+
+Um detalhe de teste, não do produto: o navegador embutido do aplicativo do
+Claude não segue o redirecionamento para 127.0.0.1 no fim da conexão (Chrome
+e Edge seguem — é o mesmo caminho do `gh auth login`). O teste completou a
+volta à mão, com `AJUDANTE_NAVEGADOR=nenhum`.
 
 ### A ordem da implantação
 

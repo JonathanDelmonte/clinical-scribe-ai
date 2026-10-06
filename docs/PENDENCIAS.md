@@ -8,13 +8,9 @@
 
 ## Não funciona no site publicado (ainda)
 
-1. **Cadastro da voz** — resolvido no código em 02/10, falta implantar. O
-   site chamava o motor no meio da requisição, e na Vercel não há motor ao
-   alcance. Agora a amostra vai para a fila (`voice_embedding`), como as
-   consultas, e quem processa — o ajudante da pessoa, ou a estação — grava a
-   impressão vocal e apaga a amostra. Ver
-   [ADR-0005, etapa 2](./adr/0005-ajudante.md#etapa-2-o-site-manda-o-trabalho-para-o-ajudante),
-   inclusive a ordem da implantação: banco, estação, site.
+Nada, desde 06/10: o **cadastro da voz** passou a ir pela fila, como as
+consultas, e funciona com o ajudante da pessoa ligado ou com a estação no ar.
+Ver [ADR-0005, etapa 2](./adr/0005-ajudante.md#etapa-2-o-site-manda-o-trabalho-para-o-ajudante).
 
 ## Antes do primeiro paciente real
 
@@ -88,6 +84,11 @@ Detalhes em [ADR-0005](./adr/0005-ajudante.md#o-que-falta).
   da equipe.
 - **Atualização manual.** Uma versão nova entra baixando o arquivo e
   escolhendo Reinstalar.
+- **A quota do que o ajudante processa — decisão de negócio.** Hoje os
+  minutos transcritos no computador da pessoa contam na quota do plano, como
+  os da estação (o uso fica registrado como `ajudante:large-v3`, custo zero).
+  Para nós eles não custam nada: decidir se continuam contando, ou se o
+  ajudante vira um motivo para usar o plano grátis sem limite de minutos.
 - **Repositório privado → token do download.** O botão "Baixar o ajudante"
   busca a Release mais recente pela API do GitHub. Ao tornar o repositório
   privado, crie um token de acesso refinado (*fine-grained*), só deste
