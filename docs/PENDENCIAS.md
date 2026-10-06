@@ -1,6 +1,6 @@
 # Pendências — o que foi adiado, de propósito
 
-> Estado em 01/10/2026. O projeto está **em fase de teste, sem paciente real**,
+> Estado em 05/10/2026. O projeto está **em fase de teste, sem paciente real**,
 > e nada aqui atrapalha os testes. A primeira lista, porém, **bloqueia o
 > primeiro paciente real**: nenhum item dela pode ficar para depois disso.
 >
@@ -8,7 +8,7 @@
 
 ## Não funciona no site publicado (ainda)
 
-Nada, desde 06/10: o **cadastro da voz** passou a ir pela fila, como as
+Nada, desde 05/10: o **cadastro da voz** passou a ir pela fila, como as
 consultas, e funciona com o ajudante da pessoa ligado ou com a estação no ar.
 Ver [ADR-0005, etapa 2](./adr/0005-ajudante.md#etapa-2-o-site-manda-o-trabalho-para-o-ajudante).
 

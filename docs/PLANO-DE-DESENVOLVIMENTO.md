@@ -78,7 +78,7 @@ ordem:
      conecta pela conta, no navegador, sem senha no programa; as etapas da
      transcrição saíram do worker para um pacote que a estação e o site
      usam iguais (`@scribe/processamento`). Testada de ponta a ponta e
-     implantada em 06/10; o ajudante 0.2.0 está publicado.
+     implantada em 05/10; o ajudante 0.2.0 está publicado.
    - **Etapa 3:** a nota feita pelo site, com a chave de IA de cada pessoa,
      sem depender de computador ligado.
 

@@ -2,7 +2,7 @@
 
 > Status: **etapa 1 implementada** (instalador, motor, bandeja) · 01/10/2026.
 > **Etapa 2 implementada, testada e implantada** (o site manda as consultas e
-> o cadastro da voz de cada pessoa para o ajudante dela) · 06/10/2026. O
+> o cadastro da voz de cada pessoa para o ajudante dela) · 05/10/2026. O
 > ajudante 0.2.0 está publicado. Ver "Etapa 2".
 
 ---
@@ -196,7 +196,7 @@ transação curta, sempre filtrada pelo job, pelo profissional e pelo ajudante
 já conferidos — a mesma disciplina do worker, e a regra do `rls.sql` (todo uso
 de `service_role` diz por quê, no próprio código: `lib/ajudante/conta.ts`).
 
-### Testado de ponta a ponta (06/10)
+### Testado de ponta a ponta (05/10)
 
 Com o site, o banco e o armazenamento locais, a conta de teste e uma consulta
 fictícia de 50 s (duas vozes sintéticas do Windows, nenhum dado real):
